@@ -45,11 +45,38 @@ Status: implemented on `feat/candidate-profile-foundation`.
 
 Exit criteria: a Candidate can securely maintain the structured foundation of a professional profile.
 
-Deferred from Phase 2A: CV/avatar upload, public sharing, jobs, applications, saved jobs, messaging, notifications, AI, and Recruiter/company profiles.
+Deferred from Phase 2A: CV/avatar upload, public Candidate sharing, jobs, applications, saved jobs, messaging, notifications, and AI.
 
-## Phase 2B — Secure Candidate documents
+## Phase 2B — Recruiter and Company Workspace
+
+Status: implemented on `feat/company-recruiter-workspace`.
+
+- Recruiter-owned professional profile extension without duplicated identity
+- Private-by-default Company profiles with deterministic server-generated slugs
+- Atomic Company creation and OWNER membership
+- Explicit OWNER/MEMBER membership domain and OWNER-only mutations
+- Completeness-gated publishing and immediate unpublishing
+- Database-backed public Company directory, bounded search, and published-only detail
+- Recruiter dashboard setup state and honest deferred hiring placeholders
+- Unit coverage plus isolated database authorization/integrity coverage
+
+Exit criteria: a Recruiter can securely represent and publish a Company while unpublished and foreign Company data remains protected.
+
+Deferred from Phase 2B: invitations, membership administration, Company verification, uploads, jobs, applications, Candidate search/CV access, messaging, notifications, AI, and billing.
+
+## Phase 2C — Job lifecycle and discovery
 
 Recommended next phase.
+
+- Company-owned Job model and OWNER-authorized creation/editing
+- Draft, published, closed, and archived lifecycle with explicit transitions
+- Public Job detail and URL-backed search/filtering/pagination
+- Recruiter Job management workspace
+- No applications or fabricated activity metrics
+
+Exit criteria: an authorized Company owner can manage real Job listings and public visitors can discover published opportunities.
+
+## Phase 2D — Secure Candidate documents
 
 - Private CV object storage and metadata model
 - Strict content-type and size validation
@@ -60,35 +87,24 @@ Recommended next phase.
 
 Exit criteria: a Candidate can privately manage a CV without exposing raw storage objects or weakening profile ownership.
 
-## Phase 2C — Job discovery foundation
+## Phase 3 — Applications and saved opportunities
 
-- Job listing read model
-- Search, filtering, and pagination
 - Saved jobs with Candidate ownership
-- Clear public and authenticated discovery states
-
-Exit criteria: a Candidate can discover and save relevant database-backed opportunities.
-
-## Phase 3 — Companies and recruiter workflows
-
-- Company profiles
-- Recruiter company membership and permissions
-- Create, edit, publish, close, and archive job listings
-- Recruiter job management workspace
-- Public company pages and job details
-
-Exit criteria: an authorized recruiter can represent a company and manage the complete job lifecycle.
-
-## Phase 4 — Applications
-
-- Application submission and candidate confirmation
-- Application status model and status history
+- Application submission and Candidate confirmation
 - Candidate application tracking
 - Recruiter applicant review and authorized CV access
-- Notes, structured review, and workflow filters
-- Candidate-facing status transparency
+- Application status model, history, notes, and workflow filters
 
-Exit criteria: both sides can complete and understand the end-to-end application workflow.
+Exit criteria: Candidates and Recruiters can complete and understand the application workflow.
+
+## Phase 4 — Membership administration
+
+- Recruiter invitations and email delivery
+- OWNER-managed membership changes
+- Ownership-transfer and last-owner invariants
+- Auditable membership events
+
+Exit criteria: Company owners can safely manage team access without leaving a Company ownerless.
 
 ## Phase 5 — Admin, trust, and analytics
 

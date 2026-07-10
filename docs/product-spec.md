@@ -53,18 +53,18 @@ The initial product MVP is expected to include:
 7. Basic admin moderation and operational views
 8. Essential product analytics and audit records
 
-## Current phase: Candidate Profile Foundation
+## Current phase: Recruiter and Company Workspace
 
-Phase 2A builds the first Candidate-owned product domain on the completed identity foundation:
+Phase 2B adds a secure Recruiter and Company workspace on the completed identity and Candidate foundations:
 
-- View and edit basic professional information without duplicating account name/email
-- Add, edit, and safely delete owned education and work-experience records
-- Add and remove normalized, duplicate-safe skills
-- View deterministic profile-completion progress and recommended next actions
-- See the same completion summary and profile links on the Candidate dashboard
-- Enforce Candidate-only access and per-record ownership on every server mutation
+- View and edit Recruiter job title, bio, and LinkedIn URL without duplicating account identity
+- Create a private Company and become its OWNER atomically
+- View all Company memberships and open membership-authorized private workspaces
+- Let OWNER edit and explicitly publish or unpublish a sufficiently complete Company profile
+- Let public visitors search published Companies and open published Company details
+- Keep jobs, applicants, team administration, and analytics as honest deferred states
 
-Public identity behavior remains unchanged. Profile data is private to the authenticated Candidate in this phase; there is no public sharing or Recruiter access. Admin follows the existing exact-role policy rather than receiving implicit access.
+Public identity behavior and Better Auth endpoint allow-lists remain unchanged. Admin follows the existing exact-role policy and receives no implicit Recruiter profile access, Company membership, or ownership. Company publication communicates visibility only and must never be described as verification.
 
 Email ownership is not verified in Phase 1. The product must not claim that an address has been verified until real email delivery and verification are implemented.
 
@@ -79,15 +79,28 @@ Email ownership is not verified in Phase 1. The product must not claim that an a
 
 Hidden navigation is not authorization. Every protected page validates the database-backed session and exact role on the server.
 
-## Intentionally deferred after Phase 2A
+## Recruiter and Company access matrix
+
+| Actor               | Recruiter profile  | Private Company workspace | Edit/publish Company | Public published profile |
+| ------------------- | ------------------ | ------------------------- | -------------------- | ------------------------ |
+| Signed out          | Redirect           | Redirect                  | Redirect             | Allowed                  |
+| Candidate           | Denied             | Denied                    | Denied               | Allowed                  |
+| Recruiter nonmember | Allowed for self   | Not found                 | Not found            | Allowed                  |
+| Recruiter MEMBER    | Allowed for self   | Allowed                   | Denied               | Allowed                  |
+| Recruiter OWNER     | Allowed for self   | Allowed                   | Allowed              | Allowed                  |
+| Admin               | No implicit access | No implicit access        | No implicit access   | Allowed                  |
+
+Companies are private until an OWNER explicitly publishes them. Publication requires name, description, industry, headquarters, and a safe website URL. Public search accepts bounded name, industry, and headquarters query parameters and returns only published rows. Public detail exposes Company profile fields only—never owner email, Recruiter profile, or membership data.
+
+## Intentionally deferred after Phase 2B
 
 - Email verification and real email delivery
 - Password reset and account recovery
 - Social authentication
 - CV and avatar upload
-- Recruiter profiles and company profiles
-- Company creation and membership
-- Jobs, applications, saved jobs, messaging, and notifications
+- Recruiter invitations, email invitations, and membership administration
+- Company verification and logo/document upload
+- Jobs, applications, candidate search, CV access, saved jobs, messaging, and notifications
 - Public Candidate profile sharing and social feeds
 - Production Admin provisioning, moderation, and audit workflows
 - AI, billing, and payments

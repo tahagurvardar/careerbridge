@@ -1,4 +1,4 @@
-// CareerBridge identity and Candidate profile foundation.
+// CareerBridge identity, Candidate profile, and Recruiter Company workspace.
 
 generator client {
   provider = "prisma-client"
@@ -24,21 +24,90 @@ enum EmploymentType {
   FREELANCE
 }
 
+enum CompanySize {
+  SOLO
+  TWO_TO_TEN
+  ELEVEN_TO_FIFTY
+  FIFTY_ONE_TO_TWO_HUNDRED
+  TWO_HUNDRED_ONE_TO_FIVE_HUNDRED
+  FIVE_HUNDRED_ONE_TO_ONE_THOUSAND
+  ONE_THOUSAND_PLUS
+}
+
+enum CompanyMembershipRole {
+  OWNER
+  MEMBER
+}
+
 model User {
-  id               String            @id
-  name             String
-  email            String
-  emailVerified    Boolean           @default(false)
-  image            String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  role             Role              @default(CANDIDATE)
-  sessions         Session[]
-  accounts         Account[]
-  candidateProfile CandidateProfile?
+  id                 String              @id
+  name               String
+  email              String
+  emailVerified      Boolean             @default(false)
+  image              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  role               Role                @default(CANDIDATE)
+  sessions           Session[]
+  accounts           Account[]
+  candidateProfile   CandidateProfile?
+  recruiterProfile   RecruiterProfile?
+  companyMemberships CompanyMembership[]
 
   @@unique([email])
   @@map("user")
+}
+
+model RecruiterProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  jobTitle    String?  @db.VarChar(160)
+  bio         String?  @db.VarChar(2000)
+  linkedinUrl String?  @db.VarChar(2048)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("recruiter_profile")
+}
+
+model Company {
+  id           String       @id @default(cuid())
+  name         String       @db.VarChar(160)
+  slug         String       @unique @db.VarChar(180)
+  tagline      String?      @db.VarChar(240)
+  description  String?      @db.VarChar(4000)
+  industry     String?      @db.VarChar(120)
+  headquarters String?      @db.VarChar(160)
+  websiteUrl   String?      @db.VarChar(2048)
+  companySize  CompanySize?
+  foundedYear  Int?         @db.SmallInt
+  isPublished  Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  memberships CompanyMembership[]
+
+  @@index([isPublished, name])
+  @@map("company")
+}
+
+model CompanyMembership {
+  id        String                @id @default(cuid())
+  userId    String
+  companyId String
+  role      CompanyMembershipRole @default(MEMBER)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId, role])
+  @@index([userId, role])
+  @@map("company_membership")
 }
 
 model CandidateProfile {
