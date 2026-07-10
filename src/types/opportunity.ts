@@ -2,7 +2,7 @@ export type EmploymentType = "Full-time" | "Internship" | "Contract";
 export type WorkMode = "Remote" | "Hybrid" | "On-site";
 
 export interface Opportunity {
-  id: string;
+  slug: string;
   title: string;
   company: string;
   companyInitials: string;
@@ -12,5 +12,8 @@ export interface Opportunity {
   compensation: string;
   postedAt: string;
   skills: string[];
+  description: string;
+  responsibilities: string[];
+  requirements: string[];
   featured?: boolean;
 }

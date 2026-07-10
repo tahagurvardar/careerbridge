@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import { Menu } from "lucide-react";
+import { Menu, Waypoints } from "lucide-react";
 
-import { Brand } from "@/components/shared/brand";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +18,7 @@ import { siteConfig } from "@/config/site";
 
 export function MobileNavigation() {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="flex items-center gap-1 md:hidden">
@@ -26,18 +26,35 @@ export function MobileNavigation() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <Button
+            ref={triggerRef}
             variant="outline"
             size="icon"
-            aria-label="Open navigation menu"
+            aria-label={open ? "Close navigation menu" : "Open navigation menu"}
           >
             <Menu aria-hidden="true" />
           </Button>
         </SheetTrigger>
-        <SheetContent className="w-[min(88vw,22rem)]">
+        <SheetContent
+          side="right"
+          className="w-[min(88vw,22rem)]"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            triggerRef.current?.focus();
+          }}
+        >
           <SheetHeader className="border-b px-5 py-5">
-            <SheetTitle asChild>
-              <Brand />
-            </SheetTitle>
+            <div className="flex items-center gap-2.5">
+              <span className="bg-primary text-primary-foreground flex size-9 items-center justify-center rounded-xl">
+                <Waypoints
+                  aria-hidden="true"
+                  className="size-5"
+                  strokeWidth={2.2}
+                />
+              </span>
+              <SheetTitle className="text-lg font-semibold tracking-tight">
+                CareerBridge
+              </SheetTitle>
+            </div>
             <SheetDescription className="sr-only">
               CareerBridge navigation
             </SheetDescription>

@@ -3,6 +3,7 @@ export const siteConfig = {
   description:
     "A clearer path from professional potential to meaningful opportunity.",
   navigation: [
+    { label: "Home", href: "/" },
     { label: "Find jobs", href: "/jobs" },
     { label: "Companies", href: "/companies" },
   ],
