@@ -1,0 +1,41 @@
+import type { Opportunity } from "@/types/opportunity";
+
+export const featuredOpportunities: Opportunity[] = [
+  {
+    id: "product-design-intern",
+    title: "Product Design Intern",
+    company: "Northstar Labs",
+    companyInitials: "NL",
+    location: "Baku, Azerbaijan",
+    workMode: "Hybrid",
+    employmentType: "Internship",
+    compensation: "$900–$1,200 / month",
+    postedAt: "2 days ago",
+    skills: ["Figma", "Research", "Prototyping"],
+    featured: true,
+  },
+  {
+    id: "frontend-engineer",
+    title: "Frontend Engineer",
+    company: "Orbit Systems",
+    companyInitials: "OS",
+    location: "Remote — Europe",
+    workMode: "Remote",
+    employmentType: "Full-time",
+    compensation: "$48k–$62k / year",
+    postedAt: "4 days ago",
+    skills: ["React", "TypeScript", "Accessibility"],
+  },
+  {
+    id: "growth-analyst",
+    title: "Growth Analyst",
+    company: "Mosaic Finance",
+    companyInitials: "MF",
+    location: "Tbilisi, Georgia",
+    workMode: "On-site",
+    employmentType: "Full-time",
+    compensation: "$32k–$40k / year",
+    postedAt: "1 week ago",
+    skills: ["SQL", "Analytics", "Experiments"],
+  },
+];
