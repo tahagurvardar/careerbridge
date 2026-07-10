@@ -10,7 +10,7 @@ The current application provides:
 
 - A responsive, theme-aware CareerBridge marketing experience
 - Presentable public routes for jobs, companies, sign-in, and registration
-- Typed mock opportunities for interface development
+- Typed mock opportunities with URL-backed filtering and detail previews
 - A scalable App Router structure with shared layout and feature boundaries
 - A PostgreSQL-ready Prisma 7 setup with a lazy, build-safe client helper
 - Product, architecture, and delivery documentation
@@ -73,13 +73,14 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Public routes
 
-| Route      | Purpose                                        |
-| ---------- | ---------------------------------------------- |
-| /          | Product landing page                           |
-| /jobs      | Opportunity discovery preview                  |
-| /companies | Company directory preview                      |
-| /login     | Account access placeholder                     |
-| /register  | Candidate and recruiter onboarding placeholder |
+| Route        | Purpose                                        |
+| ------------ | ---------------------------------------------- |
+| /            | Product landing page                           |
+| /jobs        | URL-backed mock opportunity discovery          |
+| /jobs/[slug] | Mock opportunity detail preview                |
+| /companies   | Company directory preview                      |
+| /login       | Account access placeholder                     |
+| /register    | Candidate and recruiter onboarding placeholder |
 
 ## Project structure
 

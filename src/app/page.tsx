@@ -1,7 +1,9 @@
 import Link from "next/link";
+import Form from "next/form";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowRight,
+  ArrowUpRight,
   BadgeCheck,
   BriefcaseBusiness,
   Building2,
@@ -108,46 +110,63 @@ export default function HomePage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-5 pt-2">
-              <div role="search" aria-label="Opportunity search preview">
+              <Form
+                action="/jobs"
+                role="search"
+                aria-label="Search mock opportunities"
+              >
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="relative sm:col-span-2">
+                    <label htmlFor="home-job-query" className="sr-only">
+                      Job title, company, or skill
+                    </label>
                     <Search
                       aria-hidden="true"
                       className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
                     />
                     <Input
-                      aria-label="Job title or skill"
+                      id="home-job-query"
+                      name="query"
                       placeholder="Job title, skill, or keyword"
                       className="h-11 pl-9"
-                      readOnly
                     />
                   </div>
                   <div className="relative">
+                    <label htmlFor="home-job-location" className="sr-only">
+                      Location
+                    </label>
                     <MapPin
                       aria-hidden="true"
                       className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
                     />
                     <Input
-                      aria-label="Location"
+                      id="home-job-location"
+                      name="location"
                       placeholder="Location"
                       className="h-11 pl-9"
-                      readOnly
                     />
                   </div>
-                  <Button className="h-11" asChild>
-                    <Link href="/jobs">Search opportunities</Link>
+                  <Button type="submit" className="h-11">
+                    Search opportunities
                   </Button>
                 </div>
-              </div>
+              </Form>
               <div className="border-t pt-5">
                 <p className="text-muted-foreground mb-3 text-xs font-semibold tracking-wide uppercase">
                   Recently highlighted
                 </p>
                 <div className="space-y-2">
                   {featuredOpportunities.slice(0, 2).map((opportunity) => (
-                    <div
-                      key={opportunity.id}
-                      className="bg-muted/60 flex items-center gap-3 rounded-xl p-3"
+                    <Link
+                      key={opportunity.slug}
+                      href={"/jobs/" + opportunity.slug}
+                      aria-label={
+                        "View " +
+                        opportunity.title +
+                        " at " +
+                        opportunity.company
+                      }
+                      className="bg-muted/60 hover:bg-muted focus-visible:ring-ring flex items-center gap-3 rounded-xl p-3 transition-colors focus-visible:ring-2 focus-visible:outline-none"
                     >
                       <span className="bg-background flex size-9 shrink-0 items-center justify-center rounded-lg font-mono text-xs font-semibold shadow-sm">
                         {opportunity.companyInitials}
@@ -163,7 +182,11 @@ export default function HomePage() {
                       <Badge variant="secondary">
                         {opportunity.employmentType}
                       </Badge>
-                    </div>
+                      <ArrowUpRight
+                        aria-hidden="true"
+                        className="text-muted-foreground size-4 shrink-0"
+                      />
+                    </Link>
                   ))}
                 </div>
               </div>
@@ -272,7 +295,7 @@ export default function HomePage() {
         </div>
         <div className="mt-10 grid gap-5 lg:grid-cols-3">
           {featuredOpportunities.map((opportunity) => (
-            <OpportunityCard key={opportunity.id} opportunity={opportunity} />
+            <OpportunityCard key={opportunity.slug} opportunity={opportunity} />
           ))}
         </div>
       </section>

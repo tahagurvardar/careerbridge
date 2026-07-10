@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowUpRight, Building2, MapPin, UsersRound } from "lucide-react";
+import { Building2, MapPin, UsersRound } from "lucide-react";
 
 import { PageIntro } from "@/components/shared/page-intro";
 import { Badge } from "@/components/ui/badge";
@@ -73,13 +73,7 @@ export default function CompaniesPage() {
                 <div className="bg-primary text-primary-foreground mb-4 flex size-12 items-center justify-center rounded-xl font-mono text-sm font-semibold">
                   {company.initials}
                 </div>
-                <CardTitle className="flex items-center justify-between gap-3 text-lg">
-                  {company.name}
-                  <ArrowUpRight
-                    aria-hidden="true"
-                    className="text-muted-foreground size-4"
-                  />
-                </CardTitle>
+                <CardTitle className="text-lg">{company.name}</CardTitle>
                 <CardDescription>{company.industry}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col gap-5">

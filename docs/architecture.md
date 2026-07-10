@@ -24,7 +24,7 @@ flowchart LR
   Prisma -.-> Postgres
 ```
 
-The public foundation is statically renderable and does not require a database connection. The Prisma client is created only when the shared getter is called, keeping builds independent of runtime secrets.
+The public foundation does not require a database connection. Marketing and mock job-detail routes are prerendered, while the jobs index renders URL-backed mock filters at request time. The Prisma client is created only when the shared getter is called, keeping builds independent of runtime secrets.
 
 ## Source boundaries
 

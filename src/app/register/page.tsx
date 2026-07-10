@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BriefcaseBusiness, Building2, Check } from "lucide-react";
+import { BriefcaseBusiness, Building2, Check, LockKeyhole } from "lucide-react";
 
 import { PageIntro } from "@/components/shared/page-intro";
 import { Badge } from "@/components/ui/badge";
@@ -75,8 +75,8 @@ export default function RegisterPage() {
                     ))}
                   </ul>
                   <Button className="mt-8 w-full" disabled>
+                    <LockKeyhole aria-hidden="true" data-icon="inline-start" />
                     {account.title} onboarding coming next
-                    <ArrowRight aria-hidden="true" data-icon="inline-end" />
                   </Button>
                 </CardContent>
               </Card>
