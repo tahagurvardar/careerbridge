@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Menu, Waypoints } from "lucide-react";
 
 import { ThemeToggle } from "@/components/shared/theme-toggle";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -15,8 +16,19 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { siteConfig } from "@/config/site";
+import { signOutAction } from "@/features/auth/server/actions";
 
-export function MobileNavigation() {
+type MobileNavigationUser = {
+  name: string;
+  roleLabel: string;
+  dashboardPath: string;
+};
+
+export function MobileNavigation({
+  user,
+}: {
+  user: MobileNavigationUser | null;
+}) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -59,6 +71,14 @@ export function MobileNavigation() {
               CareerBridge navigation
             </SheetDescription>
           </SheetHeader>
+          {user && (
+            <div className="border-b px-5 py-4">
+              <p className="truncate font-medium">{user.name}</p>
+              <Badge variant="secondary" className="mt-2">
+                {user.roleLabel}
+              </Badge>
+            </div>
+          )}
           <nav aria-label="Mobile navigation" className="flex flex-col px-3">
             {siteConfig.navigation.map((item) => (
               <Link
@@ -72,16 +92,41 @@ export function MobileNavigation() {
             ))}
           </nav>
           <div className="mt-auto grid gap-2 border-t p-5">
-            <Button variant="outline" size="lg" asChild>
-              <Link href="/login" onClick={() => setOpen(false)}>
-                Sign in
-              </Link>
-            </Button>
-            <Button size="lg" asChild>
-              <Link href="/register" onClick={() => setOpen(false)}>
-                Create account
-              </Link>
-            </Button>
+            {user ? (
+              <>
+                <Button size="lg" asChild>
+                  <Link
+                    href={user.dashboardPath}
+                    onClick={() => setOpen(false)}
+                  >
+                    Dashboard
+                  </Link>
+                </Button>
+                <form action={signOutAction} onSubmit={() => setOpen(false)}>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="lg"
+                    className="w-full"
+                  >
+                    Sign out
+                  </Button>
+                </form>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="lg" asChild>
+                  <Link href="/login" onClick={() => setOpen(false)}>
+                    Sign in
+                  </Link>
+                </Button>
+                <Button size="lg" asChild>
+                  <Link href="/register" onClick={() => setOpen(false)}>
+                    Create account
+                  </Link>
+                </Button>
+              </>
+            )}
           </div>
         </SheetContent>
       </Sheet>

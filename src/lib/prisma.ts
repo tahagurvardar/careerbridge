@@ -9,7 +9,30 @@ const globalForPrisma = globalThis as unknown as {
 
 let prisma = globalForPrisma.prisma;
 
-function createPrismaClient() {
+function getHardenedConnectionString(connectionString: string) {
+  const url = new URL(connectionString);
+  const sslMode = url.searchParams.get("sslmode");
+
+  // pg currently treats these values as verify-full and warns that their
+  // semantics will weaken in its next major version. Preserve strict TLS now.
+  if (["prefer", "require", "verify-ca"].includes(sslMode ?? "")) {
+    url.searchParams.set("sslmode", "verify-full");
+  }
+
+  return url.toString();
+}
+
+export function createPrismaClientForConnectionString(
+  connectionString: string,
+) {
+  const adapter = new PrismaPg({
+    connectionString: getHardenedConnectionString(connectionString),
+  });
+
+  return new PrismaClient({ adapter });
+}
+
+function createRuntimePrismaClient() {
   const connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {
@@ -18,9 +41,7 @@ function createPrismaClient() {
     );
   }
 
-  const adapter = new PrismaPg({ connectionString });
-
-  return new PrismaClient({ adapter });
+  return createPrismaClientForConnectionString(connectionString);
 }
 
 /**
@@ -30,7 +51,7 @@ function createPrismaClient() {
  * configuration, while the development global avoids extra pools during HMR.
  */
 export function getPrismaClient() {
-  prisma ??= createPrismaClient();
+  prisma ??= createRuntimePrismaClient();
 
   if (process.env.NODE_ENV !== "production") {
     globalForPrisma.prisma = prisma;
