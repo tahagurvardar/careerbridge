@@ -31,18 +31,43 @@ Exit criteria: secure role-aware access with tested authorization boundaries.
 
 Deferred from identity: email verification, password reset/recovery, social login, production Admin provisioning, and complete role profiles.
 
-## Phase 2 — Candidate profiles and job discovery
+## Phase 2A — Candidate Profile Foundation
+
+Status: implemented on `feat/candidate-profile-foundation`.
+
+- Candidate-owned basic professional profile
+- Education and work-experience create, edit, and safe delete flows
+- Normalized skill catalog with duplicate-safe Candidate assignment
+- Server-rendered protected routes and accessible React Hook Form workflows
+- Centralized 0–100 profile-completion calculation and recommendations
+- Candidate dashboard completion summary and honest later-feature placeholders
+- Unit coverage plus isolated, explicitly opted-in database integration coverage
+
+Exit criteria: a Candidate can securely maintain the structured foundation of a professional profile.
+
+Deferred from Phase 2A: CV/avatar upload, public sharing, jobs, applications, saved jobs, messaging, notifications, AI, and Recruiter/company profiles.
+
+## Phase 2B — Secure Candidate documents
 
 Recommended next phase.
 
-- Candidate profile basics
-- Education, experience, and skills
-- Secure CV upload and access design
-- Job listing read model
-- Search, filtering, pagination, and saved jobs
-- Candidate profile completion states
+- Private CV object storage and metadata model
+- Strict content-type and size validation
+- Malware-scanning and quarantine design
+- Short-lived authorized access URLs
+- Candidate replace/delete flow and retention rules
+- Audit-safe document access tests
 
-Exit criteria: a candidate can build a profile, discover jobs, and save relevant opportunities.
+Exit criteria: a Candidate can privately manage a CV without exposing raw storage objects or weakening profile ownership.
+
+## Phase 2C — Job discovery foundation
+
+- Job listing read model
+- Search, filtering, and pagination
+- Saved jobs with Candidate ownership
+- Clear public and authenticated discovery states
+
+Exit criteria: a Candidate can discover and save relevant database-backed opportunities.
 
 ## Phase 3 — Companies and recruiter workflows
 

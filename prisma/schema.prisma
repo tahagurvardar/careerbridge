@@ -1,5 +1,4 @@
-// CareerBridge identity foundation.
-// Product-domain models remain intentionally deferred.
+// CareerBridge identity and Candidate profile foundation.
 
 generator client {
   provider = "prisma-client"
@@ -16,20 +15,113 @@ enum Role {
   ADMIN
 }
 
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  TEMPORARY
+  FREELANCE
+}
+
 model User {
-  id            String    @id
-  name          String
-  email         String
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  role          Role      @default(CANDIDATE)
-  sessions      Session[]
-  accounts      Account[]
+  id               String            @id
+  name             String
+  email            String
+  emailVerified    Boolean           @default(false)
+  image            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  role             Role              @default(CANDIDATE)
+  sessions         Session[]
+  accounts         Account[]
+  candidateProfile CandidateProfile?
 
   @@unique([email])
   @@map("user")
+}
+
+model CandidateProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  headline    String?  @db.VarChar(160)
+  location    String?  @db.VarChar(120)
+  bio         String?  @db.VarChar(2000)
+  websiteUrl  String?  @db.VarChar(2048)
+  linkedinUrl String?  @db.VarChar(2048)
+  githubUrl   String?  @db.VarChar(2048)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  education  Education[]
+  experience Experience[]
+  skills     CandidateSkill[]
+
+  @@map("candidate_profile")
+}
+
+model Education {
+  id                 String   @id @default(cuid())
+  candidateProfileId String
+  school             String   @db.VarChar(160)
+  degree             String?  @db.VarChar(120)
+  fieldOfStudy       String?  @db.VarChar(120)
+  startYear          Int      @db.SmallInt
+  endYear            Int?     @db.SmallInt
+  isCurrent          Boolean  @default(false)
+  description        String?  @db.VarChar(2000)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  candidateProfile CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+
+  @@index([candidateProfileId])
+  @@map("education")
+}
+
+model Experience {
+  id                 String         @id @default(cuid())
+  candidateProfileId String
+  companyName        String         @db.VarChar(160)
+  jobTitle           String         @db.VarChar(160)
+  employmentType     EmploymentType
+  location           String?        @db.VarChar(120)
+  startDate          DateTime       @db.Date
+  endDate            DateTime?      @db.Date
+  isCurrent          Boolean        @default(false)
+  description        String?        @db.VarChar(2000)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  candidateProfile CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+
+  @@index([candidateProfileId])
+  @@map("experience")
+}
+
+model Skill {
+  id             String   @id @default(cuid())
+  name           String   @db.VarChar(80)
+  normalizedName String   @unique @db.VarChar(80)
+  createdAt      DateTime @default(now())
+
+  candidates CandidateSkill[]
+
+  @@map("skill")
+}
+
+model CandidateSkill {
+  candidateProfileId String
+  skillId            String
+  createdAt          DateTime @default(now())
+
+  candidateProfile CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  skill            Skill            @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([candidateProfileId, skillId])
+  @@index([skillId])
+  @@map("candidate_skill")
 }
 
 model Session {

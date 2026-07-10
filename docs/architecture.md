@@ -26,7 +26,7 @@ flowchart LR
   Prisma --> Postgres
 ```
 
-Phase 1 keeps the Phase 0 marketing and mock-opportunity experience intact while adding a database-backed identity path. The Prisma and Better Auth instances are created only from lazy getters, so importing a route or component does not create a connection pool. Personalized header and dashboard rendering retrieves the current session on the server.
+Phase 2A keeps the public marketing, mock-opportunity, theme, navigation, and identity experience intact while adding a Candidate-owned profile aggregate. The Prisma and Better Auth instances are created only from lazy getters, so importing a route or component does not create a connection pool. Personalized profile and dashboard rendering retrieves the current session and fresh profile data on the server.
 
 ## Source boundaries
 
@@ -35,7 +35,8 @@ Phase 1 keeps the Phase 0 marketing and mock-opportunity experience intact while
 - **src/components/layout:** cross-route site chrome
 - **src/components/shared:** reusable presentational components
 - **src/features/auth:** role rules, Zod boundaries, forms, Server Actions, and session authorization
-- **src/features:** later domain-oriented UI, actions, schemas, and queries
+- **src/features/candidate-profile:** profile schemas, completion logic, form UI, server queries, ownership-scoped commands, and Server Actions
+- **src/features:** domain-oriented UI, actions, schemas, and queries
 - **src/config:** stable site configuration and mock foundation data
 - **src/lib:** infrastructure clients and low-level utilities
 - **src/types:** genuinely shared TypeScript contracts
@@ -51,9 +52,9 @@ Unit tests run without PostgreSQL through `npm test`. Database-backed auth integ
 
 - Pages and layouts are React Server Components by default.
 - Client Components are limited to browser state or event-driven interaction.
-- Current client boundaries are theme switching, the theme provider, Radix primitives, mobile navigation, and React Hook Form authentication forms.
+- Current client boundaries are theme switching, the theme provider, Radix primitives, mobile navigation, and React Hook Form authentication/profile forms.
 - Public routes retain their Phase 0 presentation. The session-aware shared header makes route rendering request-aware.
-- Protected dashboards validate the database session and role inside each page before rendering.
+- Protected dashboards and Candidate profile routes validate the database session and exact role before rendering.
 
 ## Planned application layers
 
@@ -73,13 +74,28 @@ Route files should compose feature modules rather than accumulating domain logic
 
 - PostgreSQL is the system of record.
 - Prisma 7 provides type-safe access through the PostgreSQL driver adapter.
-- The Phase 1 schema contains only Better Auth's `User`, `Account`, `Session`, and `Verification` models plus the Prisma `Role` enum.
+- The identity schema contains Better Auth's `User`, `Account`, `Session`, and `Verification` models plus the Prisma `Role` enum.
 - The `Role` enum contains `CANDIDATE`, `RECRUITER`, and `ADMIN`; `CANDIDATE` is the least-privileged database default.
 - The official Better Auth CLI generated the compatible Prisma core models. The strongly typed Prisma role enum was then applied through migration `20260710020153_identity_foundation`.
-- Product-domain design remains deferred until tenancy, ownership, and lifecycle rules are specified.
+- Phase 2A adds only `CandidateProfile`, `Education`, `Experience`, `Skill`, and `CandidateSkill`, plus the constrained `EmploymentType` enum.
 - Database access remains server-only and is acquired through the lazy singleton helper.
 
-Likely future domain areas include candidate profiles, companies and memberships, jobs, saved jobs, applications and status history, documents, moderation, notifications, and audit events. This list is directional, not a committed schema.
+Future domain areas include companies and memberships, jobs, saved jobs, applications and status history, documents, moderation, notifications, and audit events. This list is directional, not a committed schema.
+
+### Candidate profile domain
+
+`User` has an optional one-to-one `CandidateProfile` through a unique `userId`. The profile owns zero or more `Education` and `Experience` rows; deleting the user or profile cascades through those private records. `Skill` is a shared normalized catalog. `CandidateSkill` is an explicit join with a composite `(candidateProfileId, skillId)` primary key, preventing repeat assignment even under concurrent requests.
+
+Names and email stay on `User` rather than being duplicated. Optional profile fields remain nullable. Database-native lengths bound headlines, locations, URLs, descriptions, and skill names. Education years use small integers; experience dates use PostgreSQL `DATE`; employment type is an enum. The additive `20260710172118_candidate_profile_foundation` migration creates these tables, indexes, enum, foreign keys, and cascade behavior without resetting identity data.
+
+Candidate profile routes are:
+
+- `/candidate/profile` for the server-rendered overview and completion guidance
+- `/candidate/profile/edit` for basic professional information
+- `/candidate/profile/education/new` and `/candidate/profile/education/[id]/edit`
+- `/candidate/profile/experience/new` and `/candidate/profile/experience/[id]/edit`
+
+Profile completion is computed rather than persisted. Headline, location, bio, at least one skill, at least one education record, and at least one experience record each contribute 15 points. At least one professional link contributes 10 points. The calculator returns both the 0–100 percentage and deterministic missing-section recommendations.
 
 ## Authentication and authorization
 
@@ -97,6 +113,8 @@ Public role registration is deliberately narrow:
 
 Authorization is centralized in `getCurrentSession`, `getCurrentUser`, `requireUser`, `requireGuest`, `requireRole`, role-to-dashboard mapping, and safe internal-path helpers. Protected pages call `requireRole` directly. Server Actions call guest/user guards inside the action. Future protected Route Handlers must return 401/403 when redirects are unsuitable and must call the same authoritative session layer. No middleware or proxy is used as the final security boundary.
 
+Candidate profile Server Actions call `requireRole("CANDIDATE")` independently of page rendering. They construct the actor from the authenticated session and do not accept browser-supplied ownership or role fields. Update and delete commands include `candidateProfile.userId` in their database predicates; a miss becomes the same unavailable-record result whether a row is absent or belongs to someone else. Shared command functions repeat the Candidate role assertion, which also makes database integration boundaries directly testable. Admin follows the existing exact-role policy and receives no implicit Candidate-data access.
+
 Phase 1 intentionally assigns one platform role per user. Company membership and recruiter permissions, production Admin elevation/auditing, account recovery, deletion, and retention behavior remain later design work.
 
 ## Validation and forms
@@ -105,6 +123,9 @@ Phase 1 intentionally assigns one platform role per user. Company membership and
 - React Hook Form drives accessible client interactions while the same Zod schemas remain authoritative in Server Actions.
 - Server-side validation remains authoritative even when client validation exists.
 - Form components must provide accessible labels, instructions, errors, and pending states.
+- Candidate professional URLs are normalized only after a valid `http` or `https` protocol check.
+- Education and experience current/end-date invariants are enforced by shared Zod schemas before every write.
+- Skill names are NFKC-normalized, trimmed, whitespace-collapsed, character-limited, and compared by a lower-case lookup name.
 
 ## File and document handling
 
@@ -144,7 +165,7 @@ CV upload is not implemented in the foundation. A later design must use private 
 | Single typed platform role      | Minimal Phase 1 authorization model that can evolve with later ownership rules     |
 | npm                             | Simple, widely supported package workflow                                          |
 | Server Components by default    | Less client JavaScript and clear server/client boundaries                          |
-| Identity-only Phase 1 schema    | Establishes access without encoding unreviewed product ownership assumptions       |
+| Narrow Phase 2A profile schema  | Adds only reviewed Candidate ownership and lifecycle relationships                 |
 
 ## Local migration workflow
 
