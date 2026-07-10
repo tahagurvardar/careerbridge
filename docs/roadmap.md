@@ -66,15 +66,22 @@ Deferred from Phase 2B: invitations, membership administration, Company verifica
 
 ## Phase 2C — Job lifecycle and discovery
 
-Recommended next phase.
+Status: implemented on `feat/job-lifecycle-discovery`.
 
-- Company-owned Job model and OWNER-authorized creation/editing
-- Draft, published, closed, and archived lifecycle with explicit transitions
-- Public Job detail and URL-backed search/filtering/pagination
-- Recruiter Job management workspace
-- No applications or fabricated activity metrics
+- Company-owned `Job` model and `JobSkill` relation reusing the shared Skill catalog
+- OWNER-authorized creation, editing, and required-skill management
+- Draft, published, closed, and archived lifecycle with centralized, testable transitions
+- Server-enforced publication readiness checked against fresh database data
+- Whole-integer salary range with an ISO currency code and UTC-safe deadline handling
+- Database-backed public Job directory with URL-backed search and employment/workplace/experience filters
+- Database-backed public Job detail with an honest deferred application action
+- Recruiter Job workspace plus real Job counts on the dashboard and Company workspace
+- Landing page featured Jobs sourced from published listings; typed mock opportunities removed
+- Unit coverage plus isolated database lifecycle, ownership, and visibility coverage
 
-Exit criteria: an authorized Company owner can manage real Job listings and public visitors can discover published opportunities.
+Exit criteria: an authorized Company owner can manage real Job listings and public visitors can discover only published opportunities.
+
+Deferred from Phase 2C: applications, saved jobs, candidate matching, recruiter invitations, notifications, messaging, AI, and billing.
 
 ## Phase 2D — Secure Candidate documents
 

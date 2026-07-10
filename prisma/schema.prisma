@@ -39,6 +39,27 @@ enum CompanyMembershipRole {
   MEMBER
 }
 
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum WorkplaceType {
+  ONSITE
+  HYBRID
+  REMOTE
+}
+
+enum ExperienceLevel {
+  ENTRY
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+}
+
 model User {
   id                 String              @id
   name               String
@@ -88,6 +109,7 @@ model Company {
   updatedAt    DateTime     @updatedAt
 
   memberships CompanyMembership[]
+  jobs        Job[]
 
   @@index([isPublished, name])
   @@map("company")
@@ -108,6 +130,52 @@ model CompanyMembership {
   @@index([companyId, role])
   @@index([userId, role])
   @@map("company_membership")
+}
+
+model Job {
+  id                  String           @id @default(cuid())
+  companyId           String
+  title               String           @db.VarChar(160)
+  slug                String           @unique @db.VarChar(200)
+  summary             String?          @db.VarChar(320)
+  description         String?          @db.VarChar(8000)
+  responsibilities    String?          @db.VarChar(6000)
+  requirements        String?          @db.VarChar(6000)
+  location            String?          @db.VarChar(160)
+  employmentType      EmploymentType?
+  workplaceType       WorkplaceType?
+  experienceLevel     ExperienceLevel?
+  // Salary is stored as whole currency units (e.g. 90000 = 90,000), never minor
+  // units, to keep monetary values as exact integers rather than floats.
+  salaryMin           Int?
+  salaryMax           Int?
+  salaryCurrency      String?          @db.Char(3)
+  applicationDeadline DateTime?        @db.Date
+  status              JobStatus        @default(DRAFT)
+  publishedAt         DateTime?
+  closedAt            DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  company Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  skills  JobSkill[]
+
+  @@index([companyId, status, createdAt])
+  @@index([status, publishedAt, id])
+  @@map("job")
+}
+
+model JobSkill {
+  jobId     String
+  skillId   String
+  createdAt DateTime @default(now())
+
+  job   Job   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, skillId])
+  @@index([skillId])
+  @@map("job_skill")
 }
 
 model CandidateProfile {
@@ -176,6 +244,7 @@ model Skill {
   createdAt      DateTime @default(now())
 
   candidates CandidateSkill[]
+  jobs       JobSkill[]
 
   @@map("skill")
 }

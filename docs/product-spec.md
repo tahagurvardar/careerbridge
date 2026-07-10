@@ -53,18 +53,20 @@ The initial product MVP is expected to include:
 7. Basic admin moderation and operational views
 8. Essential product analytics and audit records
 
-## Current phase: Recruiter and Company Workspace
+## Current phase: Job lifecycle and discovery
 
-Phase 2B adds a secure Recruiter and Company workspace on the completed identity and Candidate foundations:
+Phase 2C adds a secure Company-owned Job domain on the completed identity, Candidate, and Recruiter/Company foundations:
 
-- View and edit Recruiter job title, bio, and LinkedIn URL without duplicating account identity
-- Create a private Company and become its OWNER atomically
-- View all Company memberships and open membership-authorized private workspaces
-- Let OWNER edit and explicitly publish or unpublish a sufficiently complete Company profile
-- Let public visitors search published Companies and open published Company details
-- Keep jobs, applicants, team administration, and analytics as honest deferred states
+- Let a Company OWNER create a Job as a private draft for a Company they own
+- Let an OWNER edit a draft or published Job and manage its required skills from the shared Skill catalog
+- Enforce an explicit draft, published, closed, and archived lifecycle with server-only transitions
+- Gate publishing on fresh readiness: a published Company plus complete Job content and at least one skill
+- Set publication and closure timestamps on the server and remove closed or archived Jobs from discovery immediately
+- Let public visitors search and filter published Jobs and open published Job detail pages
+- Show real Job counts on the Recruiter dashboard and Company workspace with no fabricated activity
+- Keep applicants, saved Jobs, matching, and Job analytics as honest deferred states
 
-Public identity behavior and Better Auth endpoint allow-lists remain unchanged. Admin follows the existing exact-role policy and receives no implicit Recruiter profile access, Company membership, or ownership. Company publication communicates visibility only and must never be described as verification.
+Only PUBLISHED Jobs from published Companies are public; drafts, closed, archived, and unpublished-Company Jobs are never disclosed. Public identity behavior and Better Auth endpoint allow-lists remain unchanged. Admin receives no implicit Company ownership or Job access. Publication communicates visibility only and must never be described as verification.
 
 Email ownership is not verified in Phase 1. The product must not claim that an address has been verified until real email delivery and verification are implemented.
 
@@ -92,7 +94,20 @@ Hidden navigation is not authorization. Every protected page validates the datab
 
 Companies are private until an OWNER explicitly publishes them. Publication requires name, description, industry, headquarters, and a safe website URL. Public search accepts bounded name, industry, and headquarters query parameters and returns only published rows. Public detail exposes Company profile fields only—never owner email, Recruiter profile, or membership data.
 
-## Intentionally deferred after Phase 2B
+## Job access matrix
+
+| Actor               | View own Company Jobs | Create/edit Job    | Publish/close/archive | Public published Job |
+| ------------------- | --------------------- | ------------------ | --------------------- | -------------------- |
+| Signed out          | Redirect              | Redirect           | Redirect              | Allowed              |
+| Candidate           | Denied                | Denied             | Denied                | Allowed              |
+| Recruiter nonmember | Not found             | Not found          | Not found             | Allowed              |
+| Recruiter MEMBER    | Not found             | Denied             | Denied                | Allowed              |
+| Recruiter OWNER     | Allowed               | Allowed            | Allowed               | Allowed              |
+| Admin               | No implicit access    | No implicit access | No implicit access    | Allowed              |
+
+Jobs are private drafts until an OWNER publishes a complete Job under a published Company. Lifecycle transitions are server-controlled: no status value is accepted from form input, and archived Jobs are read-only in this phase. Public search accepts a bounded keyword plus employment-type, workplace-type, and experience-level filters and returns only PUBLISHED Jobs from published Companies. Public detail exposes Job and Company presentational fields only—never internal identifiers, private timestamps, or membership data. Closing or archiving a Job removes it from public discovery immediately.
+
+## Intentionally deferred after Phase 2C
 
 - Email verification and real email delivery
 - Password reset and account recovery
@@ -100,7 +115,9 @@ Companies are private until an OWNER explicitly publishes them. Publication requ
 - CV and avatar upload
 - Recruiter invitations, email invitations, and membership administration
 - Company verification and logo/document upload
-- Jobs, applications, candidate search, CV access, saved jobs, messaging, and notifications
+- Applications, application status history, and candidate CV access
+- Saved jobs, candidate matching, and job recommendations
+- Candidate search, messaging, and notifications
 - Public Candidate profile sharing and social feeds
 - Production Admin provisioning, moderation, and audit workflows
 - AI, billing, and payments

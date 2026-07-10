@@ -26,7 +26,7 @@ flowchart LR
   Prisma --> Postgres
 ```
 
-Phase 2B keeps the public marketing, theme, navigation, identity, and Candidate profile experience intact while adding a Recruiter profile, private Company workspace, and published Company discovery. The Prisma and Better Auth instances are created only from lazy getters, so importing a route or component does not create a connection pool. Personalized profile, dashboard, and Company workspace rendering retrieves the current session and fresh data on the server.
+Phase 2C keeps the public marketing, theme, navigation, identity, Candidate profile, and Recruiter/Company experiences intact while adding a Company-owned Job domain, an explicit Job lifecycle, a Recruiter Job workspace, and database-backed public Job discovery that replaces the previous typed mock opportunities. The Prisma and Better Auth instances are created only from lazy getters, so importing a route or component does not create a connection pool. Personalized profile, dashboard, Company workspace, and Job workspace rendering retrieves the current session and fresh data on the server.
 
 ## Source boundaries
 
@@ -37,8 +37,9 @@ Phase 2B keeps the public marketing, theme, navigation, identity, and Candidate 
 - **src/features/auth:** role rules, Zod boundaries, forms, Server Actions, and session authorization
 - **src/features/candidate-profile:** profile schemas, completion logic, form UI, server queries, ownership-scoped commands, and Server Actions
 - **src/features/recruiter-company:** Recruiter/Company schemas, slug and publication rules, form UI, membership-scoped queries, commands, and Server Actions
+- **src/features/jobs:** Job schemas, slug, lifecycle, publication readiness, and public search rules, plus form UI, OWNER-scoped queries, commands, and Server Actions
 - **src/features:** domain-oriented UI, actions, schemas, and queries
-- **src/config:** stable site configuration and mock foundation data
+- **src/config:** stable site navigation and configuration
 - **src/lib:** infrastructure clients and low-level utilities
 - **src/types:** genuinely shared TypeScript contracts
 - **prisma:** Prisma 7 schema and reviewed migrations
@@ -54,8 +55,8 @@ Unit tests run without PostgreSQL through `npm test`. Database-backed auth integ
 - Pages and layouts are React Server Components by default.
 - Client Components are limited to browser state or event-driven interaction.
 - Current client boundaries are theme switching, the theme provider, Radix primitives, mobile navigation, and React Hook Form authentication/profile forms.
-- Public Company routes are server-rendered from published database records; other public foundation routes retain their existing presentation. The session-aware shared header makes route rendering request-aware.
-- Protected dashboards, Candidate profile routes, and Recruiter Company routes validate the database session and exact role before rendering.
+- Public Company and Job routes are server-rendered from published database records; the landing page renders newest published Jobs. The session-aware shared header makes route rendering request-aware.
+- Protected dashboards, Candidate profile routes, Recruiter Company routes, and Recruiter Job routes validate the database session and exact role before rendering.
 
 ## Planned application layers
 
@@ -80,9 +81,10 @@ Route files should compose feature modules rather than accumulating domain logic
 - The official Better Auth CLI generated the compatible Prisma core models. The strongly typed Prisma role enum was then applied through migration `20260710020153_identity_foundation`.
 - Phase 2A adds only `CandidateProfile`, `Education`, `Experience`, `Skill`, and `CandidateSkill`, plus the constrained `EmploymentType` enum.
 - Phase 2B adds only `RecruiterProfile`, `Company`, and `CompanyMembership`, plus `CompanySize` and `CompanyMembershipRole` enums.
+- Phase 2C adds only `Job` and `JobSkill`, plus the `JobStatus`, `WorkplaceType`, and `ExperienceLevel` enums, and reuses the existing `EmploymentType` enum and `Skill` catalog.
 - Database access remains server-only and is acquired through the lazy singleton helper.
 
-Future domain areas include jobs, saved jobs, applications and status history, documents, moderation, notifications, and audit events. This list is directional, not a committed schema.
+Future domain areas include saved jobs, applications and status history, documents, moderation, notifications, and audit events. This list is directional, not a committed schema.
 
 ### Candidate profile domain
 
@@ -109,7 +111,17 @@ Private workspace reads require an authenticated Recruiter membership. `MEMBER` 
 
 Publishing is an explicit OWNER command. The server requires name, description, industry, headquarters, and a validated HTTP(S) website before setting `isPublished`. Unpublishing is a separate OWNER command. Public list and detail queries always constrain `isPublished: true`, return no membership identity, and treat an unknown or unpublished slug identically. Publication is a visibility state and never Company verification.
 
-Recruiter routes are `/recruiter/profile`, `/recruiter/profile/edit`, `/recruiter/companies`, `/recruiter/companies/new`, `/recruiter/companies/[companyId]`, and `/recruiter/companies/[companyId]/edit`. Public discovery uses `/companies` with bounded URL filters and `/companies/[slug]` for published detail. Invitations, membership administration, Company verification, uploads, and the Job domain remain deferred.
+Recruiter routes are `/recruiter/profile`, `/recruiter/profile/edit`, `/recruiter/companies`, `/recruiter/companies/new`, `/recruiter/companies/[companyId]`, and `/recruiter/companies/[companyId]/edit`. Public discovery uses `/companies` with bounded URL filters and `/companies/[slug]` for published detail. Invitations, membership administration, Company verification, and uploads remain deferred.
+
+### Job domain
+
+`Company` owns zero or more `Job` rows; deleting a Company cascades to its Jobs and their `JobSkill` links. `Job` stores a globally unique server-generated slug, bounded plain-text content fields, the reused `EmploymentType` enum plus the new `WorkplaceType` and `ExperienceLevel` enums, an integer salary range with a `CHAR(3)` currency code, an optional `DATE` application deadline, and the `JobStatus` lifecycle with server-only `publishedAt`/`closedAt` timestamps. `JobSkill` is an explicit join to the shared `Skill` catalog with a composite `(jobId, skillId)` primary key, preventing duplicate assignment. Indexes cover Company workspace queries (`companyId, status, createdAt`) and public discovery (`status, publishedAt, id`). The additive `20260710224143_job_lifecycle_discovery` migration creates these tables, enums, indexes, and cascade behavior without touching existing data.
+
+Salary is persisted as whole non-negative integer currency units rather than a floating-point or minor-unit representation, and the minimum can never exceed the maximum. The currency code is normalized to an uppercase 3-letter form and is required whenever any salary value is present. Application deadlines are date-only and compared in UTC so a timezone offset never shifts the day; a past deadline blocks publication.
+
+The lifecycle is centralized and testable: DRAFT permits edit, publish, and archive; PUBLISHED permits edit, close, and archive; CLOSED permits archive; ARCHIVED is read-only. Transitions, the resulting status, and editability all derive from a single table, so no status value is ever accepted from form input. Publishing is an OWNER command that re-evaluates readiness against freshly read database rows: the Company must be published and the Job must have a title, summary, description, responsibilities, requirements, location, employment type, workplace type, experience level, and at least one required skill. Publishing sets `PUBLISHED` and `publishedAt`; closing sets `CLOSED` and `closedAt` and immediately removes the Job from public discovery; archiving sets `ARCHIVED` and removes it from discovery. Editing a published Job re-checks readiness so a live listing cannot become incomplete.
+
+Every Job command asserts the RECRUITER role, derives identity from the session, and scopes its database predicate through the authenticated user's OWNER membership of the Job's Company. Absent, foreign, and unauthorized Job IDs produce the same unavailable result, so a Recruiter cannot view or edit another Company's private drafts, and a MEMBER cannot mutate Jobs. Public list and detail queries always constrain `status = PUBLISHED` and `Company.isPublished = true`, select only presentational fields with no internal IDs or membership identity, and order by newest `publishedAt` with a deterministic `id` tiebreaker. Recruiter Job routes are `/recruiter/jobs`, `/recruiter/jobs/new`, `/recruiter/jobs/[jobId]`, and `/recruiter/jobs/[jobId]/edit`; public discovery uses `/jobs` with bounded URL filters and `/jobs/[slug]` for published detail. Applications, saved Jobs, candidate matching, and Job analytics remain deferred.
 
 ## Authentication and authorization
 
@@ -130,6 +142,8 @@ Authorization is centralized in `getCurrentSession`, `getCurrentUser`, `requireU
 Candidate profile Server Actions call `requireRole("CANDIDATE")` independently of page rendering. They construct the actor from the authenticated session and do not accept browser-supplied ownership or role fields. Update and delete commands include `candidateProfile.userId` in their database predicates; a miss becomes the same unavailable-record result whether a row is absent or belongs to someone else. Shared command functions repeat the Candidate role assertion, which also makes database integration boundaries directly testable. Admin follows the existing exact-role policy and receives no implicit Candidate-data access.
 
 Recruiter Company Server Actions independently call `requireRole("RECRUITER")`, derive the actor from the server session, and map only validated fields. Company commands repeat the role assertion and scope writes through OWNER membership. Private membership reads and OWNER-only edits are re-authorized on every request; hiding controls is never treated as authorization. Phase 1 still assigns one platform role per user, while Company membership is a separate domain permission. Production Admin elevation/auditing, account recovery, deletion, and retention behavior remain later design work.
+
+Job Server Actions independently call `requireRole("RECRUITER")`, derive the actor from the server session, validate the lifecycle action against a fixed enum, and map only validated content fields. Every Job command repeats the role assertion and scopes reads and writes through the authenticated user's OWNER membership of the Job's Company, re-authorizing each Job ID rather than trusting a browser-supplied `companyId`, status, or ownership field. Lifecycle transitions and publication readiness are re-evaluated inside the authorized command against fresh database data, so a hidden or replayed request cannot force an invalid status or publish an incomplete Job.
 
 ## Validation and forms
 
@@ -184,7 +198,9 @@ CV upload is not implemented in the foundation. A later design must use private 
 | Server Components by default    | Less client JavaScript and clear server/client boundaries                          |
 | Narrow Phase 2A profile schema  | Adds only reviewed Candidate ownership and lifecycle relationships                 |
 | Explicit Company membership     | Separates platform role from extensible Company ownership without implicit access  |
-| Private-by-default publication  | Prevents incomplete or unapproved Company records from entering public discovery   |
+| Private-by-default publication  | Prevents incomplete or unapproved Company and Job records from entering discovery  |
+| Centralized Job lifecycle       | A single server-owned transition table blocks arbitrary status changes from forms  |
+| Integer salary representation   | Stores money as exact whole currency units instead of floats or minor units        |
 
 ## Local migration workflow
 

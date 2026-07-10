@@ -39,7 +39,7 @@ const deferredItems = [
     icon: Bookmark,
     title: "Saved jobs",
     description:
-      "Saving jobs will become available after database-backed opportunity discovery is introduced.",
+      "Browse published jobs today. Saving jobs will arrive with the saved-opportunities phase.",
   },
   {
     icon: Sparkles,
