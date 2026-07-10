@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Form from "next/form";
+import { connection } from "next/server";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowRight,
@@ -28,8 +29,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { featuredOpportunities } from "@/config/opportunities";
-import { OpportunityCard } from "@/features/opportunities/components/opportunity-card";
+import { JobCard } from "@/features/jobs/components/job-card";
+import {
+  employmentTypeLabels,
+  workplaceTypeLabels,
+} from "@/features/jobs/schemas";
+import { getFeaturedPublishedJobs } from "@/features/jobs/server/data";
+import { getPrismaClient } from "@/lib/prisma";
 
 const benefits = [
   {
@@ -52,7 +58,12 @@ const benefits = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  // Render at request time so featured jobs stay fresh and the build does not
+  // read the database while prerendering.
+  await connection();
+  const featuredJobs = await getFeaturedPublishedJobs(getPrismaClient(), 6);
+
   return (
     <>
       <section className="relative isolate overflow-hidden border-b">
@@ -110,11 +121,7 @@ export default function HomePage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-5 pt-2">
-              <Form
-                action="/jobs"
-                role="search"
-                aria-label="Search mock opportunities"
-              >
+              <Form action="/jobs" role="search" aria-label="Search jobs">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="relative sm:col-span-2">
                     <label htmlFor="home-job-query" className="sr-only">
@@ -126,7 +133,7 @@ export default function HomePage() {
                     />
                     <Input
                       id="home-job-query"
-                      name="query"
+                      name="q"
                       placeholder="Job title, skill, or keyword"
                       className="h-11 pl-9"
                     />
@@ -153,42 +160,49 @@ export default function HomePage() {
               </Form>
               <div className="border-t pt-5">
                 <p className="text-muted-foreground mb-3 text-xs font-semibold tracking-wide uppercase">
-                  Recently highlighted
+                  Recently published
                 </p>
-                <div className="space-y-2">
-                  {featuredOpportunities.slice(0, 2).map((opportunity) => (
-                    <Link
-                      key={opportunity.slug}
-                      href={"/jobs/" + opportunity.slug}
-                      aria-label={
-                        "View " +
-                        opportunity.title +
-                        " at " +
-                        opportunity.company
-                      }
-                      className="bg-muted/60 hover:bg-muted focus-visible:ring-ring flex items-center gap-3 rounded-xl p-3 transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                    >
-                      <span className="bg-background flex size-9 shrink-0 items-center justify-center rounded-lg font-mono text-xs font-semibold shadow-sm">
-                        {opportunity.companyInitials}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">
-                          {opportunity.title}
-                        </p>
-                        <p className="text-muted-foreground truncate text-xs">
-                          {opportunity.company} · {opportunity.workMode}
-                        </p>
-                      </div>
-                      <Badge variant="secondary">
-                        {opportunity.employmentType}
-                      </Badge>
-                      <ArrowUpRight
-                        aria-hidden="true"
-                        className="text-muted-foreground size-4 shrink-0"
-                      />
-                    </Link>
-                  ))}
-                </div>
+                {featuredJobs.length ? (
+                  <div className="space-y-2">
+                    {featuredJobs.slice(0, 2).map((job) => (
+                      <Link
+                        key={job.slug}
+                        href={`/jobs/${job.slug}`}
+                        aria-label={`View ${job.title} at ${job.company.name}`}
+                        className="bg-muted/60 hover:bg-muted focus-visible:ring-ring flex items-center gap-3 rounded-xl p-3 transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                      >
+                        <span className="bg-background flex size-9 shrink-0 items-center justify-center rounded-lg font-mono text-xs font-semibold shadow-sm">
+                          {job.company.name.slice(0, 2).toLocaleUpperCase()}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">
+                            {job.title}
+                          </p>
+                          <p className="text-muted-foreground truncate text-xs">
+                            {job.company.name}
+                            {job.workplaceType
+                              ? ` · ${workplaceTypeLabels[job.workplaceType]}`
+                              : ""}
+                          </p>
+                        </div>
+                        {job.employmentType ? (
+                          <Badge variant="secondary">
+                            {employmentTypeLabels[job.employmentType]}
+                          </Badge>
+                        ) : null}
+                        <ArrowUpRight
+                          aria-hidden="true"
+                          className="text-muted-foreground size-4 shrink-0"
+                        />
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm leading-6">
+                    No published jobs yet. New roles will appear here as
+                    companies publish them.
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -283,8 +297,8 @@ export default function HomePage() {
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <SectionHeading
             eyebrow="Featured opportunities"
-            title="A preview of what is waiting."
-            description="Sample listings illustrate the discovery experience planned for the next product phase."
+            title="Roles open right now."
+            description="The newest jobs published by companies on CareerBridge."
           />
           <Button variant="outline" asChild>
             <Link href="/jobs">
@@ -293,11 +307,25 @@ export default function HomePage() {
             </Link>
           </Button>
         </div>
-        <div className="mt-10 grid gap-5 lg:grid-cols-3">
-          {featuredOpportunities.map((opportunity) => (
-            <OpportunityCard key={opportunity.slug} opportunity={opportunity} />
-          ))}
-        </div>
+        {featuredJobs.length ? (
+          <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {featuredJobs.map((job) => (
+              <JobCard key={job.slug} job={job} />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-card mt-10 flex flex-col items-center rounded-2xl border border-dashed px-6 py-14 text-center">
+            <span className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-2xl">
+              <BriefcaseBusiness aria-hidden="true" className="size-6" />
+            </span>
+            <h3 className="mt-5 text-xl font-semibold">
+              No published jobs yet
+            </h3>
+            <p className="text-muted-foreground mt-2 max-w-md leading-7">
+              As companies publish roles, the newest ones will appear here.
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="px-4 pb-20 sm:px-6 sm:pb-24 lg:px-8">

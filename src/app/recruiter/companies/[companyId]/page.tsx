@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  ArrowUpRight,
   BarChart3,
   BriefcaseBusiness,
   ExternalLink,
   Pencil,
+  Plus,
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
@@ -21,6 +23,9 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { requireRole } from "@/features/auth/server/session";
+import { JobStatusBadge } from "@/features/jobs/components/job-status-badge";
+import { formatJobDate } from "@/features/jobs/format";
+import { getCompanyJobsOverview } from "@/features/jobs/server/data";
 import { PublicationControl } from "@/features/recruiter-company/components/publication-control";
 import { getCompanyPublicationReadiness } from "@/features/recruiter-company/publication";
 import {
@@ -36,12 +41,6 @@ export const metadata: Metadata = {
 };
 
 const deferredSections = [
-  {
-    icon: BriefcaseBusiness,
-    title: "Jobs",
-    description:
-      "Job creation and publishing are deferred to the Job domain phase.",
-  },
   {
     icon: UsersRound,
     title: "Applicants",
@@ -72,8 +71,9 @@ export default async function CompanyWorkspacePage({
     "RECRUITER",
     `/recruiter/companies/${companyId}`,
   );
+  const prisma = getPrismaClient();
   const membership = await getCompanyWorkspace(
-    getPrismaClient(),
+    prisma,
     session.user.id,
     companyId,
   );
@@ -82,6 +82,9 @@ export default async function CompanyWorkspacePage({
 
   const { company, role } = membership;
   const isOwner = role === "OWNER";
+  const jobsOverview = isOwner
+    ? await getCompanyJobsOverview(prisma, session.user.id, company.id)
+    : null;
   const readiness = getCompanyPublicationReadiness(company);
   const website = safeHttpUrlSchema.safeParse(company.websiteUrl ?? "");
 
@@ -232,7 +235,77 @@ export default async function CompanyWorkspacePage({
           </Card>
         </div>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {isOwner && jobsOverview ? (
+          <Card className="mt-6">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <BriefcaseBusiness
+                      aria-hidden="true"
+                      className="text-primary size-5"
+                    />
+                    Jobs
+                  </CardTitle>
+                  <CardDescription>
+                    {jobsOverview.total === 0
+                      ? "No jobs yet for this company."
+                      : `${jobsOverview.total} ${
+                          jobsOverview.total === 1 ? "job" : "jobs"
+                        } · ${jobsOverview.statusCounts.PUBLISHED} published, ${jobsOverview.statusCounts.DRAFT} draft`}
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" asChild>
+                    <Link href={`/recruiter/jobs/new?companyId=${company.id}`}>
+                      <Plus aria-hidden="true" />
+                      Create job
+                    </Link>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={`/recruiter/jobs?companyId=${company.id}`}>
+                      Manage jobs
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            {jobsOverview.recentJobs.length ? (
+              <CardContent>
+                <ul className="divide-y">
+                  {jobsOverview.recentJobs.map((job) => (
+                    <li key={job.id}>
+                      <Link
+                        href={`/recruiter/jobs/${job.id}`}
+                        className="hover:bg-muted/50 focus-visible:ring-ring -mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 focus-visible:ring-2 focus-visible:outline-none"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">
+                            {job.title}
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            {job.status === "PUBLISHED" && job.publishedAt
+                              ? `Published ${formatJobDate(job.publishedAt)}`
+                              : `Created ${formatJobDate(job.createdAt)}`}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <JobStatusBadge status={job.status} />
+                          <ArrowUpRight
+                            aria-hidden="true"
+                            className="text-muted-foreground size-4"
+                          />
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            ) : null}
+          </Card>
+        ) : null}
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {deferredSections.map((item) => {
             const Icon = item.icon;
             return (

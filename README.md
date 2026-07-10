@@ -2,15 +2,15 @@
 
 CareerBridge is a production-oriented job and internship platform designed to connect ambitious candidates with thoughtful employers. The long-term product combines structured hiring workflows with responsible AI assistance while keeping transparency, accessibility, and human decision-making at the center.
 
-> **Project status:** Phase 2B Recruiter and Company Workspace is implemented on **feat/company-recruiter-workspace**. Recruiters can manage professional profiles and owner-authorized Companies while public visitors can discover published Company profiles.
+> **Project status:** Phase 2C Job Lifecycle and Discovery is implemented on **feat/job-lifecycle-discovery**. Company owners can manage the full Job lifecycle while public visitors discover only published Jobs from published Companies.
 
 ## Foundation preview
 
 The current application provides:
 
 - A responsive, theme-aware CareerBridge marketing experience
-- Presentable public routes for jobs, database-backed Companies, sign-in, and registration
-- Typed mock opportunities with URL-backed filtering and detail previews
+- Presentable public routes for database-backed Jobs and Companies, sign-in, and registration
+- Database-backed public Job discovery with URL-backed search and filters
 - A scalable App Router structure with shared layout and feature boundaries
 - A PostgreSQL-ready Prisma 7 setup with a lazy, build-safe client helper
 - Better Auth email/password identity with database-backed sessions
@@ -21,6 +21,8 @@ The current application provides:
 - Deterministic profile-completion guidance on the profile and dashboard
 - Recruiter profiles and private multi-Company membership workspaces
 - Atomic Company ownership, completeness-gated publishing, and public discovery
+- Company-owned Jobs with an explicit draft, published, closed, and archived lifecycle
+- OWNER-authorized Job creation, editing, required skills, and publication readiness checks
 - Product, architecture, and delivery documentation
 
 ## Technology
@@ -106,9 +108,9 @@ The command refuses production execution, validates all inputs, writes only thro
 
 | Route                                   | Purpose                                      |
 | --------------------------------------- | -------------------------------------------- |
-| /                                       | Product landing page                         |
-| /jobs                                   | URL-backed mock opportunity discovery        |
-| /jobs/[slug]                            | Mock opportunity detail preview              |
+| /                                       | Product landing page with featured Jobs      |
+| /jobs                                   | Published Job discovery, search, and filters |
+| /jobs/[slug]                            | Published Job public detail                  |
 | /companies                              | Published Company discovery and search       |
 | /companies/[slug]                       | Published Company public profile             |
 | /login                                  | Email/password sign-in                       |
@@ -127,6 +129,10 @@ The command refuses production execution, validates all inputs, writes only thro
 | /recruiter/companies/new                | Create a private Company as OWNER            |
 | /recruiter/companies/[companyId]        | Private member Company workspace             |
 | /recruiter/companies/[companyId]/edit   | OWNER-only Company editing                   |
+| /recruiter/jobs                         | Owned Jobs with status/company/title filters |
+| /recruiter/jobs/new                     | Create a draft Job for an owned Company      |
+| /recruiter/jobs/[jobId]                 | Private Job workspace and lifecycle actions  |
+| /recruiter/jobs/[jobId]/edit            | OWNER-only Job editing                       |
 | /admin                                  | Protected Admin access confirmation          |
 
 ## Project structure
@@ -138,7 +144,7 @@ src/
 │   ├── layout/             # Shared site navigation and footer
 │   ├── shared/             # Reusable cross-feature components
 │   └── ui/                 # Owned shadcn/ui primitives
-├── config/                 # Site navigation and typed mock content
+├── config/                 # Stable site navigation and configuration
 ├── features/               # Domain-oriented UI modules
 ├── lib/                    # Shared utilities and infrastructure clients
 └── types/                  # Shared TypeScript contracts
@@ -151,6 +157,8 @@ Identity code is grouped under `src/features/auth`: shared schemas and role rule
 Candidate profile code is grouped under `src/features/candidate-profile`. Shared Zod schemas and the completion calculator remain database-free; interactive React Hook Form components are isolated client boundaries; queries, ownership-scoped commands, and Server Actions remain server-only. Migration `20260710172118_candidate_profile_foundation` adds the profile aggregate without changing identity behavior.
 
 Recruiter and Company code is grouped under `src/features/recruiter-company`. Database-free schemas, slug allocation, publication readiness, and ownership helpers are separated from server-only queries, commands, and Server Actions. Migration `20260710191654_recruiter_company_workspace` adds the Recruiter profile, Company, and explicit membership domain without changing Better Auth identity tables or public endpoint allow-lists.
+
+Job code is grouped under `src/features/jobs`. Database-free schemas, slug allocation, lifecycle transitions, publication readiness, and public search mapping are separated from server-only queries, OWNER-scoped commands, and Server Actions. Jobs reuse the shared `Skill` catalog through an explicit `JobSkill` relation rather than a second catalog. Migration `20260710224143_job_lifecycle_discovery` adds the `Job` and `JobSkill` tables and the `JobStatus`, `WorkplaceType`, and `ExperienceLevel` enums without changing identity, Candidate, or Company tables.
 
 Database integration tests never use `DATABASE_URL`. To run them, configure a separate `TEST_DATABASE_URL`, confirm it targets an isolated test database, set `RUN_DATABASE_INTEGRATION_TESTS=true`, and run `npm run test:integration`. The command skips clearly unless both values are present and refuses a test URL matching either application database URL. Regular `npm test` remains database-free.
 
@@ -186,7 +194,19 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Companies start unpublished. Publishing requires name, description, industry, headquarters, and a safe `http`/`https` website. Publication is visibility, not verification.
 - Public directory and detail queries always include `isPublished = true`. Unknown and unpublished slugs share the same not-found behavior, and public results never include membership or owner identity data.
 - Company names do not automatically rewrite an existing slug during editing, preserving stable public URLs.
-- Recruiter invitations, membership management, verification, uploads, jobs, applications, candidate search, messaging, notifications, AI, and billing remain deferred.
+- Recruiter invitations, membership management, verification, uploads, applications, candidate search, messaging, notifications, AI, and billing remain deferred.
+
+## Job domain boundaries
+
+- Only an authenticated `RECRUITER` session can render or mutate Job workspace routes. Every Job mutation additionally requires OWNER membership of the Job's Company; Candidate, Admin, and MEMBER users cannot create, edit, publish, close, or archive Jobs.
+- Job identity comes from the server. Slugs are generated from the validated title with deterministic `-2`, `-3` suffixes, and browser input never supplies a trusted `companyId`, status, slug, `publishedAt`, or ownership field.
+- Every Job command scopes its database predicate through the authenticated user's OWNER membership, so absent, foreign, and unauthorized Job IDs produce the same unavailable result. Recruiter A cannot view or edit Recruiter B's private drafts.
+- The lifecycle is DRAFT → PUBLISHED → CLOSED → ARCHIVED with explicit, centralized transitions. Status, `publishedAt`, and `closedAt` are set only by the server; archived Jobs are read-only in this phase.
+- Publishing is an OWNER command that re-checks readiness against fresh database data: the Company must be published and the Job must have a title, summary, description, responsibilities, requirements, location, employment type, workplace type, experience level, and at least one required skill. A deadline in the past blocks publishing.
+- Salary is stored as whole non-negative integer currency units with a normalized uppercase 3-letter currency code, and the salary minimum can never exceed the maximum. Deadlines are date-only and compared in UTC.
+- Required skills reuse the shared normalized `Skill` catalog through `JobSkill`, whose composite primary key prevents duplicate assignment even under concurrent requests.
+- Public directory and detail queries always constrain `status = PUBLISHED` and `Company.isPublished = true`. Draft, closed, archived, and unpublished-Company Jobs return the same not-found behavior, and public results never include internal IDs or membership identity.
+- Applications, saved Jobs, candidate matching, and Job analytics remain honest deferred states.
 
 ## Documentation
 
