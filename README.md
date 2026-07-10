@@ -2,7 +2,7 @@
 
 CareerBridge is a production-oriented job and internship platform designed to connect ambitious candidates with thoughtful employers. The long-term product combines structured hiring workflows with responsible AI assistance while keeping transparency, accessibility, and human decision-making at the center.
 
-> **Project status:** Phase 1 identity and access is implemented on **feat/identity-access**. Candidate and Recruiter accounts, persistent sessions, role authorization, and the development Admin bootstrap are available; product-domain workflows remain intentionally deferred.
+> **Project status:** Phase 2A Candidate Profile Foundation is implemented on **feat/candidate-profile-foundation**. Candidates can securely manage professional details, education, experience, and normalized skills while later hiring workflows remain intentionally deferred.
 
 ## Foundation preview
 
@@ -17,6 +17,8 @@ The current application provides:
 - Public Candidate and Recruiter registration with server-side role allow-listing
 - Server-protected Candidate, Recruiter, and Admin route boundaries
 - Session-aware desktop and mobile navigation with secure sign-out
+- Candidate-owned professional profiles with education, experience, and skills
+- Deterministic profile-completion guidance on the profile and dashboard
 - Product, architecture, and delivery documentation
 
 ## Technology
@@ -100,17 +102,23 @@ The command refuses production execution, validates all inputs, writes only thro
 
 ## Public routes
 
-| Route                | Purpose                                      |
-| -------------------- | -------------------------------------------- |
-| /                    | Product landing page                         |
-| /jobs                | URL-backed mock opportunity discovery        |
-| /jobs/[slug]         | Mock opportunity detail preview              |
-| /companies           | Company directory preview                    |
-| /login               | Email/password sign-in                       |
-| /register            | Candidate and Recruiter account registration |
-| /candidate/dashboard | Protected Candidate workspace preview        |
-| /recruiter/dashboard | Protected Recruiter workspace preview        |
-| /admin               | Protected Admin access confirmation          |
+| Route                                   | Purpose                                      |
+| --------------------------------------- | -------------------------------------------- |
+| /                                       | Product landing page                         |
+| /jobs                                   | URL-backed mock opportunity discovery        |
+| /jobs/[slug]                            | Mock opportunity detail preview              |
+| /companies                              | Company directory preview                    |
+| /login                                  | Email/password sign-in                       |
+| /register                               | Candidate and Recruiter account registration |
+| /candidate/dashboard                    | Protected Candidate workspace and summary    |
+| /candidate/profile                      | Protected Candidate profile overview         |
+| /candidate/profile/edit                 | Edit Candidate professional information      |
+| /candidate/profile/education/new        | Add an education record                      |
+| /candidate/profile/education/[id]/edit  | Edit owned education                         |
+| /candidate/profile/experience/new       | Add an experience record                     |
+| /candidate/profile/experience/[id]/edit | Edit owned experience                        |
+| /recruiter/dashboard                    | Protected Recruiter workspace preview        |
+| /admin                                  | Protected Admin access confirmation          |
 
 ## Project structure
 
@@ -131,6 +139,8 @@ No empty placeholder directories are committed; new boundaries should be added w
 
 Identity code is grouped under `src/features/auth`: shared schemas and role rules are usable by forms and tests, while session and action modules are explicitly server-only. The Better Auth server and Prisma client live in `src/lib` and initialize lazily at request time.
 
+Candidate profile code is grouped under `src/features/candidate-profile`. Shared Zod schemas and the completion calculator remain database-free; interactive React Hook Form components are isolated client boundaries; queries, ownership-scoped commands, and Server Actions remain server-only. Migration `20260710172118_candidate_profile_foundation` adds the profile aggregate without changing identity behavior.
+
 Database integration tests never use `DATABASE_URL`. To run them, configure a separate `TEST_DATABASE_URL`, confirm it targets an isolated test database, set `RUN_DATABASE_INTEGRATION_TESTS=true`, and run `npm run test:integration`. The command skips clearly unless both values are present and refuses a test URL matching either application database URL. Regular `npm test` remains database-free.
 
 ## Identity security boundaries
@@ -144,7 +154,17 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Authentication failures emit prefixed server diagnostics containing only safe event, category, status, and error-code metadata. Rate limits receive a distinct user-facing retry message without exposing account existence.
 - Page authorization re-validates the database-backed session and role on the server. Navigation visibility is presentation only, never the security boundary.
 - Callback paths are normalized as same-origin internal paths and must match the signed-in role's dashboard.
-- Email verification, password reset, social authentication, complete profiles, and company membership are deferred.
+- Email verification, password reset, social authentication, and company membership are deferred.
+
+## Candidate profile boundaries
+
+- Only an authenticated `CANDIDATE` session can render or mutate Candidate profile routes. Recruiters and Admins follow the existing exact-role redirect policy; Admin access is not implicitly granted.
+- Server Actions validate the role again and derive the owning user from the session. Forms never submit a user ID, profile ID, or role.
+- Education, experience, and skill removals use ownership-scoped database predicates. A record ID alone is never sufficient to mutate data.
+- Skill catalog names use Unicode and whitespace normalization plus a unique lookup name. Candidate assignments use a composite primary key and a transaction with duplicate-safe creation.
+- Professional links accept only valid `http` or `https` URLs. Profile text is rendered as text, never user-authored HTML.
+- Completion is calculated on read: headline, location, bio, skills, education, and experience are worth 15 points each; at least one professional link is worth 10 points. It is never stored or described as verification.
+- CV/avatar upload, public profiles, recruiter/company profiles, jobs, applications, saved jobs, messaging, notifications, AI, and payments remain deferred.
 
 ## Documentation
 

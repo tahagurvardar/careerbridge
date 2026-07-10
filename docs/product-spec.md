@@ -53,41 +53,42 @@ The initial product MVP is expected to include:
 7. Basic admin moderation and operational views
 8. Essential product analytics and audit records
 
-## Current phase: identity and access
+## Current phase: Candidate Profile Foundation
 
-Phase 1 builds secure identity on the completed Phase 0 foundation:
+Phase 2A builds the first Candidate-owned product domain on the completed identity foundation:
 
-- Candidate and Recruiter email/password registration
-- Database-backed authenticated sessions and sign-out
-- Session-aware public navigation on desktop and mobile
-- Server-protected Candidate, Recruiter, and Admin workspace previews
-- Typed platform roles with a least-privileged Candidate default
-- A gated, development-only Admin bootstrap
-- Focused registration, redirect, role, and authorization tests
+- View and edit basic professional information without duplicating account name/email
+- Add, edit, and safely delete owned education and work-experience records
+- Add and remove normalized, duplicate-safe skills
+- View deterministic profile-completion progress and recommended next actions
+- See the same completion summary and profile links on the Candidate dashboard
+- Enforce Candidate-only access and per-record ownership on every server mutation
 
-Public visitors may choose only Candidate or Recruiter. Admin is never displayed or accepted in public registration. Browser-supplied roles are validated against a server allow-list and checked again at the authentication persistence boundary.
+Public identity behavior remains unchanged. Profile data is private to the authenticated Candidate in this phase; there is no public sharing or Recruiter access. Admin follows the existing exact-role policy rather than receiving implicit access.
 
 Email ownership is not verified in Phase 1. The product must not claim that an address has been verified until real email delivery and verification are implemented.
 
-## Phase 1 access matrix
+## Candidate profile access matrix
 
-| Actor      | Candidate dashboard       | Recruiter dashboard       | Admin area                |
-| ---------- | ------------------------- | ------------------------- | ------------------------- |
-| Signed out | Redirect to sign-in       | Redirect to sign-in       | Redirect to sign-in       |
-| Candidate  | Allowed                   | Redirect to own dashboard | Redirect to own dashboard |
-| Recruiter  | Redirect to own dashboard | Allowed                   | Redirect to own dashboard |
-| Admin      | Redirect to Admin         | Redirect to Admin         | Allowed                   |
+| Actor      | View/edit profile         | Mutate owned child record | Mutate another Candidate |
+| ---------- | ------------------------- | ------------------------- | ------------------------ |
+| Signed out | Redirect to sign-in       | Redirect to sign-in       | Denied                   |
+| Candidate  | Allowed                   | Allowed                   | Denied by ownership      |
+| Recruiter  | Redirect to own dashboard | Denied                    | Denied                   |
+| Admin      | Redirect to Admin         | Denied by current policy  | Denied by current policy |
 
 Hidden navigation is not authorization. Every protected page validates the database-backed session and exact role on the server.
 
-## Intentionally deferred after Phase 1
+## Intentionally deferred after Phase 2A
 
 - Email verification and real email delivery
 - Password reset and account recovery
 - Social authentication
-- Complete Candidate and Recruiter profiles
+- CV and avatar upload
+- Recruiter profiles and company profiles
 - Company creation and membership
-- Jobs, applications, saved jobs, CV uploads, messaging, and notifications
+- Jobs, applications, saved jobs, messaging, and notifications
+- Public Candidate profile sharing and social feeds
 - Production Admin provisioning, moderation, and audit workflows
 - AI, billing, and payments
 
