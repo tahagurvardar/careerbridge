@@ -2,14 +2,14 @@
 
 CareerBridge is a production-oriented job and internship platform designed to connect ambitious candidates with thoughtful employers. The long-term product combines structured hiring workflows with responsible AI assistance while keeping transparency, accessibility, and human decision-making at the center.
 
-> **Project status:** Phase 2A Candidate Profile Foundation is implemented on **feat/candidate-profile-foundation**. Candidates can securely manage professional details, education, experience, and normalized skills while later hiring workflows remain intentionally deferred.
+> **Project status:** Phase 2B Recruiter and Company Workspace is implemented on **feat/company-recruiter-workspace**. Recruiters can manage professional profiles and owner-authorized Companies while public visitors can discover published Company profiles.
 
 ## Foundation preview
 
 The current application provides:
 
 - A responsive, theme-aware CareerBridge marketing experience
-- Presentable public routes for jobs, companies, sign-in, and registration
+- Presentable public routes for jobs, database-backed Companies, sign-in, and registration
 - Typed mock opportunities with URL-backed filtering and detail previews
 - A scalable App Router structure with shared layout and feature boundaries
 - A PostgreSQL-ready Prisma 7 setup with a lazy, build-safe client helper
@@ -19,6 +19,8 @@ The current application provides:
 - Session-aware desktop and mobile navigation with secure sign-out
 - Candidate-owned professional profiles with education, experience, and skills
 - Deterministic profile-completion guidance on the profile and dashboard
+- Recruiter profiles and private multi-Company membership workspaces
+- Atomic Company ownership, completeness-gated publishing, and public discovery
 - Product, architecture, and delivery documentation
 
 ## Technology
@@ -107,7 +109,8 @@ The command refuses production execution, validates all inputs, writes only thro
 | /                                       | Product landing page                         |
 | /jobs                                   | URL-backed mock opportunity discovery        |
 | /jobs/[slug]                            | Mock opportunity detail preview              |
-| /companies                              | Company directory preview                    |
+| /companies                              | Published Company discovery and search       |
+| /companies/[slug]                       | Published Company public profile             |
 | /login                                  | Email/password sign-in                       |
 | /register                               | Candidate and Recruiter account registration |
 | /candidate/dashboard                    | Protected Candidate workspace and summary    |
@@ -117,7 +120,13 @@ The command refuses production execution, validates all inputs, writes only thro
 | /candidate/profile/education/[id]/edit  | Edit owned education                         |
 | /candidate/profile/experience/new       | Add an experience record                     |
 | /candidate/profile/experience/[id]/edit | Edit owned experience                        |
-| /recruiter/dashboard                    | Protected Recruiter workspace preview        |
+| /recruiter/dashboard                    | Protected Recruiter workspace summary        |
+| /recruiter/profile                      | Protected Recruiter profile overview         |
+| /recruiter/profile/edit                 | Edit Recruiter professional information      |
+| /recruiter/companies                    | Recruiter's Company memberships              |
+| /recruiter/companies/new                | Create a private Company as OWNER            |
+| /recruiter/companies/[companyId]        | Private member Company workspace             |
+| /recruiter/companies/[companyId]/edit   | OWNER-only Company editing                   |
 | /admin                                  | Protected Admin access confirmation          |
 
 ## Project structure
@@ -141,6 +150,8 @@ Identity code is grouped under `src/features/auth`: shared schemas and role rule
 
 Candidate profile code is grouped under `src/features/candidate-profile`. Shared Zod schemas and the completion calculator remain database-free; interactive React Hook Form components are isolated client boundaries; queries, ownership-scoped commands, and Server Actions remain server-only. Migration `20260710172118_candidate_profile_foundation` adds the profile aggregate without changing identity behavior.
 
+Recruiter and Company code is grouped under `src/features/recruiter-company`. Database-free schemas, slug allocation, publication readiness, and ownership helpers are separated from server-only queries, commands, and Server Actions. Migration `20260710191654_recruiter_company_workspace` adds the Recruiter profile, Company, and explicit membership domain without changing Better Auth identity tables or public endpoint allow-lists.
+
 Database integration tests never use `DATABASE_URL`. To run them, configure a separate `TEST_DATABASE_URL`, confirm it targets an isolated test database, set `RUN_DATABASE_INTEGRATION_TESTS=true`, and run `npm run test:integration`. The command skips clearly unless both values are present and refuses a test URL matching either application database URL. Regular `npm test` remains database-free.
 
 ## Identity security boundaries
@@ -154,7 +165,7 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Authentication failures emit prefixed server diagnostics containing only safe event, category, status, and error-code metadata. Rate limits receive a distinct user-facing retry message without exposing account existence.
 - Page authorization re-validates the database-backed session and role on the server. Navigation visibility is presentation only, never the security boundary.
 - Callback paths are normalized as same-origin internal paths and must match the signed-in role's dashboard.
-- Email verification, password reset, social authentication, and company membership are deferred.
+- Email verification, password reset, social authentication, and membership invitations are deferred.
 
 ## Candidate profile boundaries
 
@@ -164,7 +175,18 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Skill catalog names use Unicode and whitespace normalization plus a unique lookup name. Candidate assignments use a composite primary key and a transaction with duplicate-safe creation.
 - Professional links accept only valid `http` or `https` URLs. Profile text is rendered as text, never user-authored HTML.
 - Completion is calculated on read: headline, location, bio, skills, education, and experience are worth 15 points each; at least one professional link is worth 10 points. It is never stored or described as verification.
-- CV/avatar upload, public profiles, recruiter/company profiles, jobs, applications, saved jobs, messaging, notifications, AI, and payments remain deferred.
+- CV/avatar upload, public Candidate profiles, jobs, applications, saved jobs, messaging, notifications, AI, and payments remain deferred.
+
+## Recruiter and Company boundaries
+
+- Only an authenticated `RECRUITER` session can render or mutate Recruiter workspace routes. Candidate and Admin roles receive no implicit Recruiter profile or Company access.
+- Recruiter profile identity comes from `User`; the one-to-one `RecruiterProfile` stores only job title, bio, and a safe LinkedIn URL.
+- Company creation generates the slug on the server and creates the Company plus `OWNER` membership atomically. Duplicate names receive deterministic `-2`, `-3`, and later suffixes without overwriting an existing Company.
+- `CompanyMembership` has unique `(userId, companyId)` membership and explicit `OWNER`/`MEMBER` roles. Every private read checks membership; every edit and publication mutation scopes through an authenticated OWNER relation.
+- Companies start unpublished. Publishing requires name, description, industry, headquarters, and a safe `http`/`https` website. Publication is visibility, not verification.
+- Public directory and detail queries always include `isPublished = true`. Unknown and unpublished slugs share the same not-found behavior, and public results never include membership or owner identity data.
+- Company names do not automatically rewrite an existing slug during editing, preserving stable public URLs.
+- Recruiter invitations, membership management, verification, uploads, jobs, applications, candidate search, messaging, notifications, AI, and billing remain deferred.
 
 ## Documentation
 

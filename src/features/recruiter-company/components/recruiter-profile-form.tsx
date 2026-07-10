@@ -1,0 +1,144 @@
+"use client";
+
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { LoaderCircle, Save } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  FormField,
+  FormStatus,
+} from "@/features/candidate-profile/components/form-field";
+import {
+  recruiterProfileSchema,
+  type RecruiterProfileInput,
+} from "@/features/recruiter-company/schemas";
+import {
+  saveRecruiterProfileAction,
+  type RecruiterCompanyActionResult,
+} from "@/features/recruiter-company/server/actions";
+
+export function RecruiterProfileForm({
+  defaultValues,
+}: {
+  defaultValues: RecruiterProfileInput;
+}) {
+  const router = useRouter();
+  const [result, setResult] = useState<RecruiterCompanyActionResult | null>(
+    null,
+  );
+  const {
+    register,
+    handleSubmit,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<RecruiterProfileInput>({
+    resolver: zodResolver(recruiterProfileSchema),
+    defaultValues,
+  });
+
+  const submit = handleSubmit(async (values) => {
+    setResult(null);
+    const nextResult = await saveRecruiterProfileAction(values);
+
+    if (!nextResult.success) {
+      Object.entries(nextResult.fieldErrors ?? {}).forEach(
+        ([field, message]) => {
+          if (message)
+            setError(field as keyof RecruiterProfileInput, { message });
+        },
+      );
+      setResult(nextResult);
+      return;
+    }
+
+    router.push(
+      `/recruiter/profile?updated=${encodeURIComponent(nextResult.message)}`,
+    );
+  });
+
+  return (
+    <form className="grid gap-6" onSubmit={submit} noValidate>
+      <FormField
+        id="jobTitle"
+        label="Job title"
+        hint="Your professional role, separate from your CareerBridge account role."
+        error={errors.jobTitle?.message}
+      >
+        <Input
+          id="jobTitle"
+          maxLength={160}
+          placeholder="Talent acquisition lead"
+          aria-invalid={Boolean(errors.jobTitle)}
+          aria-describedby={
+            errors.jobTitle ? "jobTitle-error" : "jobTitle-hint"
+          }
+          {...register("jobTitle")}
+        />
+      </FormField>
+
+      <FormField
+        id="bio"
+        label="Professional bio"
+        hint="Share your recruiting focus and experience. This is rendered as plain text."
+        error={errors.bio?.message}
+      >
+        <Textarea
+          id="bio"
+          rows={7}
+          maxLength={2000}
+          placeholder="Describe your hiring focus, industries, and professional background."
+          aria-invalid={Boolean(errors.bio)}
+          aria-describedby={errors.bio ? "bio-error" : "bio-hint"}
+          {...register("bio")}
+        />
+      </FormField>
+
+      <FormField
+        id="linkedinUrl"
+        label="LinkedIn URL"
+        hint="Only complete http or https URLs are accepted."
+        error={errors.linkedinUrl?.message}
+      >
+        <Input
+          id="linkedinUrl"
+          type="url"
+          inputMode="url"
+          placeholder="https://www.linkedin.com/in/your-name"
+          aria-invalid={Boolean(errors.linkedinUrl)}
+          aria-describedby={
+            errors.linkedinUrl ? "linkedinUrl-error" : "linkedinUrl-hint"
+          }
+          {...register("linkedinUrl")}
+        />
+      </FormField>
+
+      {result && !result.success ? (
+        <FormStatus message={result.message} />
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" size="lg" disabled={isSubmitting}>
+          {isSubmitting ? (
+            <LoaderCircle aria-hidden="true" className="animate-spin" />
+          ) : (
+            <Save aria-hidden="true" />
+          )}
+          {isSubmitting ? "Saving…" : "Save profile"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          onClick={() => router.back()}
+        >
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
