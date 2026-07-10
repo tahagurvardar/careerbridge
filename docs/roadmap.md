@@ -4,7 +4,7 @@ The roadmap is deliberately phased so each release leaves the product in a coher
 
 ## Phase 0 — Project foundation
 
-Status: complete in this branch.
+Status: complete.
 
 - Next.js, TypeScript, Tailwind CSS, and ESLint
 - shadcn/ui and Lucide icon foundation
@@ -16,17 +16,24 @@ Status: complete in this branch.
 
 ## Phase 1 — Identity and access
 
-- Finalize user and role model
-- Add the smallest required Prisma identity schema and first migration
-- Implement Auth.js sessions
-- Add candidate and recruiter registration paths
-- Add login, logout, recovery, and protected-route behavior
-- Establish authorization helpers and audit conventions
-- Add Zod schemas and React Hook Form where interactive forms begin
+Status: complete on `feat/identity-access`.
+
+- Finalized the single-role `CANDIDATE`, `RECRUITER`, and `ADMIN` model
+- Added the Better Auth identity schema and `identity_foundation` migration
+- Implemented Better Auth email/password identity and persistent database sessions
+- Added server-validated Candidate and Recruiter registration
+- Added sign-in, sign-out, session-aware navigation, and protected dashboards
+- Centralized page, Server Action, redirect, and role authorization helpers
+- Added Zod, React Hook Form, and focused custom-logic tests
+- Added an explicit development-only Admin bootstrap
 
 Exit criteria: secure role-aware access with tested authorization boundaries.
 
+Deferred from identity: email verification, password reset/recovery, social login, production Admin provisioning, and complete role profiles.
+
 ## Phase 2 — Candidate profiles and job discovery
+
+Recommended next phase.
 
 - Candidate profile basics
 - Education, experience, and skills

@@ -53,18 +53,43 @@ The initial product MVP is expected to include:
 7. Basic admin moderation and operational views
 8. Essential product analytics and audit records
 
-## Current phase: foundation
+## Current phase: identity and access
 
-Phase 0 establishes only the technical and visual foundation:
+Phase 1 builds secure identity on the completed Phase 0 foundation:
 
-- Next.js App Router application and shared public layout
-- Responsive light and dark themes
-- Public marketing and route placeholders
-- Owned shadcn/ui primitives
-- PostgreSQL-ready Prisma configuration
-- Documentation, scripts, and quality gates
+- Candidate and Recruiter email/password registration
+- Database-backed authenticated sessions and sign-out
+- Session-aware public navigation on desktop and mobile
+- Server-protected Candidate, Recruiter, and Admin workspace previews
+- Typed platform roles with a least-privileged Candidate default
+- A gated, development-only Admin bootstrap
+- Focused registration, redirect, role, and authorization tests
 
-Authentication, domain models, file upload, applications, dashboards, notifications, messaging, analytics collection, and AI features are outside Phase 0.
+Public visitors may choose only Candidate or Recruiter. Admin is never displayed or accepted in public registration. Browser-supplied roles are validated against a server allow-list and checked again at the authentication persistence boundary.
+
+Email ownership is not verified in Phase 1. The product must not claim that an address has been verified until real email delivery and verification are implemented.
+
+## Phase 1 access matrix
+
+| Actor      | Candidate dashboard       | Recruiter dashboard       | Admin area                |
+| ---------- | ------------------------- | ------------------------- | ------------------------- |
+| Signed out | Redirect to sign-in       | Redirect to sign-in       | Redirect to sign-in       |
+| Candidate  | Allowed                   | Redirect to own dashboard | Redirect to own dashboard |
+| Recruiter  | Redirect to own dashboard | Allowed                   | Redirect to own dashboard |
+| Admin      | Redirect to Admin         | Redirect to Admin         | Allowed                   |
+
+Hidden navigation is not authorization. Every protected page validates the database-backed session and exact role on the server.
+
+## Intentionally deferred after Phase 1
+
+- Email verification and real email delivery
+- Password reset and account recovery
+- Social authentication
+- Complete Candidate and Recruiter profiles
+- Company creation and membership
+- Jobs, applications, saved jobs, CV uploads, messaging, and notifications
+- Production Admin provisioning, moderation, and audit workflows
+- AI, billing, and payments
 
 ## Future AI scope
 
