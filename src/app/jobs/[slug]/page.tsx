@@ -8,7 +8,6 @@ import {
   CalendarClock,
   GraduationCap,
   Laptop2,
-  Lock,
   MapPin,
 } from "lucide-react";
 
@@ -21,6 +20,7 @@ import {
   CardHeader,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { JobApplyPanel } from "@/features/applications/components/job-apply-panel";
 import { formatJobDate, formatSalaryRange } from "@/features/jobs/format";
 import {
   employmentTypeLabels,
@@ -230,22 +230,10 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
                   <Separator />
                 </>
               ) : null}
-              <Button
-                type="button"
-                className="h-10 w-full"
-                aria-describedby="application-availability"
-                disabled
-              >
-                <Lock aria-hidden="true" data-icon="inline-start" />
-                Applications open next phase
-              </Button>
-              <p
-                id="application-availability"
-                className="text-muted-foreground text-xs leading-5"
-              >
-                Applications will be available in the next phase, once
-                authenticated candidate applications are added.
-              </p>
+              <JobApplyPanel
+                slug={job.slug}
+                applicationDeadline={job.applicationDeadline}
+              />
             </CardContent>
           </Card>
         </aside>

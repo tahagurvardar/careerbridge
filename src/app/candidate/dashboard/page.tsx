@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  ArrowUpRight,
   Bookmark,
-  FileCheck2,
+  Building2,
+  ClipboardList,
   Pencil,
   Sparkles,
   UserRound,
@@ -17,10 +19,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ApplicationStatusBadge } from "@/features/applications/components/application-status-badge";
+import { getCandidateProfileReadiness } from "@/features/applications/eligibility";
+import {
+  getCandidateApplicationStatusCounts,
+  getCandidateRecentApplications,
+} from "@/features/applications/server/data";
+import { requireRole } from "@/features/auth/server/session";
 import { CompletionCard } from "@/features/candidate-profile/components/completion-card";
 import { getCompletionFromProfile } from "@/features/candidate-profile/completion";
 import { getCandidateProfile } from "@/features/candidate-profile/server/data";
-import { requireRole } from "@/features/auth/server/session";
+import { formatJobDate } from "@/features/jobs/format";
 import { getPrismaClient } from "@/lib/prisma";
 
 export const metadata: Metadata = {
@@ -29,12 +38,6 @@ export const metadata: Metadata = {
 };
 
 const deferredItems = [
-  {
-    icon: FileCheck2,
-    title: "Applications",
-    description:
-      "Application submission and status tracking will arrive with the applications phase.",
-  },
   {
     icon: Bookmark,
     title: "Saved jobs",
@@ -45,14 +48,48 @@ const deferredItems = [
     icon: Sparkles,
     title: "Job recommendations",
     description:
-      "Personalized recommendations are deferred until the required jobs and matching foundations exist.",
+      "Personalized recommendations are deferred until the required matching foundations exist.",
   },
 ];
 
 export default async function CandidateDashboardPage() {
   const session = await requireRole("CANDIDATE", "/candidate/dashboard");
-  const profile = await getCandidateProfile(getPrismaClient(), session.user.id);
+  const prisma = getPrismaClient();
+  const [profile, { counts, total }, recent] = await Promise.all([
+    getCandidateProfile(prisma, session.user.id),
+    getCandidateApplicationStatusCounts(prisma, session.user.id),
+    getCandidateRecentApplications(prisma, session.user.id),
+  ]);
   const completion = getCompletionFromProfile(profile);
+  const active =
+    counts.SUBMITTED + counts.UNDER_REVIEW + counts.INTERVIEW + counts.OFFER;
+
+  const applyReadiness = getCandidateProfileReadiness({
+    headline: profile?.headline ?? null,
+    location: profile?.location ?? null,
+    skillCount: profile?.skills.length ?? 0,
+  });
+  const recommendation = !applyReadiness.isReady
+    ? {
+        label: "Complete your profile to apply",
+        href: "/candidate/profile/edit",
+      }
+    : total === 0
+      ? { label: "Browse jobs and apply", href: "/jobs" }
+      : active > 0
+        ? {
+            label: "Track your active applications",
+            href: "/candidate/applications",
+          }
+        : { label: "Find your next role", href: "/jobs" };
+
+  const stats = [
+    { label: "Total", value: total },
+    { label: "Active", value: active },
+    { label: "Interviews", value: counts.INTERVIEW },
+    { label: "Offers", value: counts.OFFER },
+    { label: "Hired", value: counts.HIRED },
+  ];
 
   return (
     <section className="relative overflow-hidden py-12 sm:py-16">
@@ -63,15 +100,15 @@ export default async function CandidateDashboardPage() {
             <Badge variant="secondary">Candidate</Badge>
             <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
               <Sparkles aria-hidden="true" className="size-4" />
-              Profile foundation
+              Your job search
             </span>
           </div>
           <h1 className="mt-6 text-4xl font-semibold tracking-[-0.04em] text-balance sm:text-5xl">
             Welcome, {session.user.name}.
           </h1>
           <p className="text-muted-foreground mt-5 max-w-2xl text-lg leading-8">
-            Build a clear professional foundation now. Application and job tools
-            remain honest placeholders until their product phases are ready.
+            Keep your profile current, apply to roles that fit, and track every
+            application in one place.
           </p>
         </div>
 
@@ -105,10 +142,99 @@ export default async function CandidateDashboardPage() {
           <CompletionCard {...completion} compact />
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <ClipboardList
+                    aria-hidden="true"
+                    className="text-primary size-5"
+                  />
+                  Applications
+                </CardTitle>
+                <CardDescription>
+                  Real counts from your submitted applications
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/candidate/applications">
+                  View all applications
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-6">
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+              {stats.map((item) => (
+                <div key={item.label} className="bg-muted/60 rounded-xl p-4">
+                  <dt className="text-muted-foreground text-sm">
+                    {item.label}
+                  </dt>
+                  <dd className="mt-1 text-2xl font-semibold">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            {recent.length ? (
+              <ul className="divide-y">
+                {recent.map((application) => (
+                  <li key={application.id}>
+                    <Link
+                      href={`/candidate/applications/${application.id}`}
+                      className="hover:bg-muted/50 focus-visible:ring-ring -mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 focus-visible:ring-2 focus-visible:outline-none"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">
+                          {application.job.title}
+                        </span>
+                        <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                          <Building2 aria-hidden="true" className="size-3.5" />
+                          {application.job.company.name} · Applied{" "}
+                          {formatJobDate(application.submittedAt)}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <ApplicationStatusBadge status={application.status} />
+                        <ArrowUpRight
+                          aria-hidden="true"
+                          className="text-muted-foreground size-4"
+                        />
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="bg-muted/40 rounded-xl px-4 py-8 text-center">
+                <p className="text-muted-foreground leading-6">
+                  You have not applied to any jobs yet.
+                </p>
+                <Button className="mt-4" asChild>
+                  <Link href="/jobs">Browse jobs</Link>
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-primary/20 bg-primary/5 mt-6">
+          <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold">Recommended next action</p>
+              <p className="text-muted-foreground mt-1">
+                Continue with the next meaningful step in your job search.
+              </p>
+            </div>
+            <Button asChild>
+              <Link href={recommendation.href}>{recommendation.label}</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
           {deferredItems.map((item) => {
             const Icon = item.icon;
-
             return (
               <Card key={item.title} className="h-full">
                 <CardHeader>

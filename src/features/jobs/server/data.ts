@@ -62,7 +62,7 @@ export function getRecruiterJobs(
       createdAt: true,
       publishedAt: true,
       company: { select: { id: true, name: true, isPublished: true } },
-      _count: { select: { skills: true } },
+      _count: { select: { skills: true, applications: true } },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });

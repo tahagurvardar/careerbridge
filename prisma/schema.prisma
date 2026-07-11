@@ -60,20 +60,32 @@ enum ExperienceLevel {
   LEAD
 }
 
+enum ApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
 model User {
-  id                 String              @id
+  id                 String                     @id
   name               String
   email              String
-  emailVerified      Boolean             @default(false)
+  emailVerified      Boolean                    @default(false)
   image              String?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  role               Role                @default(CANDIDATE)
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  role               Role                       @default(CANDIDATE)
   sessions           Session[]
   accounts           Account[]
   candidateProfile   CandidateProfile?
   recruiterProfile   RecruiterProfile?
   companyMemberships CompanyMembership[]
+  applications       JobApplication[]           @relation("CandidateApplications")
+  statusChanges      ApplicationStatusHistory[] @relation("StatusChangedBy")
 
   @@unique([email])
   @@map("user")
@@ -157,8 +169,9 @@ model Job {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
-  company Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  skills  JobSkill[]
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  skills       JobSkill[]
+  applications JobApplication[]
 
   @@index([companyId, status, createdAt])
   @@index([status, publishedAt, id])
@@ -176,6 +189,45 @@ model JobSkill {
   @@id([jobId, skillId])
   @@index([skillId])
   @@map("job_skill")
+}
+
+model JobApplication {
+  id          String            @id @default(cuid())
+  jobId       String
+  candidateId String
+  coverLetter String?           @db.VarChar(6000)
+  status      ApplicationStatus @default(SUBMITTED)
+  submittedAt DateTime          @default(now())
+  withdrawnAt DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  job       Job                        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidate User                       @relation("CandidateApplications", fields: [candidateId], references: [id], onDelete: Cascade)
+  history   ApplicationStatusHistory[]
+
+  // One application per Candidate per Job, enforced at the database layer.
+  @@unique([jobId, candidateId])
+  @@index([candidateId, status, submittedAt])
+  @@index([jobId, status, submittedAt])
+  @@map("job_application")
+}
+
+model ApplicationStatusHistory {
+  id              String             @id @default(cuid())
+  applicationId   String
+  // Null fromStatus marks the initial SUBMITTED event.
+  fromStatus      ApplicationStatus?
+  toStatus        ApplicationStatus
+  changedByUserId String?
+  createdAt       DateTime           @default(now())
+
+  application JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  // Preserve history if the acting user is later removed.
+  changedBy   User?          @relation("StatusChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId, createdAt])
+  @@map("application_status_history")
 }
 
 model CandidateProfile {
