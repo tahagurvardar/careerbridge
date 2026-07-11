@@ -85,6 +85,7 @@ model User {
   recruiterProfile   RecruiterProfile?
   companyMemberships CompanyMembership[]
   applications       JobApplication[]           @relation("CandidateApplications")
+  savedJobs          SavedJob[]                 @relation("CandidateSavedJobs")
   statusChanges      ApplicationStatusHistory[] @relation("StatusChangedBy")
 
   @@unique([email])
@@ -172,10 +173,26 @@ model Job {
   company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   skills       JobSkill[]
   applications JobApplication[]
+  savedBy      SavedJob[]
 
   @@index([companyId, status, createdAt])
   @@index([status, publishedAt, id])
   @@map("job")
+}
+
+model SavedJob {
+  id          String   @id @default(cuid())
+  candidateId String
+  jobId       String
+  createdAt   DateTime @default(now())
+
+  candidate User @relation("CandidateSavedJobs", fields: [candidateId], references: [id], onDelete: Cascade)
+  job       Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, jobId])
+  @@index([candidateId, createdAt, id])
+  @@index([jobId])
+  @@map("saved_job")
 }
 
 model JobSkill {

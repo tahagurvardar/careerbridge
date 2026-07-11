@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { JobCard } from "@/features/jobs/components/job-card";
+import { getCurrentSession } from "@/features/auth/server/session";
 import {
   EMPLOYMENT_TYPES,
   EXPERIENCE_LEVELS,
@@ -18,6 +19,7 @@ import {
   workplaceTypeLabels,
 } from "@/features/jobs/schemas";
 import { getPublishedJobs } from "@/features/jobs/server/data";
+import { getSavedJobSlugs } from "@/features/saved-jobs/server/data";
 import { getPrismaClient } from "@/lib/prisma";
 
 export const metadata: Metadata = {
@@ -35,7 +37,19 @@ export default async function JobsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const search = parsePublicJobSearch(await searchParams);
-  const jobs = await getPublishedJobs(getPrismaClient(), search);
+  const prisma = getPrismaClient();
+  const [jobs, session] = await Promise.all([
+    getPublishedJobs(prisma, search),
+    getCurrentSession(),
+  ]);
+  const savedSlugs =
+    session?.user.role === "CANDIDATE"
+      ? await getSavedJobSlugs(
+          prisma,
+          session.user.id,
+          jobs.map(({ slug }) => slug),
+        )
+      : new Set<string>();
   const hasFilters = hasActiveJobFilters(search);
   const resultLabel =
     jobs.length === 1 ? "1 published job" : `${jobs.length} published jobs`;
@@ -181,7 +195,17 @@ export default async function JobsPage({
         {jobs.length > 0 ? (
           <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {jobs.map((job) => (
-              <JobCard key={job.slug} job={job} />
+              <JobCard
+                key={job.slug}
+                job={job}
+                saveState={
+                  !session
+                    ? "SIGNED_OUT"
+                    : session.user.role === "CANDIDATE"
+                      ? savedSlugs.has(job.slug)
+                      : null
+                }
+              />
             ))}
           </div>
         ) : (

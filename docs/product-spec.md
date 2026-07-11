@@ -53,20 +53,20 @@ The initial product MVP is expected to include:
 7. Basic admin moderation and operational views
 8. Essential product analytics and audit records
 
-## Current phase: Job applications and applicant pipeline
+## Current phase: Saved Jobs
 
-Phase 3A adds a secure Job Application domain on the completed identity, Candidate, Recruiter/Company, and Job foundations:
+Phase 3B adds secure Candidate-owned Saved Jobs on the completed identity, profile, Company, Job, and application foundations:
 
-- Let an eligible Candidate apply once to a published Job with an optional cover letter
-- Re-check eligibility against fresh data: candidate role, published Job and Company, open deadline, complete minimum profile, and no prior application
-- Let a Candidate view all their applications, one application in detail, current status, candidate-safe status history, and withdraw an eligible active application
-- Let a Company OWNER view, search, and filter applications for owned Company Jobs, open an application, and see the applicant's relevant profile
-- Let an OWNER move applications through a controlled SUBMITTED → UNDER_REVIEW → INTERVIEW → OFFER → HIRED pipeline, with rejection from any active state
-- Record every status change — including the initial submission and withdrawal — as atomic status history
-- Show real application counts on the Candidate dashboard, Recruiter dashboard, Job workspace, and Company workspace with no fabricated activity
-- Keep CV upload/access, recruiter-only notes, saved jobs, notifications, and messaging as honest deferred states
+- Let a Candidate save a published Job under a published Company and remove it later
+- Enforce one save per Candidate per Job through a database unique constraint and idempotent concurrency handling
+- Derive Candidate identity from the authenticated session and re-check Job eligibility in every save mutation
+- Provide `/candidate/saved-jobs` with bounded Job title, Company, location, and skill search plus `ALL`, `OPEN`, and `UNAVAILABLE` filtering
+- Retain saved history after Job close/archive or Company unpublication while never linking or exposing that Job publicly
+- Integrate session-aware save controls into `/jobs` and `/jobs/[slug]` without save counts or Candidate identity leakage
+- Show real saved count, recent saves, and deterministic next-action guidance on the Candidate dashboard
+- Keep recommendations, matching, alerts, notifications, CV storage, recruiter notes, and messaging deferred
 
-Private application data is never exposed publicly. A recruiter sees a candidate's private profile only because the candidate applied to their job and only as an OWNER. Candidate identity is always derived from the session; status values are never trusted from browser input. Public identity behavior and Better Auth endpoint allow-lists remain unchanged. Admin receives no implicit Company ownership or application access.
+Saved Job data is private Candidate data. Public and recruiter Job projections expose no SavedJob relation, save count, or Candidate identity. Candidate identity always comes from the session; the browser supplies only a bounded Job slug. Existing Better Auth endpoint allow-lists remain unchanged, and Recruiter/Admin accounts receive no implicit Candidate behavior.
 
 Email ownership is not verified in Phase 1. The product must not claim that an address has been verified until real email delivery and verification are implemented.
 
@@ -120,7 +120,18 @@ Jobs are private drafts until an OWNER publishes a complete Job under a publishe
 
 A Candidate applies at most once per Job (enforced by a database unique constraint) and only when eligible: authenticated candidate, published Job under a published Company, open deadline, and a minimum profile (headline, location, at least one skill). Candidates may withdraw only from active states and may never set recruiter statuses; recruiters advance applications through the controlled pipeline and may never set WITHDRAWN. Recruiter access to an applicant's private profile exists only because the Candidate applied to a Job at a Company the Recruiter OWNs; it never appears on public pages or in unrelated Company workspaces. Foreign, MEMBER-only, and cross-Company identifiers return the same not-found result and never reveal application existence.
 
-## Intentionally deferred after Phase 3A
+## Saved Jobs access matrix
+
+| Actor      | Public Job save control | Save eligible Job             | View saved list | Remove saved Job  | See Candidate save data |
+| ---------- | ----------------------- | ----------------------------- | --------------- | ----------------- | ----------------------- |
+| Signed out | Sign in to save         | Redirect to sign-in           | Redirect        | Redirect          | No                      |
+| Candidate  | Yes                     | If Job and Company are public | Own only        | Own relation only | Own only                |
+| Recruiter  | No                      | Denied                        | Denied          | Denied            | No                      |
+| Admin      | No                      | Denied                        | Denied          | Denied            | No implicit access      |
+
+New saves require a PUBLISHED Job under a published Company and are re-checked against current database state. Unique `(candidateId, jobId)` prevents sequential and concurrent duplicates. Existing rows remain when publication changes; the Candidate list marks them unavailable, removes the public link, and still permits removal. Search spans title, Company name, location, and skill, is bounded to 100 characters, and never weakens Candidate ownership. No public surface displays save counts or saver identity.
+
+## Intentionally deferred after Phase 3B
 
 - Email verification and real email delivery
 - Password reset and account recovery
@@ -129,7 +140,7 @@ A Candidate applies at most once per Job (enforced by a database unique constrai
 - Recruiter invitations, email invitations, and membership administration
 - Company verification and logo/document upload
 - Recruiter-only candidate notes and bulk application actions
-- Saved jobs, candidate matching, and job recommendations
+- Candidate matching, job recommendations, and saved-search alerts
 - Candidate search, messaging, and notifications
 - Public Candidate profile sharing and social feeds
 - Production Admin provisioning, moderation, and audit workflows

@@ -2,7 +2,7 @@
 
 CareerBridge is a production-oriented job and internship platform designed to connect ambitious candidates with thoughtful employers. The long-term product combines structured hiring workflows with responsible AI assistance while keeping transparency, accessibility, and human decision-making at the center.
 
-> **Project status:** Phase 3A Job Applications and Applicant Pipeline is implemented on **feat/job-applications-pipeline**. Candidates apply to and track eligible published Jobs, and Company owners review and advance applicants through a controlled hiring pipeline while private application data stays protected.
+> **Project status:** Phase 3B Saved Jobs is implemented on **feat/saved-jobs**. Candidates can securely save eligible public Jobs, manage a private searchable saved list, and retain truthful unavailable history when a Job leaves public discovery.
 
 ## Foundation preview
 
@@ -26,6 +26,8 @@ The current application provides:
 - Candidate job applications with eligibility checks, optional cover letters, and duplicate prevention
 - Candidate application tracking, candidate-safe status history, and eligible withdrawal
 - Recruiter applicant pipeline with OWNER-only status transitions and atomic status history
+- Candidate-owned Saved Jobs with duplicate-safe save/remove actions and retained unavailable history
+- Searchable, availability-filtered Saved Jobs plus real dashboard counts and recent saves
 - Product, architecture, and delivery documentation
 
 ## Technology
@@ -109,40 +111,41 @@ The command refuses production execution, validates all inputs, writes only thro
 
 ## Public routes
 
-| Route                                   | Purpose                                      |
-| --------------------------------------- | -------------------------------------------- |
-| /                                       | Product landing page with featured Jobs      |
-| /jobs                                   | Published Job discovery, search, and filters |
-| /jobs/[slug]                            | Published Job public detail with apply state |
-| /jobs/[slug]/apply                      | Candidate-only application form              |
-| /companies                              | Published Company discovery and search       |
-| /companies/[slug]                       | Published Company public profile             |
-| /login                                  | Email/password sign-in                       |
-| /register                               | Candidate and Recruiter account registration |
-| /candidate/dashboard                    | Protected Candidate workspace and summary    |
-| /candidate/applications                 | Candidate's own applications and filters     |
-| /candidate/applications/[applicationId] | Candidate application detail and withdrawal  |
-| /candidate/profile                      | Protected Candidate profile overview         |
-| /candidate/profile/edit                 | Edit Candidate professional information      |
-| /candidate/profile/education/new        | Add an education record                      |
-| /candidate/profile/education/[id]/edit  | Edit owned education                         |
-| /candidate/profile/experience/new       | Add an experience record                     |
-| /candidate/profile/experience/[id]/edit | Edit owned experience                        |
-| /recruiter/dashboard                    | Protected Recruiter workspace summary        |
-| /recruiter/profile                      | Protected Recruiter profile overview         |
-| /recruiter/profile/edit                 | Edit Recruiter professional information      |
-| /recruiter/companies                    | Recruiter's Company memberships              |
-| /recruiter/companies/new                | Create a private Company as OWNER            |
-| /recruiter/companies/[companyId]        | Private member Company workspace             |
-| /recruiter/companies/[companyId]/edit   | OWNER-only Company editing                   |
-| /recruiter/jobs                         | Owned Jobs with status/company/title filters |
-| /recruiter/jobs/new                     | Create a draft Job for an owned Company      |
-| /recruiter/jobs/[jobId]                 | Private Job workspace and lifecycle actions  |
-| /recruiter/jobs/[jobId]/edit            | OWNER-only Job editing                       |
-| /recruiter/jobs/[jobId]/applications    | OWNER-only applicant pipeline for one Job    |
-| /recruiter/applications                 | Applications across owned Companies          |
-| /recruiter/applications/[applicationId] | OWNER-only candidate review and status       |
-| /admin                                  | Protected Admin access confirmation          |
+| Route                                   | Purpose                                        |
+| --------------------------------------- | ---------------------------------------------- |
+| /                                       | Product landing page with featured Jobs        |
+| /jobs                                   | Published Job discovery, search, and filters   |
+| /jobs/[slug]                            | Published Job public detail with apply state   |
+| /jobs/[slug]/apply                      | Candidate-only application form                |
+| /companies                              | Published Company discovery and search         |
+| /companies/[slug]                       | Published Company public profile               |
+| /login                                  | Email/password sign-in                         |
+| /register                               | Candidate and Recruiter account registration   |
+| /candidate/dashboard                    | Protected Candidate workspace and summary      |
+| /candidate/applications                 | Candidate's own applications and filters       |
+| /candidate/applications/[applicationId] | Candidate application detail and withdrawal    |
+| /candidate/saved-jobs                   | Candidate's private saved Job list and filters |
+| /candidate/profile                      | Protected Candidate profile overview           |
+| /candidate/profile/edit                 | Edit Candidate professional information        |
+| /candidate/profile/education/new        | Add an education record                        |
+| /candidate/profile/education/[id]/edit  | Edit owned education                           |
+| /candidate/profile/experience/new       | Add an experience record                       |
+| /candidate/profile/experience/[id]/edit | Edit owned experience                          |
+| /recruiter/dashboard                    | Protected Recruiter workspace summary          |
+| /recruiter/profile                      | Protected Recruiter profile overview           |
+| /recruiter/profile/edit                 | Edit Recruiter professional information        |
+| /recruiter/companies                    | Recruiter's Company memberships                |
+| /recruiter/companies/new                | Create a private Company as OWNER              |
+| /recruiter/companies/[companyId]        | Private member Company workspace               |
+| /recruiter/companies/[companyId]/edit   | OWNER-only Company editing                     |
+| /recruiter/jobs                         | Owned Jobs with status/company/title filters   |
+| /recruiter/jobs/new                     | Create a draft Job for an owned Company        |
+| /recruiter/jobs/[jobId]                 | Private Job workspace and lifecycle actions    |
+| /recruiter/jobs/[jobId]/edit            | OWNER-only Job editing                         |
+| /recruiter/jobs/[jobId]/applications    | OWNER-only applicant pipeline for one Job      |
+| /recruiter/applications                 | Applications across owned Companies            |
+| /recruiter/applications/[applicationId] | OWNER-only candidate review and status         |
+| /admin                                  | Protected Admin access confirmation            |
 
 ## Project structure
 
@@ -171,6 +174,8 @@ Job code is grouped under `src/features/jobs`. Database-free schemas, slug alloc
 
 Application code is grouped under `src/features/applications`. Database-free lifecycle transitions, eligibility rules, cover-letter and search schemas, and search-filter mapping are separated from server-only queries, candidate- and OWNER-scoped commands, and Server Actions. Candidate identity always comes from the session, status changes flow through the centralized transition table, and every status change writes an `ApplicationStatusHistory` row atomically. Migration `20260711001124_job_applications_pipeline` adds the `JobApplication` and `ApplicationStatusHistory` tables and the `ApplicationStatus` enum, with a database-level unique `(jobId, candidateId)` constraint, without changing existing tables.
 
+Saved Job code is grouped under `src/features/saved-jobs`. Shared Zod search/filter schemas, availability classification, save eligibility, and dashboard recommendation logic remain database-free; Candidate-scoped reads, commands, and Server Actions remain server-only. Migration `20260711023016_saved_jobs` adds the `SavedJob` join with unique `(candidateId, jobId)`, candidate/recent-order and Job indexes, and cascade relations without duplicating Job, Company, or Candidate data.
+
 Database integration tests never use `DATABASE_URL`. To run them, configure a separate `TEST_DATABASE_URL`, confirm it targets an isolated test database, set `RUN_DATABASE_INTEGRATION_TESTS=true`, and run `npm run test:integration`. The command skips clearly unless both values are present and refuses a test URL matching either application database URL. Regular `npm test` remains database-free.
 
 ## Identity security boundaries
@@ -194,7 +199,7 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Skill catalog names use Unicode and whitespace normalization plus a unique lookup name. Candidate assignments use a composite primary key and a transaction with duplicate-safe creation.
 - Professional links accept only valid `http` or `https` URLs. Profile text is rendered as text, never user-authored HTML.
 - Completion is calculated on read: headline, location, bio, skills, education, and experience are worth 15 points each; at least one professional link is worth 10 points. It is never stored or described as verification.
-- CV/avatar upload, public Candidate profiles, saved jobs, messaging, notifications, AI, and payments remain deferred.
+- CV/avatar upload, public Candidate profiles, messaging, notifications, AI, and payments remain deferred.
 
 ## Recruiter and Company boundaries
 
@@ -217,7 +222,16 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Salary is stored as whole non-negative integer currency units with a normalized uppercase 3-letter currency code, and the salary minimum can never exceed the maximum. Deadlines are date-only and compared in UTC.
 - Required skills reuse the shared normalized `Skill` catalog through `JobSkill`, whose composite primary key prevents duplicate assignment even under concurrent requests.
 - Public directory and detail queries always constrain `status = PUBLISHED` and `Company.isPublished = true`. Draft, closed, archived, and unpublished-Company Jobs return the same not-found behavior, and public results never include internal IDs or membership identity.
-- Saved Jobs, candidate matching, and Job analytics remain honest deferred states.
+- Candidate matching, recommendations, alerts, and Job analytics remain deferred.
+
+## Saved Job boundaries
+
+- `SavedJob` belongs to one Candidate `User` and one `Job`; deleting either parent cascades the relation. The database unique `(candidateId, jobId)` constraint is authoritative for duplicate and concurrent saves.
+- Save and remove Server Actions require an authenticated `CANDIDATE` and derive `candidateId` only from the session. Recruiter and Admin accounts receive no Candidate behavior, and removal is scoped by Candidate plus Job so it cannot reveal or delete another Candidate's relation.
+- A new save re-checks that the Job is `PUBLISHED` and its Company is published. Duplicate saves and repeated removals are idempotent, and raw Prisma failures are never returned to the browser.
+- Existing saves remain after a Job closes, archives, or its Company becomes unpublished. `/candidate/saved-jobs` marks those rows unavailable, removes the public link, keeps remove access, and never republishes private Job data.
+- `/jobs` performs one Candidate saved-slug query for the visible result set rather than a query per card. Public Job projections contain no SavedJob relation, Candidate identity, or save count.
+- Search is trimmed and bounded to 100 characters across Job title, Company name, location, and skill. Availability accepts only `ALL`, `OPEN`, or `UNAVAILABLE`; results are bounded and ordered by saved date then ID for deterministic newest-first output.
 
 ## Application domain boundaries
 
@@ -229,7 +243,7 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Candidate ownership scopes every candidate read and mutation by `candidateId`; recruiter access scopes every read and mutation through OWNER membership of the Job's Company. Absent, foreign, and MEMBER-only IDs return the same not-found, so cross-candidate, cross-company, and MEMBER access all fail identically.
 - A recruiter sees a candidate's private profile (email, headline, location, bio, skills, education, experience) only because the candidate applied to their job, and only as an OWNER. This data never appears on public pages or in unrelated Company workspaces. Candidate-facing history omits the acting user.
 - Cover letters are optional, trimmed, length-bounded plain text, normalized to null when empty, validated on both client and server, and never rendered as HTML.
-- CV upload and storage, recruiter-only candidate notes, saved jobs, notifications, messaging, and bulk actions remain deferred.
+- CV upload and storage, recruiter-only candidate notes, notifications, messaging, and bulk actions remain deferred.
 
 ## Documentation
 
