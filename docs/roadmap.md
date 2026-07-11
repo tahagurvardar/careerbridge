@@ -94,15 +94,30 @@ Deferred from Phase 2C: applications, saved jobs, candidate matching, recruiter 
 
 Exit criteria: a Candidate can privately manage a CV without exposing raw storage objects or weakening profile ownership.
 
-## Phase 3 — Applications and saved opportunities
+## Phase 3A — Job applications and applicant pipeline
+
+Status: implemented on `feat/job-applications-pipeline`.
+
+- `JobApplication` and `ApplicationStatusHistory` models with a database-level unique `(jobId, candidateId)` constraint
+- Explicit `ApplicationStatus` enum (SUBMITTED, UNDER_REVIEW, INTERVIEW, OFFER, HIRED, REJECTED, WITHDRAWN)
+- Candidate apply flow with fresh eligibility re-checks, optional cover letter, and duplicate/concurrency protection
+- Candidate application list, detail, candidate-safe status timeline, and eligible withdrawal
+- Recruiter applicant pipeline, application search/filter, candidate detail, and OWNER-only status transitions
+- Centralized, database-free lifecycle transitions with atomic status-history writes
+- Real application counts on the candidate dashboard, recruiter dashboard, job workspace, and company workspace
+- Unit coverage plus isolated database eligibility, ownership, lifecycle, and privacy coverage
+
+Exit criteria: a Candidate can apply to and track eligible jobs, and an authorized Company owner can review and advance applicants, while private application data stays protected.
+
+Deferred from Phase 3A: saved jobs, recruiter-only candidate notes, CV upload/access, bulk actions, notifications, and messaging.
+
+## Phase 3B — Saved opportunities and candidate documents
 
 - Saved jobs with Candidate ownership
-- Application submission and Candidate confirmation
-- Candidate application tracking
-- Recruiter applicant review and authorized CV access
-- Application status model, history, notes, and workflow filters
+- Private CV object storage and authorized recruiter CV access
+- Recruiter-only application notes and workflow annotations
 
-Exit criteria: Candidates and Recruiters can complete and understand the application workflow.
+Exit criteria: Candidates can save roles and manage documents, and Recruiters can review authorized documents within the hiring workflow.
 
 ## Phase 4 — Membership administration
 

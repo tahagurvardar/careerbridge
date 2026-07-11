@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { requireRole } from "@/features/auth/server/session";
+import { ApplicationStatusBadge } from "@/features/applications/components/application-status-badge";
+import { getCompanyApplicationOverview } from "@/features/applications/server/data";
 import { JobStatusBadge } from "@/features/jobs/components/job-status-badge";
 import { formatJobDate } from "@/features/jobs/format";
 import { getCompanyJobsOverview } from "@/features/jobs/server/data";
@@ -41,12 +43,6 @@ export const metadata: Metadata = {
 };
 
 const deferredSections = [
-  {
-    icon: UsersRound,
-    title: "Applicants",
-    description:
-      "Applicant pipelines will become available after jobs and applications exist.",
-  },
   {
     icon: ShieldCheck,
     title: "Team members",
@@ -82,9 +78,12 @@ export default async function CompanyWorkspacePage({
 
   const { company, role } = membership;
   const isOwner = role === "OWNER";
-  const jobsOverview = isOwner
-    ? await getCompanyJobsOverview(prisma, session.user.id, company.id)
-    : null;
+  const [jobsOverview, applicationOverview] = isOwner
+    ? await Promise.all([
+        getCompanyJobsOverview(prisma, session.user.id, company.id),
+        getCompanyApplicationOverview(prisma, session.user.id, company.id),
+      ])
+    : [null, null];
   const readiness = getCompanyPublicationReadiness(company);
   const website = safeHttpUrlSchema.safeParse(company.websiteUrl ?? "");
 
@@ -305,7 +304,68 @@ export default async function CompanyWorkspacePage({
           </Card>
         ) : null}
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {isOwner && applicationOverview ? (
+          <Card className="mt-6">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <UsersRound
+                      aria-hidden="true"
+                      className="text-primary size-5"
+                    />
+                    Applications
+                  </CardTitle>
+                  <CardDescription>
+                    {applicationOverview.total === 0
+                      ? "No applications yet for this company."
+                      : `${applicationOverview.total} total · ${applicationOverview.active} active`}
+                  </CardDescription>
+                </div>
+                <Button size="sm" variant="outline" asChild>
+                  <Link
+                    href={`/recruiter/applications?companyId=${company.id}`}
+                  >
+                    View applications
+                  </Link>
+                </Button>
+              </div>
+            </CardHeader>
+            {applicationOverview.recent.length ? (
+              <CardContent>
+                <ul className="divide-y">
+                  {applicationOverview.recent.map((application) => (
+                    <li key={application.id}>
+                      <Link
+                        href={`/recruiter/applications/${application.id}`}
+                        className="hover:bg-muted/50 focus-visible:ring-ring -mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 focus-visible:ring-2 focus-visible:outline-none"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">
+                            {application.candidate.name}
+                          </span>
+                          <span className="text-muted-foreground block truncate text-xs">
+                            {application.job.title} · Applied{" "}
+                            {formatJobDate(application.submittedAt)}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <ApplicationStatusBadge status={application.status} />
+                          <ArrowUpRight
+                            aria-hidden="true"
+                            className="text-muted-foreground size-4"
+                          />
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            ) : null}
+          </Card>
+        ) : null}
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {deferredSections.map((item) => {
             const Icon = item.icon;
             return (

@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  ArrowUpRight,
   BarChart3,
   BriefcaseBusiness,
   Building2,
-  ClipboardList,
   Plus,
   Sparkles,
   UserRound,
+  UsersRound,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,9 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { requireRole } from "@/features/auth/server/session";
+import { ApplicationStatusBadge } from "@/features/applications/components/application-status-badge";
+import { getRecruiterApplicationDashboard } from "@/features/applications/server/data";
+import { formatJobDate } from "@/features/jobs/format";
 import { getRecruiterJobStatusCounts } from "@/features/jobs/server/data";
 import { getRecruiterProfileWorkspace } from "@/features/recruiter-company/server/data";
 import { getPrismaClient } from "@/lib/prisma";
@@ -32,26 +36,28 @@ export const metadata: Metadata = {
 
 const deferredItems = [
   {
-    icon: ClipboardList,
-    title: "Applicant pipeline",
-    description:
-      "Applicant stages will arrive after real jobs and applications exist.",
-  },
-  {
     icon: BarChart3,
     title: "Hiring analytics",
     description:
-      "Analytics remain deferred until they can be based on real workspace activity.",
+      "Analytics remain deferred until they can be based on richer workspace activity.",
   },
 ];
 
 export default async function RecruiterDashboardPage() {
   const session = await requireRole("RECRUITER", "/recruiter/dashboard");
   const prisma = getPrismaClient();
-  const [[profile, memberships], jobCounts] = await Promise.all([
-    getRecruiterProfileWorkspace(prisma, session.user.id),
-    getRecruiterJobStatusCounts(prisma, session.user.id),
-  ]);
+  const [[profile, memberships], jobCounts, applicationDashboard] =
+    await Promise.all([
+      getRecruiterProfileWorkspace(prisma, session.user.id),
+      getRecruiterJobStatusCounts(prisma, session.user.id),
+      getRecruiterApplicationDashboard(prisma, session.user.id),
+    ]);
+  const appCounts = applicationDashboard.statusCounts;
+  const activeApplications =
+    appCounts.SUBMITTED +
+    appCounts.UNDER_REVIEW +
+    appCounts.INTERVIEW +
+    appCounts.OFFER;
   const profileSignals = [
     profile?.jobTitle,
     profile?.bio,
@@ -93,7 +99,12 @@ export default async function RecruiterDashboardPage() {
                   label: "Publish a complete job",
                   href: "/recruiter/jobs?status=DRAFT",
                 }
-              : { label: "Manage your jobs", href: "/recruiter/jobs" };
+              : appCounts.SUBMITTED > 0
+                ? {
+                    label: "Review new applications",
+                    href: "/recruiter/applications?status=SUBMITTED",
+                  }
+                : { label: "Manage your jobs", href: "/recruiter/jobs" };
 
   return (
     <section className="relative overflow-hidden py-12 sm:py-16">
@@ -238,12 +249,78 @@ export default async function RecruiterDashboardPage() {
           </CardContent>
         </Card>
 
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <UsersRound
+                    aria-hidden="true"
+                    className="text-primary size-5"
+                  />
+                  Applications
+                </CardTitle>
+                <CardDescription>
+                  Applicants across every company you own
+                </CardDescription>
+              </div>
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/recruiter/applications">View applications</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-6">
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+              <StatTile label="Total" value={applicationDashboard.total} />
+              <StatTile label="Active" value={activeApplications} />
+              <StatTile label="New" value={appCounts.SUBMITTED} />
+              <StatTile label="Review" value={appCounts.UNDER_REVIEW} />
+              <StatTile label="Interview" value={appCounts.INTERVIEW} />
+              <StatTile label="Offer" value={appCounts.OFFER} />
+            </dl>
+            {applicationDashboard.recent.length ? (
+              <ul className="divide-y">
+                {applicationDashboard.recent.map((application) => (
+                  <li key={application.id}>
+                    <Link
+                      href={`/recruiter/applications/${application.id}`}
+                      className="hover:bg-muted/50 focus-visible:ring-ring -mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 focus-visible:ring-2 focus-visible:outline-none"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">
+                          {application.candidate.name}
+                        </span>
+                        <span className="text-muted-foreground block truncate text-xs">
+                          {application.job.title} ·{" "}
+                          {application.job.company.name} · Applied{" "}
+                          {formatJobDate(application.submittedAt)}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <ApplicationStatusBadge status={application.status} />
+                        <ArrowUpRight
+                          aria-hidden="true"
+                          className="text-muted-foreground size-4"
+                        />
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground text-sm leading-6">
+                No applications yet. Publish jobs to start receiving applicants.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="border-primary/20 bg-primary/5 mt-6">
           <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold">Recommended next action</p>
               <p className="text-muted-foreground mt-1">
-                Continue with the next meaningful workspace setup step.
+                Continue with the next meaningful workspace step.
               </p>
             </div>
             <Button asChild>
@@ -252,7 +329,7 @@ export default async function RecruiterDashboardPage() {
           </CardContent>
         </Card>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div className="mt-6 grid gap-4">
           {deferredItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -277,5 +354,14 @@ export default async function RecruiterDashboardPage() {
         </div>
       </div>
     </section>
+  );
+}
+
+function StatTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-muted/60 rounded-xl p-4">
+      <dt className="text-muted-foreground text-sm">{label}</dt>
+      <dd className="mt-1 text-2xl font-semibold">{value}</dd>
+    </div>
   );
 }

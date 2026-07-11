@@ -53,20 +53,20 @@ The initial product MVP is expected to include:
 7. Basic admin moderation and operational views
 8. Essential product analytics and audit records
 
-## Current phase: Job lifecycle and discovery
+## Current phase: Job applications and applicant pipeline
 
-Phase 2C adds a secure Company-owned Job domain on the completed identity, Candidate, and Recruiter/Company foundations:
+Phase 3A adds a secure Job Application domain on the completed identity, Candidate, Recruiter/Company, and Job foundations:
 
-- Let a Company OWNER create a Job as a private draft for a Company they own
-- Let an OWNER edit a draft or published Job and manage its required skills from the shared Skill catalog
-- Enforce an explicit draft, published, closed, and archived lifecycle with server-only transitions
-- Gate publishing on fresh readiness: a published Company plus complete Job content and at least one skill
-- Set publication and closure timestamps on the server and remove closed or archived Jobs from discovery immediately
-- Let public visitors search and filter published Jobs and open published Job detail pages
-- Show real Job counts on the Recruiter dashboard and Company workspace with no fabricated activity
-- Keep applicants, saved Jobs, matching, and Job analytics as honest deferred states
+- Let an eligible Candidate apply once to a published Job with an optional cover letter
+- Re-check eligibility against fresh data: candidate role, published Job and Company, open deadline, complete minimum profile, and no prior application
+- Let a Candidate view all their applications, one application in detail, current status, candidate-safe status history, and withdraw an eligible active application
+- Let a Company OWNER view, search, and filter applications for owned Company Jobs, open an application, and see the applicant's relevant profile
+- Let an OWNER move applications through a controlled SUBMITTED → UNDER_REVIEW → INTERVIEW → OFFER → HIRED pipeline, with rejection from any active state
+- Record every status change — including the initial submission and withdrawal — as atomic status history
+- Show real application counts on the Candidate dashboard, Recruiter dashboard, Job workspace, and Company workspace with no fabricated activity
+- Keep CV upload/access, recruiter-only notes, saved jobs, notifications, and messaging as honest deferred states
 
-Only PUBLISHED Jobs from published Companies are public; drafts, closed, archived, and unpublished-Company Jobs are never disclosed. Public identity behavior and Better Auth endpoint allow-lists remain unchanged. Admin receives no implicit Company ownership or Job access. Publication communicates visibility only and must never be described as verification.
+Private application data is never exposed publicly. A recruiter sees a candidate's private profile only because the candidate applied to their job and only as an OWNER. Candidate identity is always derived from the session; status values are never trusted from browser input. Public identity behavior and Better Auth endpoint allow-lists remain unchanged. Admin receives no implicit Company ownership or application access.
 
 Email ownership is not verified in Phase 1. The product must not claim that an address has been verified until real email delivery and verification are implemented.
 
@@ -107,15 +107,28 @@ Companies are private until an OWNER explicitly publishes them. Publication requ
 
 Jobs are private drafts until an OWNER publishes a complete Job under a published Company. Lifecycle transitions are server-controlled: no status value is accepted from form input, and archived Jobs are read-only in this phase. Public search accepts a bounded keyword plus employment-type, workplace-type, and experience-level filters and returns only PUBLISHED Jobs from published Companies. Public detail exposes Job and Company presentational fields only—never internal identifiers, private timestamps, or membership data. Closing or archiving a Job removes it from public discovery immediately.
 
-## Intentionally deferred after Phase 2C
+## Application access matrix
+
+| Actor               | Apply to Job      | View own applications | View owned-Company applicants | Change application status |
+| ------------------- | ----------------- | --------------------- | ----------------------------- | ------------------------- |
+| Signed out          | Sign in to apply  | Redirect              | Redirect                      | Redirect                  |
+| Candidate           | If eligible, once | Own only              | Denied                        | Withdraw own active only  |
+| Recruiter nonmember | Cannot apply      | None                  | Not found                     | Not found                 |
+| Recruiter MEMBER    | Cannot apply      | None                  | Denied                        | Denied                    |
+| Recruiter OWNER     | Cannot apply      | None                  | Allowed (owned Company Jobs)  | Allowed pipeline moves    |
+| Admin               | Cannot apply      | None                  | No implicit access            | No implicit access        |
+
+A Candidate applies at most once per Job (enforced by a database unique constraint) and only when eligible: authenticated candidate, published Job under a published Company, open deadline, and a minimum profile (headline, location, at least one skill). Candidates may withdraw only from active states and may never set recruiter statuses; recruiters advance applications through the controlled pipeline and may never set WITHDRAWN. Recruiter access to an applicant's private profile exists only because the Candidate applied to a Job at a Company the Recruiter OWNs; it never appears on public pages or in unrelated Company workspaces. Foreign, MEMBER-only, and cross-Company identifiers return the same not-found result and never reveal application existence.
+
+## Intentionally deferred after Phase 3A
 
 - Email verification and real email delivery
 - Password reset and account recovery
 - Social authentication
-- CV and avatar upload
+- CV and avatar upload, and authorized recruiter CV access
 - Recruiter invitations, email invitations, and membership administration
 - Company verification and logo/document upload
-- Applications, application status history, and candidate CV access
+- Recruiter-only candidate notes and bulk application actions
 - Saved jobs, candidate matching, and job recommendations
 - Candidate search, messaging, and notifications
 - Public Candidate profile sharing and social feeds

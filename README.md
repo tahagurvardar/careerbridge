@@ -2,7 +2,7 @@
 
 CareerBridge is a production-oriented job and internship platform designed to connect ambitious candidates with thoughtful employers. The long-term product combines structured hiring workflows with responsible AI assistance while keeping transparency, accessibility, and human decision-making at the center.
 
-> **Project status:** Phase 2C Job Lifecycle and Discovery is implemented on **feat/job-lifecycle-discovery**. Company owners can manage the full Job lifecycle while public visitors discover only published Jobs from published Companies.
+> **Project status:** Phase 3A Job Applications and Applicant Pipeline is implemented on **feat/job-applications-pipeline**. Candidates apply to and track eligible published Jobs, and Company owners review and advance applicants through a controlled hiring pipeline while private application data stays protected.
 
 ## Foundation preview
 
@@ -23,6 +23,9 @@ The current application provides:
 - Atomic Company ownership, completeness-gated publishing, and public discovery
 - Company-owned Jobs with an explicit draft, published, closed, and archived lifecycle
 - OWNER-authorized Job creation, editing, required skills, and publication readiness checks
+- Candidate job applications with eligibility checks, optional cover letters, and duplicate prevention
+- Candidate application tracking, candidate-safe status history, and eligible withdrawal
+- Recruiter applicant pipeline with OWNER-only status transitions and atomic status history
 - Product, architecture, and delivery documentation
 
 ## Technology
@@ -110,12 +113,15 @@ The command refuses production execution, validates all inputs, writes only thro
 | --------------------------------------- | -------------------------------------------- |
 | /                                       | Product landing page with featured Jobs      |
 | /jobs                                   | Published Job discovery, search, and filters |
-| /jobs/[slug]                            | Published Job public detail                  |
+| /jobs/[slug]                            | Published Job public detail with apply state |
+| /jobs/[slug]/apply                      | Candidate-only application form              |
 | /companies                              | Published Company discovery and search       |
 | /companies/[slug]                       | Published Company public profile             |
 | /login                                  | Email/password sign-in                       |
 | /register                               | Candidate and Recruiter account registration |
 | /candidate/dashboard                    | Protected Candidate workspace and summary    |
+| /candidate/applications                 | Candidate's own applications and filters     |
+| /candidate/applications/[applicationId] | Candidate application detail and withdrawal  |
 | /candidate/profile                      | Protected Candidate profile overview         |
 | /candidate/profile/edit                 | Edit Candidate professional information      |
 | /candidate/profile/education/new        | Add an education record                      |
@@ -133,6 +139,9 @@ The command refuses production execution, validates all inputs, writes only thro
 | /recruiter/jobs/new                     | Create a draft Job for an owned Company      |
 | /recruiter/jobs/[jobId]                 | Private Job workspace and lifecycle actions  |
 | /recruiter/jobs/[jobId]/edit            | OWNER-only Job editing                       |
+| /recruiter/jobs/[jobId]/applications    | OWNER-only applicant pipeline for one Job    |
+| /recruiter/applications                 | Applications across owned Companies          |
+| /recruiter/applications/[applicationId] | OWNER-only candidate review and status       |
 | /admin                                  | Protected Admin access confirmation          |
 
 ## Project structure
@@ -160,6 +169,8 @@ Recruiter and Company code is grouped under `src/features/recruiter-company`. Da
 
 Job code is grouped under `src/features/jobs`. Database-free schemas, slug allocation, lifecycle transitions, publication readiness, and public search mapping are separated from server-only queries, OWNER-scoped commands, and Server Actions. Jobs reuse the shared `Skill` catalog through an explicit `JobSkill` relation rather than a second catalog. Migration `20260710224143_job_lifecycle_discovery` adds the `Job` and `JobSkill` tables and the `JobStatus`, `WorkplaceType`, and `ExperienceLevel` enums without changing identity, Candidate, or Company tables.
 
+Application code is grouped under `src/features/applications`. Database-free lifecycle transitions, eligibility rules, cover-letter and search schemas, and search-filter mapping are separated from server-only queries, candidate- and OWNER-scoped commands, and Server Actions. Candidate identity always comes from the session, status changes flow through the centralized transition table, and every status change writes an `ApplicationStatusHistory` row atomically. Migration `20260711001124_job_applications_pipeline` adds the `JobApplication` and `ApplicationStatusHistory` tables and the `ApplicationStatus` enum, with a database-level unique `(jobId, candidateId)` constraint, without changing existing tables.
+
 Database integration tests never use `DATABASE_URL`. To run them, configure a separate `TEST_DATABASE_URL`, confirm it targets an isolated test database, set `RUN_DATABASE_INTEGRATION_TESTS=true`, and run `npm run test:integration`. The command skips clearly unless both values are present and refuses a test URL matching either application database URL. Regular `npm test` remains database-free.
 
 ## Identity security boundaries
@@ -183,7 +194,7 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Skill catalog names use Unicode and whitespace normalization plus a unique lookup name. Candidate assignments use a composite primary key and a transaction with duplicate-safe creation.
 - Professional links accept only valid `http` or `https` URLs. Profile text is rendered as text, never user-authored HTML.
 - Completion is calculated on read: headline, location, bio, skills, education, and experience are worth 15 points each; at least one professional link is worth 10 points. It is never stored or described as verification.
-- CV/avatar upload, public Candidate profiles, jobs, applications, saved jobs, messaging, notifications, AI, and payments remain deferred.
+- CV/avatar upload, public Candidate profiles, saved jobs, messaging, notifications, AI, and payments remain deferred.
 
 ## Recruiter and Company boundaries
 
@@ -194,7 +205,7 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Companies start unpublished. Publishing requires name, description, industry, headquarters, and a safe `http`/`https` website. Publication is visibility, not verification.
 - Public directory and detail queries always include `isPublished = true`. Unknown and unpublished slugs share the same not-found behavior, and public results never include membership or owner identity data.
 - Company names do not automatically rewrite an existing slug during editing, preserving stable public URLs.
-- Recruiter invitations, membership management, verification, uploads, applications, candidate search, messaging, notifications, AI, and billing remain deferred.
+- Recruiter invitations, membership management, verification, uploads, candidate search, messaging, notifications, AI, and billing remain deferred.
 
 ## Job domain boundaries
 
@@ -206,7 +217,19 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Salary is stored as whole non-negative integer currency units with a normalized uppercase 3-letter currency code, and the salary minimum can never exceed the maximum. Deadlines are date-only and compared in UTC.
 - Required skills reuse the shared normalized `Skill` catalog through `JobSkill`, whose composite primary key prevents duplicate assignment even under concurrent requests.
 - Public directory and detail queries always constrain `status = PUBLISHED` and `Company.isPublished = true`. Draft, closed, archived, and unpublished-Company Jobs return the same not-found behavior, and public results never include internal IDs or membership identity.
-- Applications, saved Jobs, candidate matching, and Job analytics remain honest deferred states.
+- Saved Jobs, candidate matching, and Job analytics remain honest deferred states.
+
+## Application domain boundaries
+
+- A Candidate may apply only to a `PUBLISHED` Job under a published Company, before any deadline, with a minimum profile (headline, location, at least one skill), and only once. Every condition is re-checked against fresh database state inside the mutation, never trusted from earlier browser render.
+- `candidateId` always comes from the authenticated session; a database-level unique `(jobId, candidateId)` constraint plus safe P2002 handling turns duplicate and concurrent submissions into a clean already-applied result.
+- The recruiter pipeline is SUBMITTED → UNDER_REVIEW → INTERVIEW → OFFER → HIRED, with REJECTED reachable from any active state; HIRED, REJECTED, and WITHDRAWN are terminal. A recruiter can never set WITHDRAWN, a candidate can never set a recruiter status, and no backward or terminal transition is allowed.
+- Only the Candidate can withdraw, and only from an active state (SUBMITTED, UNDER_REVIEW, INTERVIEW, OFFER). Withdrawal is retained, never deleted.
+- Every status change — including the initial SUBMITTED event (with a null `fromStatus`) and withdrawal — writes an `ApplicationStatusHistory` row atomically in the same transaction. Applications are never hard-deleted in normal workflow.
+- Candidate ownership scopes every candidate read and mutation by `candidateId`; recruiter access scopes every read and mutation through OWNER membership of the Job's Company. Absent, foreign, and MEMBER-only IDs return the same not-found, so cross-candidate, cross-company, and MEMBER access all fail identically.
+- A recruiter sees a candidate's private profile (email, headline, location, bio, skills, education, experience) only because the candidate applied to their job, and only as an OWNER. This data never appears on public pages or in unrelated Company workspaces. Candidate-facing history omits the acting user.
+- Cover letters are optional, trimmed, length-bounded plain text, normalized to null when empty, validated on both client and server, and never rendered as HTML.
+- CV upload and storage, recruiter-only candidate notes, saved jobs, notifications, messaging, and bulk actions remain deferred.
 
 ## Documentation
 

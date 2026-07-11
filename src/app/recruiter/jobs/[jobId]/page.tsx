@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowUpRight,
   BarChart3,
   Building2,
   CalendarClock,
@@ -22,6 +23,8 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { requireRole } from "@/features/auth/server/session";
+import { ApplicationStatusBadge } from "@/features/applications/components/application-status-badge";
+import { getJobApplicationSummary } from "@/features/applications/server/data";
 import { JobLifecycleControls } from "@/features/jobs/components/job-lifecycle-controls";
 import { JobSkillManager } from "@/features/jobs/components/job-skill-manager";
 import { JobStatusBadge } from "@/features/jobs/components/job-status-badge";
@@ -42,20 +45,15 @@ export const metadata: Metadata = {
   description: "Manage a private job in your recruiter workspace.",
 };
 
-const deferredSections = [
-  {
-    icon: UsersRound,
-    title: "Applicants",
-    description:
-      "Applications are deferred to a later phase. No applicant data exists yet.",
-  },
-  {
-    icon: BarChart3,
-    title: "Job analytics",
-    description:
-      "Views and conversion analytics will arrive once real applications exist.",
-  },
-];
+const APPLICANT_STAGES = [
+  ["SUBMITTED", "New"],
+  ["UNDER_REVIEW", "Review"],
+  ["INTERVIEW", "Interview"],
+  ["OFFER", "Offer"],
+  ["HIRED", "Hired"],
+  ["REJECTED", "Rejected"],
+  ["WITHDRAWN", "Withdrawn"],
+] as const;
 
 export default async function JobWorkspacePage({
   params,
@@ -64,9 +62,16 @@ export default async function JobWorkspacePage({
 }) {
   const { jobId } = await params;
   const session = await requireRole("RECRUITER", `/recruiter/jobs/${jobId}`);
-  const job = await getRecruiterJob(getPrismaClient(), session.user.id, jobId);
+  const prisma = getPrismaClient();
+  const job = await getRecruiterJob(prisma, session.user.id, jobId);
 
   if (!job) notFound();
+
+  const applicants = await getJobApplicationSummary(
+    prisma,
+    session.user.id,
+    job.id,
+  );
 
   const editable = canEditJob(job.status);
   const readiness = getJobPublicationReadiness({
@@ -217,31 +222,94 @@ export default async function JobWorkspacePage({
               </CardContent>
             </Card>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              {deferredSections.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Card key={item.title} className="h-full">
-                    <CardHeader>
-                      <span className="bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-xl">
-                        <Icon aria-hidden="true" className="size-5" />
-                      </span>
-                      <CardTitle className="mt-3 text-lg">
-                        {item.title}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-muted-foreground text-sm leading-6">
-                        {item.description}
-                      </p>
-                      <Badge variant="outline" className="mt-4">
-                        Coming later
-                      </Badge>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+            <Card>
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <UsersRound
+                        aria-hidden="true"
+                        className="text-primary size-5"
+                      />
+                      Applicants
+                    </CardTitle>
+                    <CardDescription>
+                      {applicants.total === 0
+                        ? "No applicants yet."
+                        : `${applicants.total} ${
+                            applicants.total === 1 ? "applicant" : "applicants"
+                          }`}
+                    </CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/recruiter/jobs/${job.id}/applications`}>
+                      View pipeline
+                    </Link>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-5">
+                <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+                  {APPLICANT_STAGES.map(([status, label]) => (
+                    <div key={status} className="bg-muted/60 rounded-xl p-3">
+                      <dt className="text-muted-foreground text-xs">{label}</dt>
+                      <dd className="mt-1 text-xl font-semibold">
+                        {applicants.statusCounts[status]}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                {applicants.recent.length ? (
+                  <ul className="divide-y">
+                    {applicants.recent.map((application) => (
+                      <li key={application.id}>
+                        <Link
+                          href={`/recruiter/applications/${application.id}`}
+                          className="hover:bg-muted/50 focus-visible:ring-ring -mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 focus-visible:ring-2 focus-visible:outline-none"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">
+                              {application.candidate.name}
+                            </span>
+                            <span className="text-muted-foreground block truncate text-xs">
+                              {application.candidate.candidateProfile
+                                ?.headline ?? "No headline"}{" "}
+                              · Applied {formatJobDate(application.submittedAt)}
+                            </span>
+                          </span>
+                          <span className="flex shrink-0 items-center gap-2">
+                            <ApplicationStatusBadge
+                              status={application.status}
+                            />
+                            <ArrowUpRight
+                              aria-hidden="true"
+                              className="text-muted-foreground size-4"
+                            />
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <span className="bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-xl">
+                  <BarChart3 aria-hidden="true" className="size-5" />
+                </span>
+                <CardTitle className="mt-3 text-lg">Job analytics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground text-sm leading-6">
+                  Views and conversion analytics will arrive in a later phase.
+                </p>
+                <Badge variant="outline" className="mt-4">
+                  Coming later
+                </Badge>
+              </CardContent>
+            </Card>
           </div>
 
           <Card>

@@ -222,10 +222,27 @@ export default async function RecruiterJobsPage({
                         {job._count.skills}{" "}
                         {job._count.skills === 1 ? "skill" : "skills"}
                       </span>
+                      <span className="text-foreground font-medium">
+                        {job._count.applications}{" "}
+                        {job._count.applications === 1
+                          ? "applicant"
+                          : "applicants"}
+                      </span>
                     </div>
-                    <Button variant="outline" asChild>
-                      <Link href={`/recruiter/jobs/${job.id}`}>Manage job</Link>
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      {job._count.applications > 0 ? (
+                        <Button variant="outline" asChild>
+                          <Link href={`/recruiter/jobs/${job.id}/applications`}>
+                            Pipeline
+                          </Link>
+                        </Button>
+                      ) : null}
+                      <Button variant="outline" asChild>
+                        <Link href={`/recruiter/jobs/${job.id}`}>
+                          Manage job
+                        </Link>
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               </li>
