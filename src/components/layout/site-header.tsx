@@ -17,6 +17,13 @@ export async function SiteHeader() {
         name: session.user.name,
         roleLabel: roleLabels[session.user.role],
         dashboardPath: getDashboardPathForRole(session.user.role),
+        privateNavigation:
+          session.user.role === "CANDIDATE"
+            ? [
+                { label: "Applications", href: "/candidate/applications" },
+                { label: "Saved jobs", href: "/candidate/saved-jobs" },
+              ]
+            : [],
       }
     : null;
 
@@ -29,6 +36,11 @@ export async function SiteHeader() {
           className="hidden items-center gap-1 md:flex"
         >
           {siteConfig.navigation.map((item) => (
+            <Button key={item.href} variant="ghost" asChild>
+              <Link href={item.href}>{item.label}</Link>
+            </Button>
+          ))}
+          {navigationUser?.privateNavigation.map((item) => (
             <Button key={item.href} variant="ghost" asChild>
               <Link href={item.href}>{item.label}</Link>
             </Button>

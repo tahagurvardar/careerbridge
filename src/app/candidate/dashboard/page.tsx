@@ -20,7 +20,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ApplicationStatusBadge } from "@/features/applications/components/application-status-badge";
-import { getCandidateProfileReadiness } from "@/features/applications/eligibility";
 import {
   getCandidateApplicationStatusCounts,
   getCandidateRecentApplications,
@@ -30,6 +29,9 @@ import { CompletionCard } from "@/features/candidate-profile/components/completi
 import { getCompletionFromProfile } from "@/features/candidate-profile/completion";
 import { getCandidateProfile } from "@/features/candidate-profile/server/data";
 import { formatJobDate } from "@/features/jobs/format";
+import { classifySavedJobAvailability } from "@/features/saved-jobs/availability";
+import { getCandidateDashboardRecommendation } from "@/features/saved-jobs/recommendation";
+import { getCandidateSavedJobDashboard } from "@/features/saved-jobs/server/data";
 import { getPrismaClient } from "@/lib/prisma";
 
 export const metadata: Metadata = {
@@ -38,12 +40,6 @@ export const metadata: Metadata = {
 };
 
 const deferredItems = [
-  {
-    icon: Bookmark,
-    title: "Saved jobs",
-    description:
-      "Browse published jobs today. Saving jobs will arrive with the saved-opportunities phase.",
-  },
   {
     icon: Sparkles,
     title: "Job recommendations",
@@ -55,33 +51,23 @@ const deferredItems = [
 export default async function CandidateDashboardPage() {
   const session = await requireRole("CANDIDATE", "/candidate/dashboard");
   const prisma = getPrismaClient();
-  const [profile, { counts, total }, recent] = await Promise.all([
-    getCandidateProfile(prisma, session.user.id),
-    getCandidateApplicationStatusCounts(prisma, session.user.id),
-    getCandidateRecentApplications(prisma, session.user.id),
-  ]);
+  const [profile, { counts, total }, recent, savedJobDashboard] =
+    await Promise.all([
+      getCandidateProfile(prisma, session.user.id),
+      getCandidateApplicationStatusCounts(prisma, session.user.id),
+      getCandidateRecentApplications(prisma, session.user.id),
+      getCandidateSavedJobDashboard(prisma, session.user.id),
+    ]);
   const completion = getCompletionFromProfile(profile);
   const active =
     counts.SUBMITTED + counts.UNDER_REVIEW + counts.INTERVIEW + counts.OFFER;
 
-  const applyReadiness = getCandidateProfileReadiness({
-    headline: profile?.headline ?? null,
-    location: profile?.location ?? null,
-    skillCount: profile?.skills.length ?? 0,
+  const recommendation = getCandidateDashboardRecommendation({
+    profileComplete: completion.percentage === 100,
+    savedJobCount: savedJobDashboard.total,
+    savedOpenUnappliedCount: savedJobDashboard.openUnapplied,
+    activeApplicationCount: active,
   });
-  const recommendation = !applyReadiness.isReady
-    ? {
-        label: "Complete your profile to apply",
-        href: "/candidate/profile/edit",
-      }
-    : total === 0
-      ? { label: "Browse jobs and apply", href: "/jobs" }
-      : active > 0
-        ? {
-            label: "Track your active applications",
-            href: "/candidate/applications",
-          }
-        : { label: "Find your next role", href: "/jobs" };
 
   const stats = [
     { label: "Total", value: total },
@@ -218,12 +204,92 @@ export default async function CandidateDashboardPage() {
           </CardContent>
         </Card>
 
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Bookmark
+                    aria-hidden="true"
+                    className="text-primary size-5"
+                  />
+                  Saved jobs
+                </CardTitle>
+                <CardDescription>
+                  {savedJobDashboard.total} saved{" "}
+                  {savedJobDashboard.total === 1
+                    ? "opportunity"
+                    : "opportunities"}
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/candidate/saved-jobs">View all saved jobs</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {savedJobDashboard.recent.length ? (
+              <ul className="divide-y">
+                {savedJobDashboard.recent.map(({ job, createdAt }) => {
+                  const isOpen =
+                    classifySavedJobAvailability({
+                      status: job.status,
+                      companyIsPublished: job.company.isPublished,
+                    }) === "OPEN";
+                  const content = (
+                    <>
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">
+                          {job.title}
+                        </span>
+                        <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                          <Building2 aria-hidden="true" className="size-3.5" />
+                          {job.company.name} · Saved {formatJobDate(createdAt)}
+                        </span>
+                      </span>
+                      <Badge variant={isOpen ? "default" : "secondary"}>
+                        {isOpen ? "Open" : "Unavailable"}
+                      </Badge>
+                    </>
+                  );
+
+                  return (
+                    <li key={job.slug}>
+                      {isOpen ? (
+                        <Link
+                          href={`/jobs/${job.slug}`}
+                          className="hover:bg-muted/50 focus-visible:ring-ring -mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 focus-visible:ring-2 focus-visible:outline-none"
+                        >
+                          {content}
+                        </Link>
+                      ) : (
+                        <div className="-mx-2 flex items-center justify-between gap-3 px-2 py-3">
+                          {content}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="bg-muted/40 rounded-xl px-4 py-8 text-center">
+                <p className="text-muted-foreground leading-6">
+                  You have not saved any jobs yet.
+                </p>
+                <Button className="mt-4" asChild>
+                  <Link href="/jobs">Browse jobs</Link>
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="border-primary/20 bg-primary/5 mt-6">
           <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold">Recommended next action</p>
               <p className="text-muted-foreground mt-1">
-                Continue with the next meaningful step in your job search.
+                {recommendation.description}
               </p>
             </div>
             <Button asChild>

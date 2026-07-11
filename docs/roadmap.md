@@ -111,13 +111,29 @@ Exit criteria: a Candidate can apply to and track eligible jobs, and an authoriz
 
 Deferred from Phase 3A: saved jobs, recruiter-only candidate notes, CV upload/access, bulk actions, notifications, and messaging.
 
-## Phase 3B — Saved opportunities and candidate documents
+## Phase 3B — Saved Jobs
 
-- Saved jobs with Candidate ownership
+Status: implemented on `feat/saved-jobs`.
+
+- Candidate-owned `SavedJob` relation with unique duplicate prevention and cascade cleanup
+- Save/remove Server Actions with session-derived ownership and fresh publication eligibility checks
+- Idempotent sequential and concurrent duplicate saves plus idempotent removal
+- Session-aware public Job controls with one saved-ID lookup for Job-card result sets
+- Private `/candidate/saved-jobs` route with bounded search, availability filters, stable newest-first ordering, and application status
+- Retained unavailable history after Job close/archive or Company unpublication without public links or leakage
+- Real saved count, recent saves, recommended next action, and Candidate-only desktop/mobile navigation
+- Unit coverage plus isolated database authorization, concurrency, privacy, and retention coverage
+
+Exit criteria: Candidates can securely save and revisit eligible Jobs while unavailable history remains truthful and private.
+
+Deferred from Phase 3B: recommendations, matching, saved-search alerts, notifications, CV storage, recruiter notes, messaging, AI, and billing.
+
+## Phase 3C — Candidate documents and recruiter workflow context
+
 - Private CV object storage and authorized recruiter CV access
 - Recruiter-only application notes and workflow annotations
 
-Exit criteria: Candidates can save roles and manage documents, and Recruiters can review authorized documents within the hiring workflow.
+Exit criteria: Candidates can manage private documents and authorized Recruiters can review them with private workflow context.
 
 ## Phase 4 — Membership administration
 

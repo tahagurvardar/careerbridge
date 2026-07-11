@@ -22,6 +22,7 @@ type MobileNavigationUser = {
   name: string;
   roleLabel: string;
   dashboardPath: string;
+  privateNavigation: readonly { label: string; href: string }[];
 };
 
 export function MobileNavigation({
@@ -81,6 +82,16 @@ export function MobileNavigation({
           )}
           <nav aria-label="Mobile navigation" className="flex flex-col px-3">
             {siteConfig.navigation.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className="hover:bg-muted focus-visible:ring-ring rounded-lg px-3 py-3 text-base font-medium focus-visible:ring-2 focus-visible:outline-none"
+              >
+                {item.label}
+              </Link>
+            ))}
+            {user?.privateNavigation.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { JobApplyPanel } from "@/features/applications/components/job-apply-panel";
+import { getSafeInternalPath } from "@/features/auth/roles";
+import { getCurrentSession } from "@/features/auth/server/session";
 import { formatJobDate, formatSalaryRange } from "@/features/jobs/format";
 import {
   employmentTypeLabels,
@@ -28,6 +30,8 @@ import {
   workplaceTypeLabels,
 } from "@/features/jobs/schemas";
 import { getPublishedJobBySlug } from "@/features/jobs/server/data";
+import { JobSaveButton } from "@/features/saved-jobs/components/job-save-button";
+import { isJobSavedByCandidate } from "@/features/saved-jobs/server/data";
 import { getPrismaClient } from "@/lib/prisma";
 
 interface JobDetailPageProps {
@@ -55,9 +59,18 @@ export async function generateMetadata({
 export default async function JobDetailPage({ params }: JobDetailPageProps) {
   await connection();
   const { slug } = await params;
-  const job = await getPublishedJobBySlug(getPrismaClient(), slug);
+  const prisma = getPrismaClient();
+  const [job, session] = await Promise.all([
+    getPublishedJobBySlug(prisma, slug),
+    getCurrentSession(),
+  ]);
 
   if (!job) notFound();
+
+  const isSaved =
+    session?.user.role === "CANDIDATE"
+      ? await isJobSavedByCandidate(prisma, session.user.id, slug)
+      : false;
 
   const salary = formatSalaryRange(
     job.salaryMin,
@@ -229,6 +242,26 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
                   />
                   <Separator />
                 </>
+              ) : null}
+              {!session ? (
+                <Button variant="outline" className="w-full" asChild>
+                  <Link
+                    href={`/login?callbackPath=${encodeURIComponent(
+                      getSafeInternalPath(`/jobs/${slug}`, "/jobs"),
+                    )}`}
+                  >
+                    Sign in to save
+                  </Link>
+                </Button>
+              ) : session.user.role === "CANDIDATE" ? (
+                <JobSaveButton
+                  slug={slug}
+                  initialSaved={isSaved}
+                  className="w-full"
+                />
+              ) : null}
+              {session?.user.role === "CANDIDATE" || !session ? (
+                <Separator />
               ) : null}
               <JobApplyPanel
                 slug={job.slug}
