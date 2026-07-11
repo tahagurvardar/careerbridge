@@ -21,6 +21,7 @@ export async function SiteHeader() {
           session.user.role === "CANDIDATE"
             ? [
                 { label: "Applications", href: "/candidate/applications" },
+                { label: "Documents", href: "/candidate/documents" },
                 { label: "Saved jobs", href: "/candidate/saved-jobs" },
               ]
             : [],

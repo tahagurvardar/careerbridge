@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   BriefcaseBusiness,
+  Download,
   ExternalLink,
+  FileText,
   GraduationCap,
   Link2,
   Mail,
@@ -33,6 +35,8 @@ import {
 } from "@/features/candidate-profile/server/actions";
 import { getCandidateProfile } from "@/features/candidate-profile/server/data";
 import { requireRole } from "@/features/auth/server/session";
+import { formatFileSize } from "@/features/candidate-documents/documents";
+import { getCandidateCurrentResume } from "@/features/candidate-documents/server/data";
 import { getPrismaClient } from "@/lib/prisma";
 
 export const metadata: Metadata = {
@@ -74,8 +78,10 @@ export default async function CandidateProfilePage({
   searchParams: Promise<{ updated?: string | string[] }>;
 }) {
   const session = await requireRole("CANDIDATE", "/candidate/profile");
-  const [profile, query] = await Promise.all([
-    getCandidateProfile(getPrismaClient(), session.user.id),
+  const prisma = getPrismaClient();
+  const [profile, currentResume, query] = await Promise.all([
+    getCandidateProfile(prisma, session.user.id),
+    getCandidateCurrentResume(prisma, session.user.id),
     searchParams,
   ]);
   const completion = getCompletionFromProfile(profile);
@@ -372,7 +378,60 @@ export default async function CandidateProfilePage({
             </Card>
           </div>
 
-          <div className="lg:sticky lg:top-24">
+          <div className="grid gap-6 lg:sticky lg:top-24">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <FileText
+                    aria-hidden="true"
+                    className="text-primary size-5"
+                  />
+                  CV
+                </CardTitle>
+                <CardDescription>
+                  {currentResume.hasResume
+                    ? "Attached to new applications you submit."
+                    : "Add a CV to attach it to future applications."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                {currentResume.hasResume ? (
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <p className="flex items-center gap-2 text-sm font-medium">
+                      <FileText
+                        aria-hidden="true"
+                        className="text-muted-foreground size-4 shrink-0"
+                      />
+                      <span className="truncate">{currentResume.filename}</span>
+                    </p>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {formatFileSize(currentResume.sizeBytes)}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm leading-6">
+                    You have not added a CV yet.
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/candidate/documents">
+                      {currentResume.hasResume ? "Manage CV" : "Add a CV"}
+                    </Link>
+                  </Button>
+                  {currentResume.hasResume ? (
+                    <Button variant="ghost" size="sm" asChild>
+                      <a
+                        href={`/api/documents/${currentResume.documentId}/download`}
+                      >
+                        <Download aria-hidden="true" />
+                        Download
+                      </a>
+                    </Button>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
             <CompletionCard {...completion} />
           </div>
         </div>

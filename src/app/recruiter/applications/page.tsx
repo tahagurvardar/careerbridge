@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   BriefcaseBusiness,
   MapPin,
+  Paperclip,
   Search,
   UsersRound,
   X,
@@ -214,6 +215,17 @@ export default async function RecruiterApplicationsPage({
                             {application.job.title} ·{" "}
                             {application.job.company.name}
                           </span>
+                          {application.hasResume ? (
+                            <span className="flex items-center gap-1">
+                              <Paperclip
+                                aria-hidden="true"
+                                className="size-3.5"
+                              />
+                              CV attached
+                            </span>
+                          ) : (
+                            <span>No CV</span>
+                          )}
                         </div>
                       </div>
                       <span className="text-primary inline-flex items-center gap-1 text-sm font-semibold">

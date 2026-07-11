@@ -113,18 +113,19 @@ export async function getCandidateApplyProfile(
 // Candidate application reads
 // ---------------------------------------------------------------------------
 
-export function getCandidateApplications(
+export async function getCandidateApplications(
   prisma: PrismaClient,
   candidateId: string,
   search: CandidateApplicationSearch,
 ) {
-  return prisma.jobApplication.findMany({
+  const rows = await prisma.jobApplication.findMany({
     where: buildCandidateApplicationWhere(candidateId, search),
     select: {
       id: true,
       status: true,
       submittedAt: true,
       withdrawnAt: true,
+      resumeDocumentId: true,
       job: {
         select: {
           title: true,
@@ -136,6 +137,11 @@ export function getCandidateApplications(
     },
     orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
   });
+
+  return rows.map(({ resumeDocumentId, ...application }) => ({
+    ...application,
+    hasResume: Boolean(resumeDocumentId),
+  }));
 }
 
 export async function getCandidateApplicationStatusCounts(
@@ -190,6 +196,16 @@ export function getCandidateApplication(
           company: { select: { name: true, slug: true, isPublished: true } },
         },
       },
+      // The exact CV version snapshotted onto this application, if any. Only
+      // display-safe fields — never the storage key, hash, or MIME type.
+      resumeDocument: {
+        select: {
+          id: true,
+          originalFilename: true,
+          sizeBytes: true,
+          uploadedAt: true,
+        },
+      },
       // Candidate-safe history: status changes and dates only, never the actor.
       history: {
         select: { fromStatus: true, toStatus: true, createdAt: true },
@@ -203,17 +219,21 @@ export function getCandidateApplication(
 // Recruiter application reads (OWNER-scoped)
 // ---------------------------------------------------------------------------
 
-export function getRecruiterApplications(
+export async function getRecruiterApplications(
   prisma: PrismaClient,
   userId: string,
   search: RecruiterApplicationSearch,
 ) {
-  return prisma.jobApplication.findMany({
+  const rows = await prisma.jobApplication.findMany({
     where: buildRecruiterApplicationWhere(userId, search),
     select: {
       id: true,
       status: true,
       submittedAt: true,
+      // Selected only to derive an attachment indicator; the id is dropped
+      // before the data leaves the server so lists expose state, not document
+      // identifiers.
+      resumeDocumentId: true,
       candidate: {
         select: {
           name: true,
@@ -235,6 +255,11 @@ export function getRecruiterApplications(
     orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
     take: MAX_RECRUITER_RESULTS,
   });
+
+  return rows.map(({ resumeDocumentId, ...application }) => ({
+    ...application,
+    hasResume: Boolean(resumeDocumentId),
+  }));
 }
 
 export async function getRecruiterApplicationStatusCounts(
@@ -260,6 +285,17 @@ export function getRecruiterApplication(
       coverLetter: true,
       submittedAt: true,
       withdrawnAt: true,
+      // The exact CV attached to this application. The recruiter needs the id
+      // to build an authorized download link; the download route re-checks
+      // OWNER access. Storage key, hash, and MIME type are never selected.
+      resumeDocument: {
+        select: {
+          id: true,
+          originalFilename: true,
+          sizeBytes: true,
+          uploadedAt: true,
+        },
+      },
       job: {
         select: {
           id: true,

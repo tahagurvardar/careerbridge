@@ -85,11 +85,13 @@ Deferred from Phase 2C: applications, saved jobs, candidate matching, recruiter 
 
 ## Phase 2D — Secure Candidate documents
 
+Status: delivered as part of Phase 3C on `feat/secure-cv-documents` (see Phase 3C below).
+
 - Private CV object storage and metadata model
 - Strict content-type and size validation
-- Malware-scanning and quarantine design
-- Short-lived authorized access URLs
-- Candidate replace/delete flow and retention rules
+- Malware-scanning and quarantine design (dedicated scanning deferred and documented, not claimed)
+- Authorized, per-request re-authorized access route (streamed download instead of public URLs)
+- Candidate replace/remove flow and retention rules
 - Audit-safe document access tests
 
 Exit criteria: a Candidate can privately manage a CV without exposing raw storage objects or weakening profile ownership.
@@ -130,10 +132,19 @@ Deferred from Phase 3B: recommendations, matching, saved-search alerts, notifica
 
 ## Phase 3C — Candidate documents and recruiter workflow context
 
-- Private CV object storage and authorized recruiter CV access
-- Recruiter-only application notes and workflow annotations
+Status: secure Candidate CV documents implemented on `feat/secure-cv-documents` (this also delivers the Phase 2D "Secure Candidate documents" scope).
 
-Exit criteria: Candidates can manage private documents and authorized Recruiters can review them with private workflow context.
+- Immutable `CandidateDocument` versions, a one-to-one `CandidateResume` current pointer, and a nullable `JobApplication.resumeDocumentId` snapshot pinned across CV replacement
+- PDF-only upload validation (size, MIME, extension, and `%PDF-` signature), server-generated storage keys, and server-computed SHA-256
+- A pluggable private storage abstraction: local filesystem for development/test and an S3-compatible private-bucket driver for production, with production refusing the local driver
+- Server-side upload-then-commit coordination with best-effort object cleanup on database failure, immutable versions, and retention that keeps historically attached CVs downloadable
+- A Node-runtime `/api/documents/[documentId]/download` route that re-authorizes every request, forces an attachment with `private, no-store` and `nosniff`, and audit-logs successful authorized downloads
+- Candidate ownership plus OWNER-scoped Recruiter access to only the exact CV attached to an owned-Company application, with `/candidate/documents`, apply-flow, dashboard, profile, and recruiter/candidate application integration
+- Unit coverage plus isolated database upload, access, snapshot, attachment, removal, audit, privacy, and storage-consistency coverage
+
+Deferred to a later slice of Phase 3C: recruiter-only application notes and workflow annotations, dedicated malware scanning, and AI resume parsing.
+
+Exit criteria: Candidates can privately manage a CV without exposing raw storage objects or weakening profile ownership, and authorized Recruiters can review only the CV attached to their applications. Recruiter workflow annotations remain pending.
 
 ## Phase 4 — Membership administration
 
