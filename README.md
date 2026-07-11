@@ -69,6 +69,9 @@ Configure the required values without committing them:
 - `DIRECT_URL`: direct Neon Prisma CLI/migration connection
 - `BETTER_AUTH_SECRET`: high-entropy secret of at least 32 characters
 - `BETTER_AUTH_URL`: application origin, normally `http://localhost:3000` locally
+- `DOCUMENT_STORAGE_DRIVER`: `local` for development/test (default) or `s3` for production-oriented private storage
+- `DOCUMENT_STORAGE_LOCAL_ROOT`: local object directory for the `local` driver (defaults to the git-ignored `.careerbridge-private-storage`)
+- `DOCUMENT_STORAGE_S3_*`: private bucket endpoint, region, bucket, credentials, and path-style flag (required only when the driver is `s3`; the bucket must be private and is never given public URLs)
 
 Generate the client, apply migrations, and start the development server:
 
@@ -176,6 +179,8 @@ Application code is grouped under `src/features/applications`. Database-free lif
 
 Saved Job code is grouped under `src/features/saved-jobs`. Shared Zod search/filter schemas, availability classification, save eligibility, and dashboard recommendation logic remain database-free; Candidate-scoped reads, commands, and Server Actions remain server-only. Migration `20260711023016_saved_jobs` adds the `SavedJob` join with unique `(candidateId, jobId)`, candidate/recent-order and Job indexes, and cascade relations without duplicating Job, Company, or Candidate data.
 
+Candidate document code is grouped under `src/features/candidate-documents`, with a provider-agnostic private storage abstraction in `src/lib/storage`. Database-free PDF validation, filename sanitization, Content-Disposition safety, download-authorization helpers, and retention classification are separated from server-only reads, commands, and Server Actions. Uploads write an immutable `CandidateDocument` version and move a one-to-one `CandidateResume` pointer; a new application snapshots the current pointer into `JobApplication.resumeDocumentId`. A Node-runtime route at `/api/documents/[documentId]/download` re-authorizes every request and streams private bytes as a forced download. Migration `20260711222126_secure_candidate_documents` adds the `CandidateDocument`, `CandidateResume`, and `CandidateDocumentAccessLog` tables, the `CandidateDocumentKind` and `CandidateDocumentAccessType` enums, and the nullable `JobApplication.resumeDocumentId` snapshot column.
+
 Database integration tests never use `DATABASE_URL`. To run them, configure a separate `TEST_DATABASE_URL`, confirm it targets an isolated test database, set `RUN_DATABASE_INTEGRATION_TESTS=true`, and run `npm run test:integration`. The command skips clearly unless both values are present and refuses a test URL matching either application database URL. Regular `npm test` remains database-free.
 
 ## Identity security boundaries
@@ -199,7 +204,7 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Skill catalog names use Unicode and whitespace normalization plus a unique lookup name. Candidate assignments use a composite primary key and a transaction with duplicate-safe creation.
 - Professional links accept only valid `http` or `https` URLs. Profile text is rendered as text, never user-authored HTML.
 - Completion is calculated on read: headline, location, bio, skills, education, and experience are worth 15 points each; at least one professional link is worth 10 points. It is never stored or described as verification.
-- CV/avatar upload, public Candidate profiles, messaging, notifications, AI, and payments remain deferred.
+- Avatar upload, public Candidate profiles, messaging, notifications, AI, and payments remain deferred. Private CV documents are managed under `/candidate/documents` (see Candidate document boundaries).
 
 ## Recruiter and Company boundaries
 
@@ -243,7 +248,16 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Candidate ownership scopes every candidate read and mutation by `candidateId`; recruiter access scopes every read and mutation through OWNER membership of the Job's Company. Absent, foreign, and MEMBER-only IDs return the same not-found, so cross-candidate, cross-company, and MEMBER access all fail identically.
 - A recruiter sees a candidate's private profile (email, headline, location, bio, skills, education, experience) only because the candidate applied to their job, and only as an OWNER. This data never appears on public pages or in unrelated Company workspaces. Candidate-facing history omits the acting user.
 - Cover letters are optional, trimmed, length-bounded plain text, normalized to null when empty, validated on both client and server, and never rendered as HTML.
-- CV upload and storage, recruiter-only candidate notes, notifications, messaging, and bulk actions remain deferred.
+- Recruiter-only candidate notes, notifications, messaging, and bulk actions remain deferred.
+
+## Candidate document boundaries
+
+- A Candidate has at most one current CV. Each upload creates a new immutable `CandidateDocument` version and atomically moves the one-to-one `CandidateResume` pointer; previous versions are never overwritten, so applications they are attached to keep working. `candidateId` always comes from the session.
+- Uploads accept only PDFs and must pass every check together: non-empty, at most 5 MB, `application/pdf` MIME, a `.pdf` extension, and a `%PDF-` magic-byte signature. The storage key is generated server-side, the SHA-256 is computed server-side, and the original filename is sanitized for safe display and Content-Disposition. File bytes are never stored in PostgreSQL.
+- Applying snapshots the Candidate's current CV inside the application transaction into `JobApplication.resumeDocumentId`; that exact version stays pinned even after the Candidate replaces or removes their CV. Applying without a CV is allowed, and the browser never supplies a document ID. A Candidate may attach their current CV to an eligible existing active application once; an existing snapshot is never replaced and terminal applications never receive a late CV.
+- Downloads go only through the authenticated `/api/documents/[documentId]/download` route, which re-authorizes from the session on every request. A Candidate may download their own documents; a Recruiter may download a document only when it is attached to an application whose Job Company they OWN. MEMBER, other-company, cross-Candidate, signed-out, and Admin requests are all denied identically, and unknown or unauthorized IDs never reveal existence.
+- Responses force a download: `Content-Type: application/pdf`, a safe `Content-Disposition` attachment filename, `Cache-Control: private, no-store`, and `X-Content-Type-Options: nosniff`. Storage keys, bucket names, endpoints, filesystem paths, and credentials are never exposed, and no public object URL is ever created. Successful authorized downloads write a `CandidateDocumentAccessLog` row; denied attempts never do.
+- Private object storage is a pluggable abstraction: a local filesystem driver (development and test only, under the git-ignored `.careerbridge-private-storage`, with path-traversal protection) and an S3-compatible driver for production. Production refuses the local driver and fails loudly when S3 configuration is incomplete. Dedicated malware scanning and AI resume parsing are explicitly deferred.
 
 ## Documentation
 

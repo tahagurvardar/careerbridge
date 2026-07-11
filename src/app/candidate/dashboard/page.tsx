@@ -5,6 +5,7 @@ import {
   Bookmark,
   Building2,
   ClipboardList,
+  FileText,
   Pencil,
   Sparkles,
   UserRound,
@@ -25,6 +26,7 @@ import {
   getCandidateRecentApplications,
 } from "@/features/applications/server/data";
 import { requireRole } from "@/features/auth/server/session";
+import { getCandidateCurrentResume } from "@/features/candidate-documents/server/data";
 import { CompletionCard } from "@/features/candidate-profile/components/completion-card";
 import { getCompletionFromProfile } from "@/features/candidate-profile/completion";
 import { getCandidateProfile } from "@/features/candidate-profile/server/data";
@@ -51,12 +53,13 @@ const deferredItems = [
 export default async function CandidateDashboardPage() {
   const session = await requireRole("CANDIDATE", "/candidate/dashboard");
   const prisma = getPrismaClient();
-  const [profile, { counts, total }, recent, savedJobDashboard] =
+  const [profile, { counts, total }, recent, savedJobDashboard, currentResume] =
     await Promise.all([
       getCandidateProfile(prisma, session.user.id),
       getCandidateApplicationStatusCounts(prisma, session.user.id),
       getCandidateRecentApplications(prisma, session.user.id),
       getCandidateSavedJobDashboard(prisma, session.user.id),
+      getCandidateCurrentResume(prisma, session.user.id),
     ]);
   const completion = getCompletionFromProfile(profile);
   const active =
@@ -110,19 +113,45 @@ export default async function CandidateDashboardPage() {
                 experience current.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-wrap gap-3">
-              <Button asChild>
-                <Link href="/candidate/profile">
-                  <UserRound aria-hidden="true" />
-                  View profile
-                </Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/candidate/profile/edit">
-                  <Pencil aria-hidden="true" />
-                  Edit profile
-                </Link>
-              </Button>
+            <CardContent className="grid gap-4">
+              <div className="bg-muted/50 flex items-center justify-between gap-3 rounded-xl p-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <FileText
+                    aria-hidden="true"
+                    className="text-muted-foreground size-4 shrink-0"
+                  />
+                  <span className="min-w-0 text-sm">
+                    {currentResume.hasResume ? (
+                      <span className="truncate font-medium">
+                        {currentResume.filename}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        No CV uploaded yet
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <Button variant="ghost" size="sm" asChild className="shrink-0">
+                  <Link href="/candidate/documents">
+                    {currentResume.hasResume ? "Manage" : "Add CV"}
+                  </Link>
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button asChild>
+                  <Link href="/candidate/profile">
+                    <UserRound aria-hidden="true" />
+                    View profile
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/candidate/profile/edit">
+                    <Pencil aria-hidden="true" />
+                    Edit profile
+                  </Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
           <CompletionCard {...completion} compact />

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CircleAlert, Clock, ShieldCheck } from "lucide-react";
+import { CircleAlert, Clock, FileText, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { requireRole } from "@/features/auth/server/session";
@@ -15,6 +15,8 @@ import {
   getCandidateApplyProfile,
   getJobForApplication,
 } from "@/features/applications/server/data";
+import { formatFileSize } from "@/features/candidate-documents/documents";
+import { getCandidateCurrentResume } from "@/features/candidate-documents/server/data";
 import {
   employmentTypeLabels,
   workplaceTypeLabels,
@@ -46,7 +48,10 @@ export default async function ApplyPage({
   );
   if (existing) redirect(`/candidate/applications/${existing.id}`);
 
-  const applyProfile = await getCandidateApplyProfile(prisma, session.user.id);
+  const [applyProfile, currentResume] = await Promise.all([
+    getCandidateApplyProfile(prisma, session.user.id),
+    getCandidateCurrentResume(prisma, session.user.id),
+  ]);
   const deadlinePassed = isApplicationDeadlinePassed(job.applicationDeadline);
   const readiness = getCandidateProfileReadiness({
     headline: applyProfile.headline,
@@ -112,6 +117,35 @@ export default async function ApplyPage({
               to that team and are shared only because you applied.
             </p>
           </div>
+
+          <div className="grid gap-2 rounded-xl border p-4">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <FileText aria-hidden="true" className="text-primary size-4" />
+              Your CV
+            </p>
+            {currentResume.hasResume ? (
+              <p className="text-muted-foreground text-sm leading-6">
+                Your current CV{" "}
+                <span className="text-foreground font-medium">
+                  {currentResume.filename}
+                </span>{" "}
+                ({formatFileSize(currentResume.sizeBytes)}) will be attached to
+                this application.
+              </p>
+            ) : (
+              <p className="text-muted-foreground text-sm leading-6">
+                You have no current CV. You can still apply without a CV, or{" "}
+                <Link
+                  href="/candidate/documents"
+                  className="text-primary font-medium underline-offset-4 hover:underline"
+                >
+                  add one first
+                </Link>
+                .
+              </p>
+            )}
+          </div>
+
           <ApplyForm slug={slug} />
         </div>
       )}

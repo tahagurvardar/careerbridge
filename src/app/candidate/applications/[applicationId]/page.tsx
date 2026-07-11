@@ -10,6 +10,8 @@ import {
   MapPin,
 } from "lucide-react";
 
+import { Download, FileText } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,8 +25,14 @@ import { requireRole } from "@/features/auth/server/session";
 import { ApplicationStatusBadge } from "@/features/applications/components/application-status-badge";
 import { StatusTimeline } from "@/features/applications/components/status-timeline";
 import { WithdrawApplicationButton } from "@/features/applications/components/withdraw-application-button";
-import { canCandidateWithdrawApplication } from "@/features/applications/lifecycle";
+import {
+  canCandidateWithdrawApplication,
+  isActiveApplicationStatus,
+} from "@/features/applications/lifecycle";
 import { getCandidateApplication } from "@/features/applications/server/data";
+import { AttachResumeButton } from "@/features/candidate-documents/components/attach-resume-button";
+import { formatFileSize } from "@/features/candidate-documents/documents";
+import { getCandidateCurrentResume } from "@/features/candidate-documents/server/data";
 import { formatJobDate } from "@/features/jobs/format";
 import {
   employmentTypeLabels,
@@ -47,17 +55,24 @@ export default async function CandidateApplicationDetailPage({
     "CANDIDATE",
     `/candidate/applications/${applicationId}`,
   );
-  const application = await getCandidateApplication(
-    getPrismaClient(),
-    session.user.id,
-    applicationId,
-  );
+  const prisma = getPrismaClient();
+  const [application, currentResume] = await Promise.all([
+    getCandidateApplication(prisma, session.user.id, applicationId),
+    getCandidateCurrentResume(prisma, session.user.id),
+  ]);
 
   if (!application) notFound();
 
   const { job } = application;
   const jobIsPublic = job.status === "PUBLISHED" && job.company.isPublished;
   const canWithdraw = canCandidateWithdrawApplication(application.status);
+  const attachedResume = application.resumeDocument;
+  // A one-time attach is offered only when this application has no CV, is still
+  // active, and the Candidate currently has a CV to attach.
+  const canAttachResume =
+    !attachedResume &&
+    isActiveApplicationStatus(application.status) &&
+    currentResume.hasResume;
 
   return (
     <section className="py-10 sm:py-14">
@@ -152,6 +167,78 @@ export default async function CandidateApplicationDetailPage({
                     You applied without a cover letter.
                   </p>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText
+                    aria-hidden="true"
+                    className="text-primary size-5"
+                  />
+                  Attached CV
+                </CardTitle>
+                <CardDescription>
+                  The CV snapshotted onto this application.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                {attachedResume ? (
+                  <div className="bg-muted/50 flex flex-col gap-3 rounded-xl p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 font-medium">
+                        <FileText
+                          aria-hidden="true"
+                          className="text-muted-foreground size-4 shrink-0"
+                        />
+                        <span className="truncate">
+                          {attachedResume.originalFilename}
+                        </span>
+                      </p>
+                      <p className="text-muted-foreground mt-1 text-sm">
+                        {formatFileSize(attachedResume.sizeBytes)} · Attached{" "}
+                        {formatJobDate(attachedResume.uploadedAt)}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      asChild
+                      className="shrink-0 self-start sm:self-center"
+                    >
+                      <a href={`/api/documents/${attachedResume.id}/download`}>
+                        <Download aria-hidden="true" />
+                        Download
+                      </a>
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm leading-6">
+                    No CV was attached to this application.
+                  </p>
+                )}
+
+                {canAttachResume ? (
+                  <div className="grid gap-2">
+                    <AttachResumeButton
+                      applicationId={application.id}
+                      currentResumeFilename={currentResume.filename}
+                    />
+                    <p className="text-muted-foreground text-xs leading-5">
+                      You applied before adding a CV. You can attach your
+                      current CV to this application once — it cannot be changed
+                      afterward.
+                    </p>
+                  </div>
+                ) : !attachedResume && currentResume.hasResume ? (
+                  <p className="text-muted-foreground text-xs leading-5">
+                    A CV can no longer be attached to this application.
+                  </p>
+                ) : !attachedResume ? (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/candidate/documents">Add a CV</Link>
+                  </Button>
+                ) : null}
               </CardContent>
             </Card>
 

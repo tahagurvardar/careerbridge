@@ -4,8 +4,10 @@ import { notFound } from "next/navigation";
 import {
   ArrowLeft,
   BriefcaseBusiness,
-  ExternalLink,
+  Download,
+  FileText,
   GraduationCap,
+  ExternalLink,
   Mail,
   MapPin,
   ShieldCheck,
@@ -26,6 +28,7 @@ import { ApplicationStatusActions } from "@/features/applications/components/app
 import { ApplicationStatusBadge } from "@/features/applications/components/application-status-badge";
 import { StatusTimeline } from "@/features/applications/components/status-timeline";
 import { getRecruiterApplication } from "@/features/applications/server/data";
+import { formatFileSize } from "@/features/candidate-documents/documents";
 import { formatJobDate } from "@/features/jobs/format";
 import {
   employmentTypeLabels,
@@ -67,6 +70,7 @@ export default async function RecruiterApplicationDetailPage({
 
   const { job, candidate } = application;
   const profile = candidate.candidateProfile;
+  const attachedResume = application.resumeDocument;
   const jobIsPublic = job.status === "PUBLISHED" && job.company.isPublished;
   const timeline = application.history.map((entry) => ({
     fromStatus: entry.fromStatus,
@@ -243,6 +247,56 @@ export default async function RecruiterApplicationDetailPage({
                 ) : (
                   <p className="text-muted-foreground">
                     This candidate applied without a cover letter.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText
+                    aria-hidden="true"
+                    className="text-primary size-5"
+                  />
+                  CV
+                </CardTitle>
+                <CardDescription>
+                  The exact CV attached to this application.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {attachedResume ? (
+                  <div className="bg-muted/50 flex flex-col gap-3 rounded-xl p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 font-medium">
+                        <FileText
+                          aria-hidden="true"
+                          className="text-muted-foreground size-4 shrink-0"
+                        />
+                        <span className="truncate">
+                          {attachedResume.originalFilename}
+                        </span>
+                      </p>
+                      <p className="text-muted-foreground mt-1 text-sm">
+                        {formatFileSize(attachedResume.sizeBytes)} · Attached{" "}
+                        {formatJobDate(attachedResume.uploadedAt)}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      asChild
+                      className="shrink-0 self-start sm:self-center"
+                    >
+                      <a href={`/api/documents/${attachedResume.id}/download`}>
+                        <Download aria-hidden="true" />
+                        Download CV
+                      </a>
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm leading-6">
+                    No CV was attached to this application.
                   </p>
                 )}
               </CardContent>

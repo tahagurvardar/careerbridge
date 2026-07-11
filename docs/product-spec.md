@@ -53,20 +53,19 @@ The initial product MVP is expected to include:
 7. Basic admin moderation and operational views
 8. Essential product analytics and audit records
 
-## Current phase: Saved Jobs
+## Current phase: Secure Candidate documents
 
-Phase 3B adds secure Candidate-owned Saved Jobs on the completed identity, profile, Company, Job, and application foundations:
+Phase 3C adds secure private Candidate CV documents on the completed identity, profile, Company, Job, application, and saved-job foundations:
 
-- Let a Candidate save a published Job under a published Company and remove it later
-- Enforce one save per Candidate per Job through a database unique constraint and idempotent concurrency handling
-- Derive Candidate identity from the authenticated session and re-check Job eligibility in every save mutation
-- Provide `/candidate/saved-jobs` with bounded Job title, Company, location, and skill search plus `ALL`, `OPEN`, and `UNAVAILABLE` filtering
-- Retain saved history after Job close/archive or Company unpublication while never linking or exposing that Job publicly
-- Integrate session-aware save controls into `/jobs` and `/jobs/[slug]` without save counts or Candidate identity leakage
-- Show real saved count, recent saves, and deterministic next-action guidance on the Candidate dashboard
-- Keep recommendations, matching, alerts, notifications, CV storage, recruiter notes, and messaging deferred
+- Let a Candidate upload one current CV as a PDF, replace it, download it, and remove it from their active profile
+- Store each upload as an immutable version and move a one-to-one current-CV pointer, so old versions stay valid on the applications they are attached to
+- Validate uploads by non-zero size up to 5 MB, `application/pdf` MIME, `.pdf` extension, and a `%PDF-` signature together, with server-generated storage keys and server-computed SHA-256
+- Snapshot the Candidate's current CV onto a new application, keep pre-existing applications valid with no CV, and allow a one-time attach to an eligible existing active application
+- Serve downloads only through an authenticated, per-request re-authorized route that forces an attachment and never exposes storage internals or a public URL
+- Give an OWNER Recruiter download access only to the exact CV attached to an application for a Job at a Company they own, and audit-log successful downloads
+- Keep the local filesystem driver to development and test, require S3-compatible private storage in production, and keep malware scanning and AI resume parsing deferred
 
-Saved Job data is private Candidate data. Public and recruiter Job projections expose no SavedJob relation, save count, or Candidate identity. Candidate identity always comes from the session; the browser supplies only a bounded Job slug. Existing Better Auth endpoint allow-lists remain unchanged, and Recruiter/Admin accounts receive no implicit Candidate behavior.
+Candidate documents are private Candidate data. Public Job, Company, and Candidate surfaces expose no document records, filenames, counts, attachment state, storage keys, or access logs. Candidate identity always comes from the session; the browser never supplies a document ID, storage key, `candidateId`, or `resumeDocumentId`. Existing Better Auth endpoint allow-lists and every prior authorization boundary remain unchanged, and Recruiter/Admin accounts receive no implicit Candidate behavior.
 
 Email ownership is not verified in Phase 1. The product must not claim that an address has been verified until real email delivery and verification are implemented.
 
@@ -131,14 +130,30 @@ A Candidate applies at most once per Job (enforced by a database unique constrai
 
 New saves require a PUBLISHED Job under a published Company and are re-checked against current database state. Unique `(candidateId, jobId)` prevents sequential and concurrent duplicates. Existing rows remain when publication changes; the Candidate list marks them unavailable, removes the public link, and still permits removal. Search spans title, Company name, location, and skill, is bounded to 100 characters, and never weakens Candidate ownership. No public surface displays save counts or saver identity.
 
-## Intentionally deferred after Phase 3B
+## Candidate Document access matrix
+
+| Actor               | Upload / replace / remove own CV | Download own CV     | Download CV attached to an application       | See another Candidate's document |
+| ------------------- | -------------------------------- | ------------------- | -------------------------------------------- | -------------------------------- |
+| Signed out          | Redirect to sign-in              | Denied (uniform)    | Denied (uniform)                             | No                               |
+| Candidate           | Own only                         | Own current + prior | Own applications only                        | Denied by ownership              |
+| Recruiter nonmember | Denied                           | No                  | Not found                                    | No                               |
+| Recruiter MEMBER    | Denied                           | No                  | Denied                                       | No                               |
+| Recruiter OWNER     | Denied                           | No                  | Only the CV attached to an owned-Company Job | No                               |
+| Admin               | Denied                           | No                  | No implicit access                           | No implicit access               |
+
+Each upload creates an immutable version and moves a one-to-one current-CV pointer; applying pins that exact version onto the application so replacing or removing the current CV never changes historical attachments. Downloads are re-authorized on every request from the session: a Candidate reaches only their own documents and a Recruiter reaches only the exact document attached to an application for a Job at a Company they OWN. MEMBER, nonmember, cross-Candidate, Admin, and signed-out requests are denied identically, and unknown or unauthorized document IDs return the same not-found without revealing existence. Responses force a download with `application/pdf`, a safe filename, `private, no-store`, and `nosniff`; storage keys, buckets, endpoints, paths, and credentials are never exposed. Successful authorized downloads are audit-logged; denials are not.
+
+## Intentionally deferred after Phase 3C
 
 - Email verification and real email delivery
 - Password reset and account recovery
 - Social authentication
-- CV and avatar upload, and authorized recruiter CV access
+- Avatar upload and public Candidate document sharing
+- Dedicated CV malware scanning and quarantine
+- AI resume parsing, OCR, CV scoring, and match analysis
 - Recruiter invitations, email invitations, and membership administration
 - Company verification and logo/document upload
+- Recruiter document uploads, offer documents, and identity/certificate documents
 - Recruiter-only candidate notes and bulk application actions
 - Candidate matching, job recommendations, and saved-search alerts
 - Candidate search, messaging, and notifications

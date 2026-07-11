@@ -101,12 +101,22 @@ export async function createJobApplication(
         );
       }
 
+      // Snapshot the Candidate's current CV from fresh state inside the same
+      // transaction. The document id comes only from the Candidate's own
+      // current-resume pointer, never from browser input, so another
+      // Candidate's document can never be attached. No current CV is allowed.
+      const currentResume = await transaction.candidateResume.findUnique({
+        where: { candidateId: actor.userId },
+        select: { documentId: true },
+      });
+
       const application = await transaction.jobApplication.create({
         data: {
           jobId: job.id,
           candidateId: actor.userId,
           coverLetter: normalizedCoverLetter,
           status: "SUBMITTED",
+          resumeDocumentId: currentResume?.documentId ?? null,
         },
         select: { id: true },
       });

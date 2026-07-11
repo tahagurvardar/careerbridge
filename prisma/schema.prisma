@@ -70,23 +70,35 @@ enum ApplicationStatus {
   WITHDRAWN
 }
 
+enum CandidateDocumentKind {
+  RESUME
+}
+
+enum CandidateDocumentAccessType {
+  OWNER_DOWNLOAD
+  RECRUITER_APPLICATION_DOWNLOAD
+}
+
 model User {
-  id                 String                     @id
+  id                 String                       @id
   name               String
   email              String
-  emailVerified      Boolean                    @default(false)
+  emailVerified      Boolean                      @default(false)
   image              String?
-  createdAt          DateTime                   @default(now())
-  updatedAt          DateTime                   @updatedAt
-  role               Role                       @default(CANDIDATE)
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  role               Role                         @default(CANDIDATE)
   sessions           Session[]
   accounts           Account[]
   candidateProfile   CandidateProfile?
   recruiterProfile   RecruiterProfile?
   companyMemberships CompanyMembership[]
-  applications       JobApplication[]           @relation("CandidateApplications")
-  savedJobs          SavedJob[]                 @relation("CandidateSavedJobs")
-  statusChanges      ApplicationStatusHistory[] @relation("StatusChangedBy")
+  applications       JobApplication[]             @relation("CandidateApplications")
+  savedJobs          SavedJob[]                   @relation("CandidateSavedJobs")
+  statusChanges      ApplicationStatusHistory[]   @relation("StatusChangedBy")
+  documents          CandidateDocument[]          @relation("CandidateDocuments")
+  currentResume      CandidateResume?             @relation("CandidateCurrentResume")
+  documentAccessLogs CandidateDocumentAccessLog[] @relation("DocumentAccessActor")
 
   @@unique([email])
   @@map("user")
@@ -209,24 +221,31 @@ model JobSkill {
 }
 
 model JobApplication {
-  id          String            @id @default(cuid())
-  jobId       String
-  candidateId String
-  coverLetter String?           @db.VarChar(6000)
-  status      ApplicationStatus @default(SUBMITTED)
-  submittedAt DateTime          @default(now())
-  withdrawnAt DateTime?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id               String            @id @default(cuid())
+  jobId            String
+  candidateId      String
+  coverLetter      String?           @db.VarChar(6000)
+  status           ApplicationStatus @default(SUBMITTED)
+  // Immutable snapshot of the Candidate's current CV at submission time. Stays
+  // pinned to that exact document even after the Candidate replaces their CV.
+  // Null preserves backward compatibility with pre-Phase-3C applications.
+  resumeDocumentId String?
+  submittedAt      DateTime          @default(now())
+  withdrawnAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
-  job       Job                        @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  candidate User                       @relation("CandidateApplications", fields: [candidateId], references: [id], onDelete: Cascade)
-  history   ApplicationStatusHistory[]
+  job                Job                          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidate          User                         @relation("CandidateApplications", fields: [candidateId], references: [id], onDelete: Cascade)
+  history            ApplicationStatusHistory[]
+  resumeDocument     CandidateDocument?           @relation("ApplicationResume", fields: [resumeDocumentId], references: [id], onDelete: SetNull)
+  documentAccessLogs CandidateDocumentAccessLog[]
 
   // One application per Candidate per Job, enforced at the database layer.
   @@unique([jobId, candidateId])
   @@index([candidateId, status, submittedAt])
   @@index([jobId, status, submittedAt])
+  @@index([resumeDocumentId])
   @@map("job_application")
 }
 
@@ -245,6 +264,70 @@ model ApplicationStatusHistory {
 
   @@index([applicationId, createdAt])
   @@map("application_status_history")
+}
+
+/// Immutable Candidate document version. Each upload creates a new row; the
+/// stored object and every metadata field are never overwritten (only
+/// removedFromProfileAt is set when the version leaves the active profile).
+/// File bytes live in private object storage, never in PostgreSQL.
+model CandidateDocument {
+  id                   String                @id @default(cuid())
+  candidateId          String
+  kind                 CandidateDocumentKind @default(RESUME)
+  // Opaque, server-generated storage object key. Never exposed to the browser.
+  storageKey           String                @unique @db.VarChar(255)
+  // Sanitized display filename, safe for Content-Disposition.
+  originalFilename     String                @db.VarChar(255)
+  mimeType             String                @db.VarChar(120)
+  sizeBytes            Int
+  sha256               String                @db.Char(64)
+  uploadedAt           DateTime              @default(now())
+  removedFromProfileAt DateTime?
+  createdAt            DateTime              @default(now())
+
+  candidate    User                         @relation("CandidateDocuments", fields: [candidateId], references: [id], onDelete: Cascade)
+  currentFor   CandidateResume?
+  applications JobApplication[]             @relation("ApplicationResume")
+  accessLogs   CandidateDocumentAccessLog[]
+
+  @@index([candidateId, kind, uploadedAt])
+  @@index([candidateId, createdAt])
+  @@map("candidate_document")
+}
+
+/// One-to-one pointer to a Candidate's current CV. candidateId is the primary
+/// key (at most one current resume per Candidate); documentId is unique (a
+/// document is current for at most one Candidate). Cleared when the Candidate
+/// removes their CV so old versions stay attached to historical applications.
+model CandidateResume {
+  candidateId String   @id
+  documentId  String   @unique
+  updatedAt   DateTime @updatedAt
+
+  candidate User              @relation("CandidateCurrentResume", fields: [candidateId], references: [id], onDelete: Cascade)
+  document  CandidateDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("candidate_resume")
+}
+
+/// Minimal, server-controlled audit trail of successful authorized document
+/// downloads. Denied attempts are never recorded here.
+model CandidateDocumentAccessLog {
+  id            String                      @id @default(cuid())
+  documentId    String
+  actorUserId   String
+  // Null for a Candidate downloading their own document outside an application.
+  applicationId String?
+  accessType    CandidateDocumentAccessType
+  createdAt     DateTime                    @default(now())
+
+  document    CandidateDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  actor       User              @relation("DocumentAccessActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+  application JobApplication?   @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  @@index([documentId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("candidate_document_access_log")
 }
 
 model CandidateProfile {

@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# private document storage (local development/test object store)
+/.careerbridge-private-storage
+
 # vercel
 .vercel
 
