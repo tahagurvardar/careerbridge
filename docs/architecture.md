@@ -26,7 +26,7 @@ flowchart LR
   Prisma --> Postgres
 ```
 
-Phase 3D keeps the completed identity, profile, Company, Job, application, Saved Job, and secure CV document experiences intact while adding internal Recruiter application notes: an immutable revision history, author-only editing and soft deletion, optimistic concurrency, and OWNER-scoped note counts, all invisible to Candidates and the public. The Prisma, Better Auth, and document storage instances are created only from lazy getters, so importing a route or component does not create a connection pool or storage client. Personalized profile, dashboard, Company workspace, Job workspace, application, Saved Job, document, and note rendering retrieves the current session and fresh data on the server.
+Phase 4A keeps the completed identity, profile, Company, Job, application, Saved Job, secure CV document, and Recruiter note experiences intact while adding in-app notifications: application submission, recruiter status changes, and Candidate withdrawal each create recipient-scoped notifications inside the existing domain transaction, and every Candidate and Recruiter gets a private Activity Center, an unread header badge, filters, and mark-as-read actions. The Prisma, Better Auth, and document storage instances are created only from lazy getters, so importing a route or component does not create a connection pool or storage client. Personalized profile, dashboard, Company workspace, Job workspace, application, Saved Job, document, note, and notification rendering retrieves the current session and fresh data on the server.
 
 ## Source boundaries
 
@@ -42,6 +42,7 @@ Phase 3D keeps the completed identity, profile, Company, Job, application, Saved
 - **src/features/saved-jobs:** save eligibility, availability, validation, dashboard recommendation logic, interactive controls, and Candidate-scoped server reads and mutations
 - **src/features/candidate-documents:** PDF validation, filename/Content-Disposition safety, download-authorization and retention helpers, upload/remove/attach commands, the download authorizer, and Candidate document UI
 - **src/features/application-notes:** internal note validation, ownership/visibility/concurrency helpers, OWNER-scoped reads, transactional create/edit/soft-delete commands with immutable revision history, Server Actions, and the Recruiter notes UI
+- **src/features/notifications:** notification copy/dedupe-key/recipient-dedupe/safe-destination/badge helpers, recipient-scoped reads, mark-as-read commands, transactional emit helpers used inside application mutations, Server Actions, the Notification Center route UI, and the header bell
 - **src/features:** domain-oriented UI, actions, schemas, and queries
 - **src/config:** stable site navigation and configuration
 - **src/lib:** infrastructure clients and low-level utilities, including the private document storage abstraction (`src/lib/storage`)
@@ -90,9 +91,10 @@ Route files should compose feature modules rather than accumulating domain logic
 - Phase 3B adds only `SavedJob`, reads current Job/Company/Application data through authorized projections, and duplicates no Candidate, Job, Company, skill, or application fields.
 - Phase 3C adds only `CandidateDocument`, `CandidateResume`, and `CandidateDocumentAccessLog`, plus the `CandidateDocumentKind` and `CandidateDocumentAccessType` enums and a nullable `JobApplication.resumeDocumentId` snapshot column; file bytes live in private object storage, not in PostgreSQL.
 - Phase 3D adds only `ApplicationNote` and `ApplicationNoteRevision`, plus the `ApplicationNoteRevisionAction` enum and a unique `(noteId, version)` constraint; notes are internal Recruiter data read through authorized relations, never duplicating Candidate, Recruiter, Job, or Company fields.
+- Phase 4A adds only `Notification`, plus the `NotificationType` enum and a unique `dedupeKey` constraint; notifications store bounded event snapshots and nullable Application/Job/Company links (`onDelete: SetNull`) for retention, never duplicating private Candidate, CV, or note data.
 - Database access remains server-only and is acquired through the lazy singleton helper.
 
-Future domain areas include recommendations, alerts, moderation, notifications, and audit events. This list is directional, not a committed schema.
+In-app notifications now exist for application events (see the Notification domain); email, push, real-time, and preference-based delivery remain deferred. Future domain areas include recommendations, alerts, moderation, and audit events. This list is directional, not a committed schema.
 
 ### Candidate profile domain
 
@@ -139,7 +141,7 @@ Eligibility is re-evaluated against fresh database rows inside the create mutati
 
 The lifecycle is centralized and database-free. Recruiter-controlled forward transitions are SUBMITTED → UNDER_REVIEW → INTERVIEW → OFFER → HIRED, with REJECTED reachable from any active state; HIRED, REJECTED, and WITHDRAWN are terminal. A recruiter can never set WITHDRAWN, only the Candidate can withdraw (and only from an active state), and no backward or terminal transition is accepted. Each accepted change updates the status and appends an `ApplicationStatusHistory` row in the same transaction, using a compare-and-set on the prior status so a concurrent change cannot double-apply. Applications are retained after withdrawal or rejection and are never hard-deleted in normal workflow.
 
-Candidate reads and mutations are scoped by `candidateId` from the session; recruiter reads and mutations are scoped through OWNER membership of the Job's Company. Absent, foreign, and MEMBER-only IDs return the same not-found, so cross-candidate, cross-company, and MEMBER access fail identically and foreign application existence is never leaked. A recruiter sees a candidate's private profile only because the candidate applied to their job and only as an OWNER; candidate-facing history omits the acting user. Candidate routes are `/candidate/applications` and `/candidate/applications/[applicationId]`; the apply form is `/jobs/[slug]/apply`; recruiter routes are `/recruiter/applications`, `/recruiter/applications/[applicationId]`, and `/recruiter/jobs/[jobId]/applications`. Each application now carries a nullable CV snapshot (`resumeDocumentId`); see the Candidate document domain. Recruiter-only notes, notifications, and messaging remain deferred.
+Candidate reads and mutations are scoped by `candidateId` from the session; recruiter reads and mutations are scoped through OWNER membership of the Job's Company. Absent, foreign, and MEMBER-only IDs return the same not-found, so cross-candidate, cross-company, and MEMBER access fail identically and foreign application existence is never leaked. A recruiter sees a candidate's private profile only because the candidate applied to their job and only as an OWNER; candidate-facing history omits the acting user. Candidate routes are `/candidate/applications` and `/candidate/applications/[applicationId]`; the apply form is `/jobs/[slug]/apply`; recruiter routes are `/recruiter/applications`, `/recruiter/applications/[applicationId]`, and `/recruiter/jobs/[jobId]/applications`. Each application now carries a nullable CV snapshot (`resumeDocumentId`); see the Candidate document domain. Application submission, recruiter status changes, and withdrawal now emit in-app notifications within the same transaction (see the Notification domain); messaging remains deferred.
 
 ### Saved Job domain
 
@@ -160,6 +162,28 @@ An upload validates the PDF, uploads the object first, then creates the `Candida
 `ApplicationNote` is an internal Recruiter note on one `JobApplication`. It carries a nullable `authorUserId` (`onDelete: SetNull`, so the audit trail survives author account removal), a bounded `body` holding the current active text, a monotonic `revision` starting at 1, `createdAt`/`updatedAt`, and a nullable `deletedAt` soft-delete marker. Indexes cover active-note lists and counts (`applicationId, deletedAt, createdAt`) and author-owned lookups (`authorUserId`). `ApplicationNoteRevision` is the immutable audit history: `noteId`, `version`, an `ApplicationNoteRevisionAction` (`CREATED`/`EDITED`/`DELETED`), the `body` snapshot at that version, a nullable `actorUserId` (`onDelete: SetNull`), and `createdAt`, with a database-level `unique(noteId, version)` plus ordering and actor indexes. No Candidate, Recruiter, Job, or Company field is duplicated; those are read through authorized relations. The additive `20260712011236_recruiter_application_notes` migration creates both tables, the enum, and the unique constraint.
 
 Every note read and mutation re-derives identity from the session and re-scopes through the application's Job Company OWNER membership. Creating a note writes the note and its version-1 `CREATED` revision in one transaction; editing and soft-deleting each write the next `EDITED`/`DELETED` revision (preserving the body) in one transaction. Edits and deletions use optimistic concurrency: a compare-and-set `updateMany` matches only an undeleted, author-owned row still at the client's `expectedRevision`, and the `unique(noteId, version)` constraint is the authoritative backstop, so two concurrent edits never both succeed and no duplicate revision is written. A stale attempt returns a safe conflict. Notes are soft-deleted, never hard-deleted; there is no restore in this phase. The Recruiter surface is the internal notes section on `/recruiter/applications/[applicationId]`, with immutable history at `/recruiter/applications/[applicationId]/notes/[noteId]/history`.
+
+### Notification domain
+
+`Notification` belongs to exactly one recipient `User` (`recipientUserId`, `onDelete: Cascade`) and carries a `NotificationType`, bounded server-generated `title`/`message`/`href` snapshots, a nullable `actorUserId` (`onDelete: SetNull`), nullable `applicationId`/`jobId`/`companyId` context links (`onDelete: SetNull`), a unique `dedupeKey`, a nullable `readAt`, and `createdAt`. Indexes cover the recipient unread count and read-state filtering (`recipientUserId, readAt, createdAt`), the newest-first list (`recipientUserId, createdAt`), and application-scoped lookups (`applicationId`). The additive `20260712211930_notifications_activity_center` migration creates this table and the enum. No Candidate email, CV filename, note body, or private profile field is stored; context is duplicated only as safe snapshot text plus retained id links that never grant access.
+
+The three event types are `APPLICATION_SUBMITTED`, `APPLICATION_STATUS_CHANGED`, and `APPLICATION_WITHDRAWN`. Recipients are resolved server-side from fresh transaction state: submission and withdrawal notify every current Company OWNER whose user role is `RECRUITER` (excluding MEMBER users, any Admin holding a membership row, the acting Candidate, and unrelated Companies); a status change notifies the application's owning Candidate. Recipient ids are de-duplicated and the actor is filtered out before insert. Notifications are created inside the existing submission, status-transition, and withdrawal transactions via `createMany({ skipDuplicates: true })`, so they are atomic with the `JobApplication` and `ApplicationStatusHistory` writes and a rolled-back mutation emits nothing.
+
+Duplicate prevention is a deterministic, server-generated `dedupeKey` (`application-submitted:{applicationId}:{recipientUserId}`, `application-status-changed:{statusHistoryId}:{recipientUserId}`, `application-withdrawn:{statusHistoryId}:{recipientUserId}`) with a database unique constraint. Transactional retries and concurrent duplicate submissions (already bounded by `unique(jobId, candidateId)`) therefore create exactly one notification per recipient per event; the browser never supplies the key. Titles, messages, and destinations are generated server-side, rendered as escaped React text (never HTML or Markdown), and destinations pass through the shared safe-internal-path helper so no external, protocol-relative, or open-redirect target is ever stored.
+
+Every read is scoped to `recipientUserId = session user`. Browser-facing projections select only `id`, `type`, `title`, `message`, `href`, `readAt`, and `createdAt` — never `dedupeKey`, recipient/actor ids, or relation ids. The unread count is a React `cache`d aggregate shared by the header bell and dashboards within a request. Mark-one and mark-all are IDOR-safe `updateMany`s scoped to the recipient and are idempotent; they never reveal another user's notifications. `/notifications` is a server-rendered Activity Center for Candidates and Recruiters only (Admins redirected, signed-out users sent to sign-in) with `ALL`/`UNREAD`/`READ` filters, a bounded page size of 20 clamped to the real page range, deterministic `createdAt DESC, id DESC` ordering, an empty state, and mark-as-read actions. The header bell shows an unread badge (exact 1–99, then `99+`) that refreshes on navigation and after mark-read; there is no polling.
+
+A notification is retained with its original recipient after a role change (ownership removal never transfers it), and possession never authorizes the underlying entity: the destination route re-authorizes independently, so a removed OWNER keeps the historical text but is denied the referenced application. The Notification access matrix:
+
+| Event / capability         | Candidate (owner)    | Company OWNER Recruiter | Company MEMBER | Other-Company Recruiter | Admin | Public |
+| -------------------------- | -------------------- | ----------------------- | -------------- | ----------------------- | ----- | ------ |
+| APPLICATION_SUBMITTED      | not notified (actor) | notified                | no             | no                      | no    | no     |
+| APPLICATION_STATUS_CHANGED | notified             | not notified            | no             | no                      | no    | no     |
+| APPLICATION_WITHDRAWN      | not notified (actor) | notified                | no             | no                      | no    | no     |
+| Read own Activity Center   | own only             | own only                | own only       | own only                | none  | none   |
+| Read another user's        | no                   | no                      | no             | no                      | no    | no     |
+| Mark own read / all read   | yes                  | yes                     | yes            | yes                     | n/a   | no     |
+| Unread header badge        | yes                  | yes                     | yes            | yes                     | no    | no     |
 
 ## Authentication and authorization
 
@@ -190,6 +214,8 @@ Saved Job Server Actions independently call `requireRole("CANDIDATE")`, derive `
 Candidate document Server Actions independently call `requireRole("CANDIDATE")` and derive `candidateId` from the session; the browser never supplies a document ID, storage key, `candidateId`, or `resumeDocumentId`. Upload/replace validate the PDF (size, MIME, extension, and `%PDF-` magic bytes together), generate the storage key and SHA-256 server-side, and coordinate storage and database as described in the document domain. The existing-application attach action re-authorizes ownership, re-reads the current pointer, refuses to replace an existing snapshot, and uses a compare-and-set bounded to active statuses. The download Route Handler runs on the Node runtime and re-authorizes every request through the same session layer: it resolves the document, computes an owned application relation for Recruiters, and applies a single pure decision — a Candidate reaches only their own documents, a Recruiter reaches only a document attached to an application whose Job Company they OWN, and MEMBER, other-company, cross-Candidate, Admin, and signed-out requests are denied identically with a uniform 404 that never reveals existence. It streams `application/pdf` as a forced attachment with `private, no-store` and `nosniff`, writes a `CandidateDocumentAccessLog` row only on success, and never leaks storage keys, bucket names, endpoints, paths, credentials, or raw provider errors.
 
 Application note Server Actions independently call `requireRole("RECRUITER")`, derive the actor from the session, and validate only the note body plus a `noteId`/`expectedRevision` concurrency token — never `authorUserId`, `candidateId`, `companyId`, ownership, revision actor, or timestamps. Every command re-authorizes the target through the application's Job Company OWNER membership inside the transaction: reads and creates require OWNER; edits and soft-deletes additionally require the actor to be the note's original author on an undeleted note. `expectedRevision` is only a concurrency token, never authorization. The note history page and all list note-counts re-check OWNER scope on every request, and absent, foreign, MEMBER-only, cross-Company, Candidate, Admin, and signed-out requests return the same not-found so note existence is never revealed. Note bodies are rendered as escaped plain text with preserved line breaks, never HTML or Markdown, and never appear in any Candidate or public projection.
+
+Notification creation is never a standalone Server Action: it happens only inside the authoritative application submission, status-transition, and withdrawal commands, which already derive identity from the session and resolve recipients from fresh database state, so a client can never control the recipient, actor, type, title, message, href, or dedupe key. The `/notifications` route and the mark-as-read Server Actions gate through a shared recipient guard that requires an authenticated `CANDIDATE` or `RECRUITER` (Admins are redirected to their dashboard, signed-out users to sign-in with a safe callback). Mark-one validates only a `notificationId` reference and scopes the `updateMany` to `(id, recipientUserId = session user, readAt: null)`; mark-all scopes to the session user's unread rows. Both are idempotent, never touch another recipient's rows, and return safe generic messages with no Prisma internals. Every notification read is recipient-scoped, and the destination route (`/candidate/applications/[applicationId]` or `/recruiter/applications/[applicationId]`) re-authorizes independently, so a notification never bypasses application authorization.
 
 ## Validation and forms
 
@@ -238,29 +264,31 @@ Private Candidate documents use a provider-agnostic storage abstraction in `src/
 
 ## Technical decisions
 
-| Decision                          | Rationale                                                                                    |
-| --------------------------------- | -------------------------------------------------------------------------------------------- |
-| Next.js App Router                | Server-first rendering, route composition, metadata, and a unified full-stack path           |
-| TypeScript strict mode            | Stronger contracts and safer refactoring                                                     |
-| Tailwind CSS 4 and theme tokens   | Consistent responsive styling with a small CSS surface                                       |
-| shadcn/ui with Radix              | Accessible primitives owned and customizable in-repository                                   |
-| PostgreSQL and Prisma 7           | Relational integrity, migrations, and type-safe queries                                      |
-| Better Auth and Prisma adapter    | Maintained credential hashing, sessions, cookies, and generated identity models              |
-| Single typed platform role        | Minimal Phase 1 authorization model that can evolve with later ownership rules               |
-| npm                               | Simple, widely supported package workflow                                                    |
-| Server Components by default      | Less client JavaScript and clear server/client boundaries                                    |
-| Narrow Phase 2A profile schema    | Adds only reviewed Candidate ownership and lifecycle relationships                           |
-| Explicit Company membership       | Separates platform role from extensible Company ownership without implicit access            |
-| Private-by-default publication    | Prevents incomplete or unapproved Company and Job records from entering discovery            |
-| Centralized Job lifecycle         | A single server-owned transition table blocks arbitrary status changes from forms            |
-| DB-unique application constraint  | `unique(jobId, candidateId)` makes duplicate and concurrent applies safe by design           |
-| Atomic status + history writes    | Each status change and its history row commit in one transaction, never partially            |
-| Integer salary representation     | Stores money as exact whole currency units instead of floats or minor units                  |
-| Immutable CV versions + pointer   | Old documents stay valid on historical applications after the current CV changes             |
-| Injectable private storage        | Local and S3-compatible drivers behind one interface; production forbids local disk          |
-| Revisioned soft-delete for notes  | Immutable `(noteId, version)` history plus `deletedAt` keeps a full internal audit trail     |
-| Compare-and-set note edits        | `expectedRevision` + unique version make concurrent edits safe without last-writer-wins loss |
-| Server-side upload then DB commit | Best-effort object cleanup on failure prevents pointers to missing storage objects           |
+| Decision                          | Rationale                                                                                     |
+| --------------------------------- | --------------------------------------------------------------------------------------------- |
+| Next.js App Router                | Server-first rendering, route composition, metadata, and a unified full-stack path            |
+| TypeScript strict mode            | Stronger contracts and safer refactoring                                                      |
+| Tailwind CSS 4 and theme tokens   | Consistent responsive styling with a small CSS surface                                        |
+| shadcn/ui with Radix              | Accessible primitives owned and customizable in-repository                                    |
+| PostgreSQL and Prisma 7           | Relational integrity, migrations, and type-safe queries                                       |
+| Better Auth and Prisma adapter    | Maintained credential hashing, sessions, cookies, and generated identity models               |
+| Single typed platform role        | Minimal Phase 1 authorization model that can evolve with later ownership rules                |
+| npm                               | Simple, widely supported package workflow                                                     |
+| Server Components by default      | Less client JavaScript and clear server/client boundaries                                     |
+| Narrow Phase 2A profile schema    | Adds only reviewed Candidate ownership and lifecycle relationships                            |
+| Explicit Company membership       | Separates platform role from extensible Company ownership without implicit access             |
+| Private-by-default publication    | Prevents incomplete or unapproved Company and Job records from entering discovery             |
+| Centralized Job lifecycle         | A single server-owned transition table blocks arbitrary status changes from forms             |
+| DB-unique application constraint  | `unique(jobId, candidateId)` makes duplicate and concurrent applies safe by design            |
+| Atomic status + history writes    | Each status change and its history row commit in one transaction, never partially             |
+| Integer salary representation     | Stores money as exact whole currency units instead of floats or minor units                   |
+| Immutable CV versions + pointer   | Old documents stay valid on historical applications after the current CV changes              |
+| Injectable private storage        | Local and S3-compatible drivers behind one interface; production forbids local disk           |
+| Revisioned soft-delete for notes  | Immutable `(noteId, version)` history plus `deletedAt` keeps a full internal audit trail      |
+| Compare-and-set note edits        | `expectedRevision` + unique version make concurrent edits safe without last-writer-wins loss  |
+| Server-side upload then DB commit | Best-effort object cleanup on failure prevents pointers to missing storage objects            |
+| In-transaction notification emit  | Notifications commit with the application/history write, so they are never orphaned or lost   |
+| Unique `dedupeKey` notifications  | Deterministic server keys make transaction retries and concurrent duplicate events idempotent |
 
 ## Local migration workflow
 

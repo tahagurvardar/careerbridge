@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { Menu, Waypoints } from "lucide-react";
+import { Bell, Menu, Waypoints } from "lucide-react";
 
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/sheet";
 import { siteConfig } from "@/config/site";
 import { signOutAction } from "@/features/auth/server/actions";
+import { NotificationBell } from "@/features/notifications/components/notification-bell";
+import { formatUnreadBadge } from "@/features/notifications/notifications";
 
 type MobileNavigationUser = {
   name: string;
@@ -27,14 +29,21 @@ type MobileNavigationUser = {
 
 export function MobileNavigation({
   user,
+  unreadCount,
 }: {
   user: MobileNavigationUser | null;
+  unreadCount: number | null;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const unreadBadge =
+    unreadCount === null ? null : formatUnreadBadge(unreadCount);
 
   return (
     <div className="flex items-center gap-1 md:hidden">
+      {unreadCount !== null ? (
+        <NotificationBell unreadCount={unreadCount} />
+      ) : null}
       <ThemeToggle />
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
@@ -101,6 +110,21 @@ export function MobileNavigation({
                 {item.label}
               </Link>
             ))}
+            {unreadCount !== null ? (
+              <Link
+                href="/notifications"
+                onClick={() => setOpen(false)}
+                className="hover:bg-muted focus-visible:ring-ring flex items-center justify-between gap-2 rounded-lg px-3 py-3 text-base font-medium focus-visible:ring-2 focus-visible:outline-none"
+              >
+                <span className="flex items-center gap-2">
+                  <Bell aria-hidden="true" className="size-4" />
+                  Notifications
+                </span>
+                {unreadBadge ? (
+                  <Badge aria-hidden="true">{unreadBadge}</Badge>
+                ) : null}
+              </Link>
+            ) : null}
           </nav>
           <div className="mt-auto grid gap-2 border-t p-5">
             {user ? (

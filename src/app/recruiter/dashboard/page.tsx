@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   ArrowUpRight,
   BarChart3,
+  Bell,
   BriefcaseBusiness,
   Building2,
   Plus,
@@ -24,6 +25,9 @@ import { Progress } from "@/components/ui/progress";
 import { requireRole } from "@/features/auth/server/session";
 import { ApplicationStatusBadge } from "@/features/applications/components/application-status-badge";
 import { getRecruiterApplicationDashboard } from "@/features/applications/server/data";
+import { NotificationSummaryList } from "@/features/notifications/components/notification-summary-list";
+import { formatUnreadBadge } from "@/features/notifications/notifications";
+import { getNotificationSummary } from "@/features/notifications/server/data";
 import { formatJobDate } from "@/features/jobs/format";
 import { getRecruiterJobStatusCounts } from "@/features/jobs/server/data";
 import { getRecruiterProfileWorkspace } from "@/features/recruiter-company/server/data";
@@ -46,12 +50,17 @@ const deferredItems = [
 export default async function RecruiterDashboardPage() {
   const session = await requireRole("RECRUITER", "/recruiter/dashboard");
   const prisma = getPrismaClient();
-  const [[profile, memberships], jobCounts, applicationDashboard] =
-    await Promise.all([
-      getRecruiterProfileWorkspace(prisma, session.user.id),
-      getRecruiterJobStatusCounts(prisma, session.user.id),
-      getRecruiterApplicationDashboard(prisma, session.user.id),
-    ]);
+  const [
+    [profile, memberships],
+    jobCounts,
+    applicationDashboard,
+    notifications,
+  ] = await Promise.all([
+    getRecruiterProfileWorkspace(prisma, session.user.id),
+    getRecruiterJobStatusCounts(prisma, session.user.id),
+    getRecruiterApplicationDashboard(prisma, session.user.id),
+    getNotificationSummary(prisma, session.user.id),
+  ]);
   const appCounts = applicationDashboard.statusCounts;
   const activeApplications =
     appCounts.SUBMITTED +
@@ -310,6 +319,40 @@ export default async function RecruiterDashboardPage() {
             ) : (
               <p className="text-muted-foreground text-sm leading-6">
                 No applications yet. Publish jobs to start receiving applicants.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell aria-hidden="true" className="text-primary size-5" />
+                  Notifications
+                  {notifications.unreadCount > 0 ? (
+                    <Badge>
+                      {formatUnreadBadge(notifications.unreadCount)} unread
+                    </Badge>
+                  ) : null}
+                </CardTitle>
+                <CardDescription>
+                  New applications and withdrawals across companies you own
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/notifications">Open notifications</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {notifications.recent.length ? (
+              <NotificationSummaryList notifications={notifications.recent} />
+            ) : (
+              <p className="text-muted-foreground text-sm leading-6">
+                No notifications yet. New applications and withdrawals will
+                appear here.
               </p>
             )}
           </CardContent>

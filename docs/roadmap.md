@@ -162,6 +162,25 @@ Deferred from Phase 3D: note @mentions, note notifications, rich-text/Markdown n
 
 Exit criteria: authorized Recruiters can keep private, revision-audited internal notes on applications while Candidates and the public never see them.
 
+## Phase 4A — In-app notifications and activity center
+
+Status: implemented on `feat/notifications-activity-center`. This delivers the in-product-notification portion of the original Phase 6 communication scope ahead of schedule.
+
+- `Notification` model and `NotificationType` enum with a unique `dedupeKey`, recipient/read-state/application indexes, and nullable `SetNull` Application/Job/Company links for retention
+- Transactional creation inside the existing application submission, status-transition, and withdrawal commands, so a notification is atomic with the `JobApplication` and `ApplicationStatusHistory` writes
+- Server-side recipient resolution — Company OWNER Recruiters on submission/withdrawal, the owning Candidate on status change — excluding MEMBER users, Admins, the acting Candidate, and unrelated Companies
+- Deterministic dedupe keys plus a unique constraint that make transaction retries and concurrent duplicate submissions idempotent
+- Bounded, escaped-text event snapshots with safe internal destinations, carrying no Candidate email, CV, or note data
+- A private `/notifications` Activity Center for Candidates and Recruiters with `ALL`/`UNREAD`/`READ` filters, bounded pagination, deterministic ordering, an empty state, and mark-one/mark-all actions
+- A recipient-scoped unread header bell (desktop and mobile) with an exact 1–99 then `99+` badge, refreshed on navigation and after mark-read without polling
+- Candidate and Recruiter dashboard unread counts and recent-notification summaries
+- Retention with independent destination re-authorization, so a notification never grants access to its underlying entity
+- Unit coverage plus isolated database event, ownership, read-state, privacy, and retention coverage
+
+Deferred from Phase 4A: email/SMS/mobile/browser push, WebSocket/SSE real-time delivery, notification preferences and muting, digest and scheduled notifications, and recruiter-note/CV/saved-job/marketing notifications.
+
+Exit criteria: Candidates and Recruiters receive private, in-app notifications for the application events that concern them, with a secure Activity Center and unread badge, while public and cross-user boundaries stay intact.
+
 ## Phase 4 — Membership administration
 
 - Recruiter invitations and email delivery
@@ -183,7 +202,7 @@ Exit criteria: platform operators can safely manage and understand production ac
 
 ## Phase 6 — Communication
 
-- In-product notifications
+- In-product notifications (initial application-event delivery shipped in Phase 4A)
 - Email notification infrastructure and preferences
 - Candidate-recruiter messaging if validated by product needs
 - Delivery, read, and retry behavior

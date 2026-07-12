@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowUpRight,
+  Bell,
   Bookmark,
   Building2,
   ClipboardList,
@@ -31,6 +32,9 @@ import { CompletionCard } from "@/features/candidate-profile/components/completi
 import { getCompletionFromProfile } from "@/features/candidate-profile/completion";
 import { getCandidateProfile } from "@/features/candidate-profile/server/data";
 import { formatJobDate } from "@/features/jobs/format";
+import { NotificationSummaryList } from "@/features/notifications/components/notification-summary-list";
+import { formatUnreadBadge } from "@/features/notifications/notifications";
+import { getNotificationSummary } from "@/features/notifications/server/data";
 import { classifySavedJobAvailability } from "@/features/saved-jobs/availability";
 import { getCandidateDashboardRecommendation } from "@/features/saved-jobs/recommendation";
 import { getCandidateSavedJobDashboard } from "@/features/saved-jobs/server/data";
@@ -53,14 +57,21 @@ const deferredItems = [
 export default async function CandidateDashboardPage() {
   const session = await requireRole("CANDIDATE", "/candidate/dashboard");
   const prisma = getPrismaClient();
-  const [profile, { counts, total }, recent, savedJobDashboard, currentResume] =
-    await Promise.all([
-      getCandidateProfile(prisma, session.user.id),
-      getCandidateApplicationStatusCounts(prisma, session.user.id),
-      getCandidateRecentApplications(prisma, session.user.id),
-      getCandidateSavedJobDashboard(prisma, session.user.id),
-      getCandidateCurrentResume(prisma, session.user.id),
-    ]);
+  const [
+    profile,
+    { counts, total },
+    recent,
+    savedJobDashboard,
+    currentResume,
+    notifications,
+  ] = await Promise.all([
+    getCandidateProfile(prisma, session.user.id),
+    getCandidateApplicationStatusCounts(prisma, session.user.id),
+    getCandidateRecentApplications(prisma, session.user.id),
+    getCandidateSavedJobDashboard(prisma, session.user.id),
+    getCandidateCurrentResume(prisma, session.user.id),
+    getNotificationSummary(prisma, session.user.id),
+  ]);
   const completion = getCompletionFromProfile(profile);
   const active =
     counts.SUBMITTED + counts.UNDER_REVIEW + counts.INTERVIEW + counts.OFFER;
@@ -229,6 +240,38 @@ export default async function CandidateDashboardPage() {
                   <Link href="/jobs">Browse jobs</Link>
                 </Button>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell aria-hidden="true" className="text-primary size-5" />
+                  Notifications
+                  {notifications.unreadCount > 0 ? (
+                    <Badge>
+                      {formatUnreadBadge(notifications.unreadCount)} unread
+                    </Badge>
+                  ) : null}
+                </CardTitle>
+                <CardDescription>Updates on your applications</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/notifications">Open notifications</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {notifications.recent.length ? (
+              <NotificationSummaryList notifications={notifications.recent} />
+            ) : (
+              <p className="text-muted-foreground text-sm leading-6">
+                You have no notifications yet. Updates on your applications will
+                appear here.
+              </p>
             )}
           </CardContent>
         </Card>

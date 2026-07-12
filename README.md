@@ -2,7 +2,7 @@
 
 CareerBridge is a production-oriented job and internship platform designed to connect ambitious candidates with thoughtful employers. The long-term product combines structured hiring workflows with responsible AI assistance while keeping transparency, accessibility, and human decision-making at the center.
 
-> **Project status:** Phase 3B Saved Jobs is implemented on **feat/saved-jobs**. Candidates can securely save eligible public Jobs, manage a private searchable saved list, and retain truthful unavailable history when a Job leaves public discovery.
+> **Project status:** Phase 4A In-App Notifications and Activity Center is implemented on **feat/notifications-activity-center**. Candidates are notified when a Recruiter changes an application's status, Company OWNERs are notified when a Candidate submits or withdraws an application, and every recipient gets a private Activity Center, an unread header badge, filters, and mark-as-read actions. Email, push, and real-time delivery remain deferred.
 
 ## Foundation preview
 
@@ -28,6 +28,9 @@ The current application provides:
 - Recruiter applicant pipeline with OWNER-only status transitions and atomic status history
 - Candidate-owned Saved Jobs with duplicate-safe save/remove actions and retained unavailable history
 - Searchable, availability-filtered Saved Jobs plus real dashboard counts and recent saves
+- Recruiter-only internal application notes with an immutable, author-scoped revision history
+- Transactional in-app notifications for application submission, status change, and withdrawal
+- A private per-recipient Activity Center with filters, pagination, mark-as-read, and an unread header badge
 - Product, architecture, and delivery documentation
 
 ## Technology
@@ -148,6 +151,7 @@ The command refuses production execution, validates all inputs, writes only thro
 | /recruiter/jobs/[jobId]/applications    | OWNER-only applicant pipeline for one Job      |
 | /recruiter/applications                 | Applications across owned Companies            |
 | /recruiter/applications/[applicationId] | OWNER-only candidate review and status         |
+| /notifications                          | Candidate/Recruiter private Activity Center    |
 | /admin                                  | Protected Admin access confirmation            |
 
 ## Project structure
@@ -182,6 +186,8 @@ Saved Job code is grouped under `src/features/saved-jobs`. Shared Zod search/fil
 Candidate document code is grouped under `src/features/candidate-documents`, with a provider-agnostic private storage abstraction in `src/lib/storage`. Database-free PDF validation, filename sanitization, Content-Disposition safety, download-authorization helpers, and retention classification are separated from server-only reads, commands, and Server Actions. Uploads write an immutable `CandidateDocument` version and move a one-to-one `CandidateResume` pointer; a new application snapshots the current pointer into `JobApplication.resumeDocumentId`. A Node-runtime route at `/api/documents/[documentId]/download` re-authorizes every request and streams private bytes as a forced download. Migration `20260711222126_secure_candidate_documents` adds the `CandidateDocument`, `CandidateResume`, and `CandidateDocumentAccessLog` tables, the `CandidateDocumentKind` and `CandidateDocumentAccessType` enums, and the nullable `JobApplication.resumeDocumentId` snapshot column.
 
 Recruiter application note code is grouped under `src/features/application-notes`. Database-free note-body validation, ownership/visibility helpers, deleted-note classification, optimistic-concurrency, and revision-action labels are separated from server-only OWNER-scoped reads, transactional commands, and Server Actions. Each note keeps an immutable `ApplicationNoteRevision` audit trail, and the protected `/recruiter/applications/[applicationId]/notes/[noteId]/history` route renders it. Migration `20260712011236_recruiter_application_notes` adds the `ApplicationNote` and `ApplicationNoteRevision` tables, the `ApplicationNoteRevisionAction` enum, and a unique `(noteId, version)` constraint without changing existing application or document tables.
+
+Notification code is grouped under `src/features/notifications`. Database-free notification copy, deterministic dedupe keys, recipient de-duplication, safe-destination generation, type labels/icon keys, unread-badge formatting, and Notification Center role rules are separated from server-only recipient-scoped reads, mark-as-read commands, transactional emit helpers, and Server Actions. Notifications are created inside the existing application submission, status-transition, and withdrawal transactions — never in a separate write after commit — so a notification is always atomic with its `JobApplication` and `ApplicationStatusHistory`. Recipients are resolved from fresh database state (Company OWNER Recruiters, or the owning Candidate), and a unique `dedupeKey` makes retries and concurrent duplicate events idempotent. The protected `/notifications` Activity Center and the header bell serve Candidates and Recruiters only. Migration `20260712211930_notifications_activity_center` adds the `notification` table and the `NotificationType` enum with recipient/read-state/application indexes, without changing existing tables.
 
 Database integration tests never use `DATABASE_URL`. To run them, configure a separate `TEST_DATABASE_URL`, confirm it targets an isolated test database, set `RUN_DATABASE_INTEGRATION_TESTS=true`, and run `npm run test:integration`. The command skips clearly unless both values are present and refuses a test URL matching either application database URL. Regular `npm test` remains database-free.
 
@@ -250,7 +256,7 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Candidate ownership scopes every candidate read and mutation by `candidateId`; recruiter access scopes every read and mutation through OWNER membership of the Job's Company. Absent, foreign, and MEMBER-only IDs return the same not-found, so cross-candidate, cross-company, and MEMBER access all fail identically.
 - A recruiter sees a candidate's private profile (email, headline, location, bio, skills, education, experience) only because the candidate applied to their job, and only as an OWNER. This data never appears on public pages or in unrelated Company workspaces. Candidate-facing history omits the acting user.
 - Cover letters are optional, trimmed, length-bounded plain text, normalized to null when empty, validated on both client and server, and never rendered as HTML.
-- Notifications, messaging, and bulk actions remain deferred.
+- Application submission, recruiter status changes, and Candidate withdrawal now emit in-app notifications inside the same transaction (see In-app notification boundaries). Messaging, bulk actions, and email/push delivery remain deferred.
 
 ## Candidate document boundaries
 
@@ -269,6 +275,16 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Each note keeps a monotonic `revision` and an immutable `ApplicationNoteRevision` audit trail: creation writes version 1 (`CREATED`), each edit and each soft delete writes the next version (`EDITED` / `DELETED`) preserving the body at that version. A database-level `unique(noteId, version)` constraint is authoritative; the note and its revision are always written together in one transaction.
 - Editing and deletion use optimistic concurrency: the client sends an `expectedRevision` concurrency token (never an authorization value) and a compare-and-set update only succeeds at the matching revision on an undeleted note the actor authored. A stale attempt is rejected with a safe conflict message, so two concurrent edits can never both win and no duplicate revision is created. Notes are soft-deleted, never hard-deleted, and there is no restore in this phase.
 - Recruiter list and pipeline views show only an OWNER-scoped active-note count (bodies are never projected into lists). Candidate application pages and lists, the Candidate dashboard, and every public Job/Company projection expose no note record, count, body, author, timestamp, or existence signal. Deferred: @mentions, note notifications, rich-text/Markdown, attachments, and AI summarization.
+
+## In-app notification boundaries
+
+- A `Notification` belongs to exactly one recipient `User`. A Candidate is notified when a Recruiter changes their application's status; every current Company OWNER Recruiter is notified when a Candidate submits or withdraws an application to a Job their Company owns. MEMBER users, the acting Candidate, Admins, and unrelated Recruiters are never notified — recipients are resolved server-side from fresh database state (OWNER membership with a `RECRUITER` user role), never from browser input.
+- Notifications are created inside the existing application submission, status-transition, and withdrawal transactions, so they are atomic with the `JobApplication` and `ApplicationStatusHistory` writes. A failed or rolled-back mutation, an invalid or terminal transition, and a repeated withdrawal all create no notification.
+- A deterministic, server-generated `dedupeKey` with a database unique constraint makes transactional retries and concurrent duplicate submissions idempotent: each Company OWNER receives exactly one notification per event. The browser never supplies the key.
+- Title, message, and destination are bounded, server-generated event snapshots rendered as escaped React text — never HTML or Markdown. Copy never includes Candidate email, CV filenames, internal note bodies, document metadata, or raw database IDs. Destinations are validated through the shared safe-internal-path logic (no external, protocol-relative, or open-redirect targets).
+- Every read is scoped to `recipientUserId = session user`. No Candidate, Recruiter, Admin, or Company OWNER can read another user's notifications, and browser-facing projections expose only `id`, `type`, `title`, `message`, `href`, `readAt`, and `createdAt` — never `dedupeKey`, recipient/actor IDs, or relation IDs. Mark-one and mark-all are IDOR-safe `updateMany`s scoped to the recipient and are idempotent; they never reveal whether another user's notification exists.
+- The `/notifications` Activity Center serves Candidates and Recruiters only (Admins are redirected, signed-out users are sent to sign-in). It offers `ALL`/`UNREAD`/`READ` filters, a bounded page size of 20 with deterministic `createdAt DESC, id DESC` ordering, an empty state, and mark-as-read actions. The header bell shows an unread badge (exact 1–99, then `99+`) that refreshes on navigation and after mark-read — there is no polling and no real-time claim.
+- A notification is retained with its original recipient even after the recipient loses Company ownership; possession of a notification never grants access to the underlying entity. Its destination route re-authorizes independently, so a removed OWNER keeps the historical notification text but is denied the application it references. Application/Job/Company links are nullable and set null (not cascaded) on entity deletion, so history survives without exposing an inaccessible record. Email, SMS, mobile/browser push, WebSockets/SSE real-time delivery, notification preferences, muting, digests, and recruiter-note/CV/saved-job/marketing notifications remain deferred.
 
 ## Documentation
 
