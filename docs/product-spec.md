@@ -23,6 +23,7 @@ CareerBridge brings these activities into one role-aware system with shared doma
 - Save opportunities
 - Apply for roles
 - Track application status and history
+- Receive in-app notifications when an application's status changes
 
 ### Recruiter
 
@@ -32,6 +33,7 @@ CareerBridge brings these activities into one role-aware system with shared doma
 - Access candidate CVs when authorized
 - Keep private internal notes on applications with the hiring team
 - Update application statuses
+- Receive in-app notifications when candidates apply to or withdraw from owned-Company Jobs
 - View recruitment workflow analytics
 
 ### Admin
@@ -54,21 +56,22 @@ The initial product MVP is expected to include:
 7. Basic admin moderation and operational views
 8. Essential product analytics and audit records
 
-## Current phase: Recruiter application notes
+## Current phase: In-app notifications and activity center
 
-Phase 3D adds internal Recruiter notes on Job Applications on the completed identity, profile, Company, Job, application, saved-job, and CV-document foundations:
+Phase 4A adds in-app notifications on the completed identity, profile, Company, Job, application, saved-job, CV-document, and Recruiter-note foundations:
 
-- Let an OWNER Recruiter add private internal notes to an authorized application, read all active notes with author and timestamps, and see an edited indicator
-- Keep an immutable revision history for every note (created, edited, deleted), each preserving the note body at that version under a database `unique(noteId, version)` constraint
-- Allow only the original author to edit or soft-delete their own note; any OWNER may add notes and read notes plus history, but author attribution can never change
-- Use optimistic concurrency (`expectedRevision`) so a stale form cannot silently overwrite a newer edit, and soft-delete rather than hard-delete with no restore in this phase
-- Show OWNER-scoped active note counts on the applications list, Job applicant pipeline, and Job workspace — never note bodies in list views
-- Keep every note invisible to Candidates (including on their own application), Company MEMBER users, other-company Recruiters, Admins, the public, and search metadata
-- Keep @mentions, notifications, rich text/Markdown, attachments, and AI summarization deferred
+- Notify a Candidate when a Recruiter changes their application's status, and notify every current Company OWNER Recruiter when a Candidate submits or withdraws an application to a Job the Company owns
+- Resolve recipients server-side from fresh database state, excluding MEMBER users, Admins, the acting Candidate, and unrelated Companies; never trust a recipient supplied by the browser
+- Create each notification inside the existing application submission, status-transition, and withdrawal transaction, so it is atomic with the status change and its history — a failed, invalid, or repeated action creates nothing
+- Prevent duplicates with a deterministic, server-generated dedupe key and a database unique constraint, so transaction retries and concurrent duplicate submissions produce exactly one notification per recipient per event
+- Generate bounded, escaped-text titles, messages, and safe internal destinations that contain no Candidate email, CV filename, note body, or private metadata
+- Give each Candidate and Recruiter a private `/notifications` Activity Center with all/unread/read filters, bounded pagination, an unread count, an empty state, and mark-one/mark-all-as-read actions
+- Show a recipient-scoped unread bell in the desktop and mobile header (exact 1–99, then `99+`) that refreshes on navigation and after mark-read, with no polling and no real-time claim
+- Surface unread counts and recent notifications on the Candidate and Recruiter dashboards
 
-Internal notes are private Recruiter data. Candidate and public surfaces expose no note record, count, body, author, timestamp, or existence signal. Author identity always comes from the session; the browser never supplies `authorUserId`, `candidateId`, `companyId`, ownership, the revision actor, or timestamps. Existing Better Auth endpoint allow-lists and every prior authorization, privacy, document-access, and application-ownership boundary remain unchanged, and Candidate/MEMBER/Admin accounts receive no implicit note access.
+Notifications are private to their recipient. A notification is retained with its original recipient after a role change and never grants access to the entity it references — the destination route re-authorizes independently. No public, cross-user, MEMBER, Admin, or search surface exposes a notification record, count, title, message, read state, recipient, or dedupe key. Every prior authorization, privacy, CV-access, and note-privacy boundary remains unchanged.
 
-Email ownership is not verified in Phase 1. The product must not claim that an address has been verified until real email delivery and verification are implemented.
+Email ownership is not verified in Phase 1, and no email, SMS, push, or real-time delivery exists yet. The product must not claim real-time delivery or that an address has been verified until that infrastructure is implemented.
 
 ## Candidate profile access matrix
 
@@ -157,7 +160,20 @@ Each upload creates an immutable version and moves a one-to-one current-CV point
 
 Notes are internal to the hiring team: only a Recruiter who OWNs the application's Job Company can read, add, edit, delete, or view the history of a note, and every request re-authorizes that OWNER relationship from the session. Any OWNER may add notes and read all notes plus history, but only the original author may edit or soft-delete their own note and author attribution never changes. Editing and deletion use an `expectedRevision` concurrency token (never authorization) so concurrent edits cannot both win; a stale attempt returns a safe conflict. Every note keeps an immutable `(noteId, version)` revision history and is soft-deleted, never hard-deleted. Candidates (including on their own application), MEMBER users, other-company Recruiters, Admins, the public, and search metadata never see a note, its count, body, author, timestamps, or whether any note exists.
 
-## Intentionally deferred after Phase 3D
+## Notification access matrix
+
+| Actor               | Submission notification | Status-change notification | Withdrawal notification | Read own Activity Center | Read another user's | Mark own read | Unread bell |
+| ------------------- | ----------------------- | -------------------------- | ----------------------- | ------------------------ | ------------------- | ------------- | ----------- |
+| Signed out          | n/a                     | n/a                        | n/a                     | Redirect to sign-in      | Denied              | Redirect      | None        |
+| Candidate (owner)   | Not notified (actor)    | Notified                   | Not notified (actor)    | Own only                 | Denied              | Own only      | Yes         |
+| Recruiter OWNER     | Notified                | Not notified               | Notified                | Own only                 | Denied              | Own only      | Yes         |
+| Recruiter MEMBER    | No                      | No                         | No                      | Own only                 | Denied              | Own only      | Yes         |
+| Other-Company Recr. | No                      | No                         | No                      | Own only                 | Denied              | Own only      | Yes         |
+| Admin               | No                      | No                         | No                      | Redirect to Admin        | Denied              | n/a           | None        |
+
+Recipients are resolved server-side from fresh OWNER membership (with a `RECRUITER` user role) or the owning Candidate; the browser never supplies a recipient, actor, type, title, message, destination, read time, or dedupe key. Every read and mark-read is scoped to the session user's own rows, so no Candidate, Recruiter, Company OWNER, or Admin can read or modify another user's notifications, and browser-facing projections omit the dedupe key, recipient/actor ids, and relation ids. The `/notifications` Activity Center serves Candidates and Recruiters only; Admins have no implicit Notification Center. A notification is retained with its original recipient after a role change and never authorizes the underlying application — the destination route re-authorizes independently. No public Job, Company, or search surface exposes any notification data.
+
+## Intentionally deferred after Phase 4A
 
 - Email verification and real email delivery
 - Password reset and account recovery
@@ -169,9 +185,12 @@ Notes are internal to the hiring team: only a Recruiter who OWNs the application
 - Company verification and logo/document upload
 - Recruiter document uploads, offer documents, and identity/certificate documents
 - Note @mentions, note notifications, rich-text/Markdown notes, note attachments, and AI note summarization
+- Email, SMS, mobile push, browser push, and real-time (WebSocket/SSE) notification delivery
+- Notification preferences, muting, digests, and scheduled notifications
+- Recruiter-note, CV-download, saved-job, job-recommendation, and marketing notifications
 - Bulk application actions
 - Candidate matching, job recommendations, and saved-search alerts
-- Candidate search, messaging, and notifications
+- Candidate search and messaging
 - Public Candidate profile sharing and social feeds
 - Production Admin provisioning, moderation, and audit workflows
 - AI, billing, and payments

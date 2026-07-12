@@ -9,9 +9,19 @@ import { siteConfig } from "@/config/site";
 import { getDashboardPathForRole, roleLabels } from "@/features/auth/roles";
 import { signOutAction } from "@/features/auth/server/actions";
 import { getCurrentSession } from "@/features/auth/server/session";
+import { NotificationBell } from "@/features/notifications/components/notification-bell";
+import { isNotificationCenterRole } from "@/features/notifications/notifications";
+import { getUnreadNotificationCount } from "@/features/notifications/server/data";
+import { getPrismaClient } from "@/lib/prisma";
 
 export async function SiteHeader() {
   const session = await getCurrentSession();
+  // Only Candidates and Recruiters get a bell; public and Admin headers issue
+  // no notification query and expose no count.
+  const unreadCount =
+    session && isNotificationCenterRole(session.user.role)
+      ? await getUnreadNotificationCount(getPrismaClient(), session.user.id)
+      : null;
   const navigationUser = session
     ? {
         name: session.user.name,
@@ -48,6 +58,9 @@ export async function SiteHeader() {
           ))}
         </nav>
         <div className="hidden items-center gap-1.5 md:flex">
+          {unreadCount !== null ? (
+            <NotificationBell unreadCount={unreadCount} />
+          ) : null}
           <ThemeToggle />
           {navigationUser ? (
             <>
@@ -77,7 +90,7 @@ export async function SiteHeader() {
             </>
           )}
         </div>
-        <MobileNavigation user={navigationUser} />
+        <MobileNavigation user={navigationUser} unreadCount={unreadCount} />
       </div>
     </header>
   );

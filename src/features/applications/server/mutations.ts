@@ -11,6 +11,11 @@ import {
   canRecruiterTransitionApplication,
 } from "@/features/applications/lifecycle";
 import type { RecruiterTargetStatus } from "@/features/applications/schemas";
+import {
+  emitApplicationStatusChangedNotification,
+  emitApplicationSubmittedNotifications,
+  emitApplicationWithdrawnNotifications,
+} from "@/features/notifications/server/emit";
 
 export type ApplicationActor = {
   userId: string;
@@ -72,7 +77,12 @@ export async function createJobApplication(
       // Re-check every eligibility condition against fresh database state.
       const job = await transaction.job.findFirst({
         where: { slug, status: "PUBLISHED", company: { isPublished: true } },
-        select: { id: true, applicationDeadline: true },
+        select: {
+          id: true,
+          applicationDeadline: true,
+          companyId: true,
+          title: true,
+        },
       });
       if (!job) {
         throw new ApplicationMutationError("NOT_ELIGIBLE");
@@ -129,6 +139,22 @@ export async function createJobApplication(
         },
       });
 
+      // Notify every current Company OWNER, atomically with the application and
+      // its initial history. The Candidate display name is read from trusted
+      // server state, never from the browser.
+      const candidate = await transaction.user.findUnique({
+        where: { id: actor.userId },
+        select: { name: true },
+      });
+      await emitApplicationSubmittedNotifications(transaction, {
+        applicationId: application.id,
+        jobId: job.id,
+        companyId: job.companyId,
+        jobTitle: job.title,
+        candidateUserId: actor.userId,
+        candidateName: candidate?.name,
+      });
+
       return { id: application.id };
     });
   } catch (error) {
@@ -152,7 +178,12 @@ export async function withdrawJobApplication(
   return prisma.$transaction(async (transaction) => {
     const application = await transaction.jobApplication.findFirst({
       where: { id: applicationId, candidateId: actor.userId },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        candidateId: true,
+        job: { select: { id: true, companyId: true, title: true } },
+      },
     });
     if (!application) {
       throw new ApplicationMutationError("NOT_FOUND");
@@ -174,13 +205,31 @@ export async function withdrawJobApplication(
       throw new ApplicationMutationError("CONFLICT");
     }
 
-    await transaction.applicationStatusHistory.create({
+    const history = await transaction.applicationStatusHistory.create({
       data: {
         applicationId: application.id,
         fromStatus: application.status,
         toStatus: "WITHDRAWN",
         changedByUserId: actor.userId,
       },
+      select: { id: true },
+    });
+
+    // Notify every current Company OWNER, atomically with the status change and
+    // its history. Keyed on the history id so a repeated withdrawal — which can
+    // never reach here after the compare-and-set — could add no duplicate.
+    const candidate = await transaction.user.findUnique({
+      where: { id: actor.userId },
+      select: { name: true },
+    });
+    await emitApplicationWithdrawnNotifications(transaction, {
+      applicationId: application.id,
+      jobId: application.job.id,
+      companyId: application.job.companyId,
+      jobTitle: application.job.title,
+      candidateUserId: actor.userId,
+      candidateName: candidate?.name,
+      statusHistoryId: history.id,
     });
 
     return { status: "WITHDRAWN" as const };
@@ -205,7 +254,12 @@ export async function transitionApplicationByRecruiter(
           },
         },
       },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        candidateId: true,
+        job: { select: { id: true, companyId: true, title: true } },
+      },
     });
     if (!application) {
       throw new ApplicationMutationError("NOT_FOUND");
@@ -230,13 +284,28 @@ export async function transitionApplicationByRecruiter(
       throw new ApplicationMutationError("CONFLICT");
     }
 
-    await transaction.applicationStatusHistory.create({
+    const history = await transaction.applicationStatusHistory.create({
       data: {
         applicationId: application.id,
         fromStatus: application.status,
         toStatus: targetStatus,
         changedByUserId: actor.userId,
       },
+      select: { id: true },
+    });
+
+    // Notify the Candidate who owns the application, atomically with the status
+    // change and its history. An invalid or conflicting transition throws
+    // before this point, so it emits nothing.
+    await emitApplicationStatusChangedNotification(transaction, {
+      applicationId: application.id,
+      jobId: application.job.id,
+      companyId: application.job.companyId,
+      jobTitle: application.job.title,
+      status: targetStatus,
+      candidateUserId: application.candidateId,
+      actorUserId: actor.userId,
+      statusHistoryId: history.id,
     });
 
     return { status: targetStatus };
