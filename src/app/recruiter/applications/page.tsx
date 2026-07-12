@@ -6,6 +6,7 @@ import {
   MapPin,
   Paperclip,
   Search,
+  StickyNote,
   UsersRound,
   X,
 } from "lucide-react";
@@ -226,6 +227,16 @@ export default async function RecruiterApplicationsPage({
                           ) : (
                             <span>No CV</span>
                           )}
+                          <span className="flex items-center gap-1">
+                            <StickyNote
+                              aria-hidden="true"
+                              className="size-3.5"
+                            />
+                            {application.activeNoteCount}{" "}
+                            {application.activeNoteCount === 1
+                              ? "note"
+                              : "notes"}
+                          </span>
                         </div>
                       </div>
                       <span className="text-primary inline-flex items-center gap-1 text-sm font-semibold">

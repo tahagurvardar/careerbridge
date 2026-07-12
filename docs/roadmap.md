@@ -142,9 +142,25 @@ Status: secure Candidate CV documents implemented on `feat/secure-cv-documents` 
 - Candidate ownership plus OWNER-scoped Recruiter access to only the exact CV attached to an owned-Company application, with `/candidate/documents`, apply-flow, dashboard, profile, and recruiter/candidate application integration
 - Unit coverage plus isolated database upload, access, snapshot, attachment, removal, audit, privacy, and storage-consistency coverage
 
-Deferred to a later slice of Phase 3C: recruiter-only application notes and workflow annotations, dedicated malware scanning, and AI resume parsing.
+Deferred to Phase 3D (below): recruiter-only application notes and workflow annotations. Still deferred: dedicated malware scanning and AI resume parsing.
 
-Exit criteria: Candidates can privately manage a CV without exposing raw storage objects or weakening profile ownership, and authorized Recruiters can review only the CV attached to their applications. Recruiter workflow annotations remain pending.
+Exit criteria: Candidates can privately manage a CV without exposing raw storage objects or weakening profile ownership, and authorized Recruiters can review only the CV attached to their applications.
+
+## Phase 3D — Recruiter application notes and internal annotations
+
+Status: implemented on `feat/recruiter-application-notes`.
+
+- `ApplicationNote` and immutable `ApplicationNoteRevision` models with an `ApplicationNoteRevisionAction` enum and a database `unique(noteId, version)` constraint
+- Internal notes visible only to Recruiter Company OWNERs of the application's Job; never to Candidates (including on their own application), MEMBER users, other companies, Admins, or any public/search surface
+- Session-derived author identity, author-only editing and soft deletion, and read/add access for any OWNER without changing author attribution
+- Optimistic concurrency (`expectedRevision` compare-and-set plus the unique version constraint) so concurrent edits cannot both win, with atomic note-plus-revision writes and a safe conflict message
+- Soft-delete retention with no hard delete and no restore, and a protected immutable history route
+- OWNER-scoped active note counts on the applications list, Job applicant pipeline, and Job workspace, with no note bodies in list projections
+- Unit coverage plus isolated database authorization, creation, editing, deletion, history, and privacy coverage
+
+Deferred from Phase 3D: note @mentions, note notifications, rich-text/Markdown notes, note attachments, and AI note summarization.
+
+Exit criteria: authorized Recruiters can keep private, revision-audited internal notes on applications while Candidates and the public never see them.
 
 ## Phase 4 — Membership administration
 

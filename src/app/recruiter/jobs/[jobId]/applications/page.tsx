@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, MapPin, UsersRound } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  MapPin,
+  StickyNote,
+  UsersRound,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -119,6 +125,14 @@ export default async function JobApplicantPipelinePage({
                             "No headline yet"}
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" className="gap-1">
+                            <StickyNote
+                              aria-hidden="true"
+                              className="size-3.5"
+                            />
+                            {application._count.notes}{" "}
+                            {application._count.notes === 1 ? "note" : "notes"}
+                          </Badge>
                           {application.candidate.candidateProfile?.location ? (
                             <span className="text-muted-foreground flex items-center gap-1 text-xs">
                               <MapPin aria-hidden="true" className="size-3.5" />

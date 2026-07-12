@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ExternalLink,
   Pencil,
+  StickyNote,
   UsersRound,
 } from "lucide-react";
 
@@ -238,6 +239,8 @@ export default async function JobWorkspacePage({
                         ? "No applicants yet."
                         : `${applicants.total} ${
                             applicants.total === 1 ? "applicant" : "applicants"
+                          } · ${applicants.activeNoteCount} internal ${
+                            applicants.activeNoteCount === 1 ? "note" : "notes"
                           }`}
                     </CardDescription>
                   </div>
@@ -278,6 +281,15 @@ export default async function JobWorkspacePage({
                             </span>
                           </span>
                           <span className="flex shrink-0 items-center gap-2">
+                            {application._count.notes ? (
+                              <Badge variant="outline" className="gap-1">
+                                <StickyNote
+                                  aria-hidden="true"
+                                  className="size-3.5"
+                                />
+                                {application._count.notes}
+                              </Badge>
+                            ) : null}
                             <ApplicationStatusBadge
                               status={application.status}
                             />

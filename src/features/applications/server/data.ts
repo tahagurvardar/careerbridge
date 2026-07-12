@@ -234,6 +234,9 @@ export async function getRecruiterApplications(
       // before the data leaves the server so lists expose state, not document
       // identifiers.
       resumeDocumentId: true,
+      // Count active notes only. Note bodies are intentionally absent from all
+      // recruiter list projections.
+      _count: { select: { notes: { where: { deletedAt: null } } } },
       candidate: {
         select: {
           name: true,
@@ -256,9 +259,10 @@ export async function getRecruiterApplications(
     take: MAX_RECRUITER_RESULTS,
   });
 
-  return rows.map(({ resumeDocumentId, ...application }) => ({
+  return rows.map(({ resumeDocumentId, _count, ...application }) => ({
     ...application,
     hasResume: Boolean(resumeDocumentId),
+    activeNoteCount: _count.notes,
   }));
 }
 
@@ -397,6 +401,7 @@ export async function getJobApplicantPipeline(
         id: true,
         status: true,
         submittedAt: true,
+        _count: { select: { notes: { where: { deletedAt: null } } } },
         candidate: {
           select: {
             name: true,
@@ -432,7 +437,7 @@ export async function getJobApplicationSummary(
     jobId,
     job: { company: { memberships: { some: { userId, role: "OWNER" } } } },
   };
-  const [{ counts, total }, recent] = await Promise.all([
+  const [{ counts, total }, recent, activeNoteCount] = await Promise.all([
     countByStatus(prisma, where),
     prisma.jobApplication.findMany({
       where,
@@ -440,6 +445,7 @@ export async function getJobApplicationSummary(
         id: true,
         status: true,
         submittedAt: true,
+        _count: { select: { notes: { where: { deletedAt: null } } } },
         candidate: {
           select: {
             name: true,
@@ -450,8 +456,11 @@ export async function getJobApplicationSummary(
       orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
       take: 5,
     }),
+    prisma.applicationNote.count({
+      where: { deletedAt: null, application: where },
+    }),
   ]);
-  return { statusCounts: counts, total, recent };
+  return { statusCounts: counts, total, activeNoteCount, recent };
 }
 
 export async function getCompanyApplicationOverview(

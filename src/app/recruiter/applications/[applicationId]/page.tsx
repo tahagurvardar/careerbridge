@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { requireRole } from "@/features/auth/server/session";
+import { ApplicationNotesPanel } from "@/features/application-notes/components/application-notes-panel";
+import { getApplicationNotes } from "@/features/application-notes/server/data";
 import { ApplicationStatusActions } from "@/features/applications/components/application-status-actions";
 import { ApplicationStatusBadge } from "@/features/applications/components/application-status-badge";
 import { StatusTimeline } from "@/features/applications/components/status-timeline";
@@ -60,13 +62,13 @@ export default async function RecruiterApplicationDetailPage({
     "RECRUITER",
     `/recruiter/applications/${applicationId}`,
   );
-  const application = await getRecruiterApplication(
-    getPrismaClient(),
-    session.user.id,
-    applicationId,
-  );
+  const prisma = getPrismaClient();
+  const [application, noteData] = await Promise.all([
+    getRecruiterApplication(prisma, session.user.id, applicationId),
+    getApplicationNotes(prisma, session.user.id, applicationId),
+  ]);
 
-  if (!application) notFound();
+  if (!application || !noteData) notFound();
 
   const { job, candidate } = application;
   const profile = candidate.candidateProfile;
@@ -299,6 +301,23 @@ export default async function RecruiterApplicationDetailPage({
                     No CV was attached to this application.
                   </p>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Application notes</CardTitle>
+                <CardDescription>
+                  Private context for Company owners reviewing this candidate.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ApplicationNotesPanel
+                  applicationId={application.id}
+                  currentUserId={session.user.id}
+                  notes={noteData.active}
+                  deletedNotes={noteData.deleted}
+                />
               </CardContent>
             </Card>
 
