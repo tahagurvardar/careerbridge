@@ -30,6 +30,7 @@ CareerBridge brings these activities into one role-aware system with shared doma
 - Create, edit, publish, and close job listings
 - Review applicants and candidate profiles
 - Access candidate CVs when authorized
+- Keep private internal notes on applications with the hiring team
 - Update application statuses
 - View recruitment workflow analytics
 
@@ -53,19 +54,19 @@ The initial product MVP is expected to include:
 7. Basic admin moderation and operational views
 8. Essential product analytics and audit records
 
-## Current phase: Secure Candidate documents
+## Current phase: Recruiter application notes
 
-Phase 3C adds secure private Candidate CV documents on the completed identity, profile, Company, Job, application, and saved-job foundations:
+Phase 3D adds internal Recruiter notes on Job Applications on the completed identity, profile, Company, Job, application, saved-job, and CV-document foundations:
 
-- Let a Candidate upload one current CV as a PDF, replace it, download it, and remove it from their active profile
-- Store each upload as an immutable version and move a one-to-one current-CV pointer, so old versions stay valid on the applications they are attached to
-- Validate uploads by non-zero size up to 5 MB, `application/pdf` MIME, `.pdf` extension, and a `%PDF-` signature together, with server-generated storage keys and server-computed SHA-256
-- Snapshot the Candidate's current CV onto a new application, keep pre-existing applications valid with no CV, and allow a one-time attach to an eligible existing active application
-- Serve downloads only through an authenticated, per-request re-authorized route that forces an attachment and never exposes storage internals or a public URL
-- Give an OWNER Recruiter download access only to the exact CV attached to an application for a Job at a Company they own, and audit-log successful downloads
-- Keep the local filesystem driver to development and test, require S3-compatible private storage in production, and keep malware scanning and AI resume parsing deferred
+- Let an OWNER Recruiter add private internal notes to an authorized application, read all active notes with author and timestamps, and see an edited indicator
+- Keep an immutable revision history for every note (created, edited, deleted), each preserving the note body at that version under a database `unique(noteId, version)` constraint
+- Allow only the original author to edit or soft-delete their own note; any OWNER may add notes and read notes plus history, but author attribution can never change
+- Use optimistic concurrency (`expectedRevision`) so a stale form cannot silently overwrite a newer edit, and soft-delete rather than hard-delete with no restore in this phase
+- Show OWNER-scoped active note counts on the applications list, Job applicant pipeline, and Job workspace — never note bodies in list views
+- Keep every note invisible to Candidates (including on their own application), Company MEMBER users, other-company Recruiters, Admins, the public, and search metadata
+- Keep @mentions, notifications, rich text/Markdown, attachments, and AI summarization deferred
 
-Candidate documents are private Candidate data. Public Job, Company, and Candidate surfaces expose no document records, filenames, counts, attachment state, storage keys, or access logs. Candidate identity always comes from the session; the browser never supplies a document ID, storage key, `candidateId`, or `resumeDocumentId`. Existing Better Auth endpoint allow-lists and every prior authorization boundary remain unchanged, and Recruiter/Admin accounts receive no implicit Candidate behavior.
+Internal notes are private Recruiter data. Candidate and public surfaces expose no note record, count, body, author, timestamp, or existence signal. Author identity always comes from the session; the browser never supplies `authorUserId`, `candidateId`, `companyId`, ownership, the revision actor, or timestamps. Existing Better Auth endpoint allow-lists and every prior authorization, privacy, document-access, and application-ownership boundary remain unchanged, and Candidate/MEMBER/Admin accounts receive no implicit note access.
 
 Email ownership is not verified in Phase 1. The product must not claim that an address has been verified until real email delivery and verification are implemented.
 
@@ -143,7 +144,20 @@ New saves require a PUBLISHED Job under a published Company and are re-checked a
 
 Each upload creates an immutable version and moves a one-to-one current-CV pointer; applying pins that exact version onto the application so replacing or removing the current CV never changes historical attachments. Downloads are re-authorized on every request from the session: a Candidate reaches only their own documents and a Recruiter reaches only the exact document attached to an application for a Job at a Company they OWN. MEMBER, nonmember, cross-Candidate, Admin, and signed-out requests are denied identically, and unknown or unauthorized document IDs return the same not-found without revealing existence. Responses force a download with `application/pdf`, a safe filename, `private, no-store`, and `nosniff`; storage keys, buckets, endpoints, paths, and credentials are never exposed. Successful authorized downloads are audit-logged; denials are not.
 
-## Intentionally deferred after Phase 3C
+## Internal Application Notes access matrix
+
+| Actor               | Read notes & history         | Add note             | Edit / delete a note                |
+| ------------------- | ---------------------------- | -------------------- | ----------------------------------- |
+| Signed out          | Redirect / not found         | Redirect / not found | Redirect / not found                |
+| Candidate           | No (even on own application) | No                   | No                                  |
+| Recruiter nonmember | Not found                    | Not found            | Not found                           |
+| Recruiter MEMBER    | No                           | No                   | No                                  |
+| Recruiter OWNER     | Yes (all notes on the app)   | Yes                  | Only notes they originally authored |
+| Admin               | No implicit access           | No implicit access   | No implicit access                  |
+
+Notes are internal to the hiring team: only a Recruiter who OWNs the application's Job Company can read, add, edit, delete, or view the history of a note, and every request re-authorizes that OWNER relationship from the session. Any OWNER may add notes and read all notes plus history, but only the original author may edit or soft-delete their own note and author attribution never changes. Editing and deletion use an `expectedRevision` concurrency token (never authorization) so concurrent edits cannot both win; a stale attempt returns a safe conflict. Every note keeps an immutable `(noteId, version)` revision history and is soft-deleted, never hard-deleted. Candidates (including on their own application), MEMBER users, other-company Recruiters, Admins, the public, and search metadata never see a note, its count, body, author, timestamps, or whether any note exists.
+
+## Intentionally deferred after Phase 3D
 
 - Email verification and real email delivery
 - Password reset and account recovery
@@ -154,7 +168,8 @@ Each upload creates an immutable version and moves a one-to-one current-CV point
 - Recruiter invitations, email invitations, and membership administration
 - Company verification and logo/document upload
 - Recruiter document uploads, offer documents, and identity/certificate documents
-- Recruiter-only candidate notes and bulk application actions
+- Note @mentions, note notifications, rich-text/Markdown notes, note attachments, and AI note summarization
+- Bulk application actions
 - Candidate matching, job recommendations, and saved-search alerts
 - Candidate search, messaging, and notifications
 - Public Candidate profile sharing and social feeds

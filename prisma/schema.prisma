@@ -79,6 +79,12 @@ enum CandidateDocumentAccessType {
   RECRUITER_APPLICATION_DOWNLOAD
 }
 
+enum ApplicationNoteRevisionAction {
+  CREATED
+  EDITED
+  DELETED
+}
+
 model User {
   id                 String                       @id
   name               String
@@ -99,6 +105,8 @@ model User {
   documents          CandidateDocument[]          @relation("CandidateDocuments")
   currentResume      CandidateResume?             @relation("CandidateCurrentResume")
   documentAccessLogs CandidateDocumentAccessLog[] @relation("DocumentAccessActor")
+  applicationNotes   ApplicationNote[]            @relation("ApplicationNoteAuthor")
+  noteRevisions      ApplicationNoteRevision[]    @relation("ApplicationNoteRevisionActor")
 
   @@unique([email])
   @@map("user")
@@ -240,6 +248,7 @@ model JobApplication {
   history            ApplicationStatusHistory[]
   resumeDocument     CandidateDocument?           @relation("ApplicationResume", fields: [resumeDocumentId], references: [id], onDelete: SetNull)
   documentAccessLogs CandidateDocumentAccessLog[]
+  notes              ApplicationNote[]
 
   // One application per Candidate per Job, enforced at the database layer.
   @@unique([jobId, candidateId])
@@ -328,6 +337,60 @@ model CandidateDocumentAccessLog {
   @@index([documentId, createdAt])
   @@index([actorUserId, createdAt])
   @@map("candidate_document_access_log")
+}
+
+/// Internal Recruiter-only note on a Job Application. Visible only to OWNER
+/// members of the Application's Job Company — never to the Candidate, MEMBER
+/// users, other companies, Admins, or any public surface. `body` holds the
+/// current active text; `revision` starts at 1 and increases on each edit or
+/// soft deletion. A null `deletedAt` marks an active note; notes are never
+/// hard-deleted in the normal workflow. Candidate/Recruiter/Job/Company data
+/// is read through authorized relations, never duplicated here.
+model ApplicationNote {
+  id            String    @id @default(cuid())
+  applicationId String
+  // Nullable so the audit trail survives author account removal.
+  authorUserId  String?
+  body          String    @db.VarChar(5000)
+  revision      Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  application JobApplication            @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  author      User?                     @relation("ApplicationNoteAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  revisions   ApplicationNoteRevision[]
+
+  // Active-note lists and counts per Application (newest first), and
+  // author-owned note lookups.
+  @@index([applicationId, deletedAt, createdAt])
+  @@index([authorUserId])
+  @@map("application_note")
+}
+
+/// Immutable revision-history entry for an ApplicationNote. Created alongside
+/// every note create, edit, and soft delete in the same transaction. Records
+/// are never edited or removed in the normal workflow.
+model ApplicationNoteRevision {
+  id          String                        @id @default(cuid())
+  noteId      String
+  version     Int
+  action      ApplicationNoteRevisionAction
+  // CREATED/EDITED preserve the full note text at that version; DELETED keeps
+  // the final body for authorized audit review.
+  body        String                        @db.VarChar(5000)
+  // Nullable so history survives actor account removal.
+  actorUserId String?
+  createdAt   DateTime                      @default(now())
+
+  note  ApplicationNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  actor User?           @relation("ApplicationNoteRevisionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  // One row per (note, version) is the authoritative concurrency guard.
+  @@unique([noteId, version])
+  @@index([noteId, version])
+  @@index([actorUserId, createdAt])
+  @@map("application_note_revision")
 }
 
 model CandidateProfile {
