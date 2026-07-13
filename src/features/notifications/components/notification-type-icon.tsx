@@ -1,4 +1,11 @@
-import { Bell, Inbox, RefreshCw, Undo2, type LucideIcon } from "lucide-react";
+import {
+  Bell,
+  Inbox,
+  RefreshCw,
+  Undo2,
+  UserRoundPlus,
+  type LucideIcon,
+} from "lucide-react";
 
 import type { NotificationType } from "@/generated/prisma/enums";
 import {
@@ -13,6 +20,7 @@ const iconByKey: Record<NotificationIconKey, LucideIcon> = {
   inbound: Inbox,
   status: RefreshCw,
   withdrawn: Undo2,
+  invitation: UserRoundPlus,
 };
 
 export function NotificationTypeIcon({

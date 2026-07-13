@@ -9,6 +9,8 @@ import {
   buildApplicationStatusChangedContent,
   buildApplicationSubmittedContent,
   buildApplicationWithdrawnContent,
+  buildCompanyInvitationReceivedContent,
+  companyInvitationReceivedDedupeKey,
   dedupeRecipientIds,
 } from "@/features/notifications/notifications";
 
@@ -137,6 +139,54 @@ export async function emitApplicationStatusChangedNotification(
       companyId: input.companyId,
       dedupeKey: applicationStatusChangedDedupeKey(
         input.statusHistoryId,
+        recipientUserId,
+      ),
+    })),
+    skipDuplicates: true,
+  });
+  return result.count;
+}
+
+/**
+ * One COMPANY_INVITATION_RECEIVED notification for the invited Recruiter when
+ * a Company OWNER creates an invitation. Runs inside the invitation-creation
+ * transaction, so a rolled-back invitation emits nothing. The recipient is the
+ * server-resolved invitee — never a client value — and the copy contains only
+ * the Company name and the safe invitation-list destination: no invitee email,
+ * no activeKey, no private membership data. Possessing the notification grants
+ * no membership; the invitation must still be explicitly accepted.
+ */
+export async function emitCompanyInvitationReceivedNotification(
+  tx: Tx,
+  input: {
+    invitationId: string;
+    companyId: string;
+    companyName: string;
+    inviteeUserId: string;
+    invitedByUserId: string;
+  },
+): Promise<number> {
+  const recipients = dedupeRecipientIds(
+    [input.inviteeUserId],
+    input.invitedByUserId,
+  );
+  if (recipients.length === 0) return 0;
+
+  const content = buildCompanyInvitationReceivedContent({
+    companyName: input.companyName,
+  });
+
+  const result = await tx.notification.createMany({
+    data: recipients.map((recipientUserId) => ({
+      recipientUserId,
+      actorUserId: input.invitedByUserId,
+      type: "COMPANY_INVITATION_RECEIVED" as const,
+      title: content.title,
+      message: content.message,
+      href: content.href,
+      companyId: input.companyId,
+      dedupeKey: companyInvitationReceivedDedupeKey(
+        input.invitationId,
         recipientUserId,
       ),
     })),
