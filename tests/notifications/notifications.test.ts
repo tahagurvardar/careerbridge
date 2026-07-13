@@ -31,6 +31,10 @@ const ALL_TYPES: NotificationType[] = [
   "APPLICATION_STATUS_CHANGED",
   "APPLICATION_WITHDRAWN",
   "COMPANY_INVITATION_RECEIVED",
+  "INTERVIEW_SCHEDULED",
+  "INTERVIEW_RESCHEDULED",
+  "INTERVIEW_CANCELED",
+  "INTERVIEW_RESPONSE_RECEIVED",
 ];
 
 describe("notification type labels and icon keys", () => {

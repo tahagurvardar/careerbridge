@@ -2,7 +2,7 @@
 
 CareerBridge is a production-oriented job and internship platform designed to connect ambitious candidates with thoughtful employers. The long-term product combines structured hiring workflows with responsible AI assistance while keeping transparency, accessibility, and human decision-making at the center.
 
-> **Project status:** Phase 4A In-App Notifications and Activity Center is implemented on **feat/notifications-activity-center**. Candidates are notified when a Recruiter changes an application's status, Company OWNERs are notified when a Candidate submits or withdraws an application, and every recipient gets a private Activity Center, an unread header badge, filters, and mark-as-read actions. Email, push, and real-time delivery remain deferred.
+> **Project status:** Phase 4C Transactional Email Delivery is implemented on **feat/transactional-email-delivery**, on top of the merged Phase 4B Company Team Membership. Company OWNERs invite existing Recruiter accounts, administer roles with a database-enforced last-owner invariant, and review audit history; application and invitation events now also queue private, preference-aware transactional email delivered by an authenticated dispatcher. SMS, push, and real-time delivery remain deferred.
 
 ## Foundation preview
 
@@ -31,6 +31,10 @@ The current application provides:
 - Recruiter-only internal application notes with an immutable, author-scoped revision history
 - Transactional in-app notifications for application submission, status change, and withdrawal
 - A private per-recipient Activity Center with filters, pagination, mark-as-read, and an unread header badge
+- Company team invitations for existing Recruiter accounts with an explicit, expiring lifecycle
+- OWNER-only team administration: promote, demote, remove, ownership transfer, leave, and audit history
+- Role-relevant transactional email preferences and an atomic, provider-isolated email outbox
+- A bearer-protected email dispatcher with skip-locked claiming, bounded retries, and dead letters
 - Product, architecture, and delivery documentation
 
 ## Technology
@@ -75,6 +79,7 @@ Configure the required values without committing them:
 - `DOCUMENT_STORAGE_DRIVER`: `local` for development/test (default) or `s3` for production-oriented private storage
 - `DOCUMENT_STORAGE_LOCAL_ROOT`: local object directory for the `local` driver (defaults to the git-ignored `.careerbridge-private-storage`)
 - `DOCUMENT_STORAGE_S3_*`: private bucket endpoint, region, bucket, credentials, and path-style flag (required only when the driver is `s3`; the bucket must be private and is never given public URLs)
+- `EMAIL_*`: transactional email driver, sender identity, HTTPS app base URL, dispatcher bearer secret, and batch/retry bounds (the non-network `log` driver is the development/test default; production requires `resend` and rejects `log`)
 
 Generate the client, apply migrations, and start the development server:
 
@@ -130,6 +135,8 @@ The command refuses production execution, validates all inputs, writes only thro
 | /candidate/dashboard                    | Protected Candidate workspace and summary      |
 | /candidate/applications                 | Candidate's own applications and filters       |
 | /candidate/applications/[applicationId] | Candidate application detail and withdrawal    |
+| /candidate/interviews                   | Candidate's own interview agenda and filters   |
+| /candidate/interviews/[interviewId]     | Candidate interview detail and accept/decline  |
 | /candidate/saved-jobs                   | Candidate's private saved Job list and filters |
 | /candidate/profile                      | Protected Candidate profile overview           |
 | /candidate/profile/edit                 | Edit Candidate professional information        |
@@ -144,6 +151,8 @@ The command refuses production execution, validates all inputs, writes only thro
 | /recruiter/companies/new                | Create a private Company as OWNER              |
 | /recruiter/companies/[companyId]        | Private member Company workspace               |
 | /recruiter/companies/[companyId]/edit   | OWNER-only Company editing                     |
+| /recruiter/companies/[companyId]/team   | OWNER-only team administration and audit       |
+| /recruiter/invitations                  | Recruiter's own incoming Company invitations   |
 | /recruiter/jobs                         | Owned Jobs with status/company/title filters   |
 | /recruiter/jobs/new                     | Create a draft Job for an owned Company        |
 | /recruiter/jobs/[jobId]                 | Private Job workspace and lifecycle actions    |
@@ -151,7 +160,10 @@ The command refuses production execution, validates all inputs, writes only thro
 | /recruiter/jobs/[jobId]/applications    | OWNER-only applicant pipeline for one Job      |
 | /recruiter/applications                 | Applications across owned Companies            |
 | /recruiter/applications/[applicationId] | OWNER-only candidate review and status         |
+| /recruiter/interviews                   | OWNER-only interview agenda across Companies   |
+| /recruiter/interviews/[interviewId]     | OWNER-only interview management and history    |
 | /notifications                          | Candidate/Recruiter private Activity Center    |
+| /settings/notifications                 | Candidate/Recruiter email delivery settings    |
 | /admin                                  | Protected Admin access confirmation            |
 
 ## Project structure
@@ -189,6 +201,12 @@ Recruiter application note code is grouped under `src/features/application-notes
 
 Notification code is grouped under `src/features/notifications`. Database-free notification copy, deterministic dedupe keys, recipient de-duplication, safe-destination generation, type labels/icon keys, unread-badge formatting, and Notification Center role rules are separated from server-only recipient-scoped reads, mark-as-read commands, transactional emit helpers, and Server Actions. Notifications are created inside the existing application submission, status-transition, and withdrawal transactions — never in a separate write after commit — so a notification is always atomic with its `JobApplication` and `ApplicationStatusHistory`. Recipients are resolved from fresh database state (Company OWNER Recruiters, or the owning Candidate), and a unique `dedupeKey` makes retries and concurrent duplicate events idempotent. The protected `/notifications` Activity Center and the header bell serve Candidates and Recruiters only. Migration `20260712211930_notifications_activity_center` adds the `notification` table and the `NotificationType` enum with recipient/read-state/application indexes, without changing existing tables.
 
+Company team code is grouped under `src/features/company-team`. Database-free invitation lifecycle transitions, expiry classification, active-key generation, last-owner and eligibility decisions, and audit labels are separated from server-only OWNER-scoped reads, transactional commands, and Server Actions. Invitation creation, acceptance, decline, revocation, every role change, ownership transfer, and leave each commit atomically with an append-only `CompanyMembershipEvent`; owner-count-reducing changes run under Serializable isolation. The OWNER-only `/recruiter/companies/[companyId]/team` and invitee-scoped `/recruiter/invitations` routes render it. Migration `20260712232412_company_team_membership` adds the `CompanyInvitation` and `CompanyMembershipEvent` tables, their enums, and the `COMPANY_INVITATION_RECEIVED` notification type without changing existing tables.
+
+Transactional email code is grouped under `src/features/email`. Database-free templates, dedupe keys, role/event rules, and preference resolution are separated from server-only outbox emit helpers (called inside the existing application and invitation transactions), the queue dispatcher, the provider abstraction, and preference reads/writes. The bearer-protected Node route `/api/internal/email/dispatch` drains a bounded batch with PostgreSQL `SKIP LOCKED` claiming and lock-token finalization, and `/settings/notifications` renders role-relevant preferences. Migration `20260713010934_transactional_email_delivery` adds the `EmailOutbox`, `EmailDeliveryAttempt`, and `UserEmailPreference` tables and their enums without changing existing tables.
+
+Interview code is grouped under `src/features/interviews`. Database-free lifecycle rules, schedule/timezone validation (UTC instants plus an independently validated IANA zone), overlap detection, optimistic-version helpers, and display formatting are separated from server-only Candidate-/OWNER-scoped reads, transactional commands, and Server Actions. Creation and rescheduling run under Serializable isolation with the repository's bounded retry so overlapping active interviews for a Candidate or organizer cannot double-book; every transition appends an immutable `InterviewEvent` and emits the Candidate/OWNER notification and outbox rows atomically. Interview scheduling and Application status remain separate controlled workflows — scheduling never mutates `ApplicationStatus` or writes `ApplicationStatusHistory`. Migration `20260713130051_interview_scheduling_workflow` adds the `Interview` and `InterviewEvent` tables, the `InterviewFormat`/`InterviewStatus`/`InterviewEventType` enums, and the four interview values on `NotificationType` and `EmailEventType` without changing existing tables.
+
 Database integration tests never use `DATABASE_URL`. To run them, configure a separate `TEST_DATABASE_URL`, confirm it targets an isolated test database, set `RUN_DATABASE_INTEGRATION_TESTS=true`, and run `npm run test:integration`. The command skips clearly unless both values are present and refuses a test URL matching either application database URL. Regular `npm test` remains database-free.
 
 ## Identity security boundaries
@@ -223,7 +241,7 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Companies start unpublished. Publishing requires name, description, industry, headquarters, and a safe `http`/`https` website. Publication is visibility, not verification.
 - Public directory and detail queries always include `isPublished = true`. Unknown and unpublished slugs share the same not-found behavior, and public results never include membership or owner identity data.
 - Company names do not automatically rewrite an existing slug during editing, preserving stable public URLs.
-- Recruiter invitations, membership management, verification, uploads, candidate search, messaging, notifications, AI, and billing remain deferred.
+- Company verification, logo/document uploads, candidate search, messaging, AI, and billing remain deferred. Team invitations and membership administration shipped in Phase 4B (see Company team membership boundaries); in-app notifications shipped in Phase 4A.
 
 ## Job domain boundaries
 
@@ -256,7 +274,7 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Candidate ownership scopes every candidate read and mutation by `candidateId`; recruiter access scopes every read and mutation through OWNER membership of the Job's Company. Absent, foreign, and MEMBER-only IDs return the same not-found, so cross-candidate, cross-company, and MEMBER access all fail identically.
 - A recruiter sees a candidate's private profile (email, headline, location, bio, skills, education, experience) only because the candidate applied to their job, and only as an OWNER. This data never appears on public pages or in unrelated Company workspaces. Candidate-facing history omits the acting user.
 - Cover letters are optional, trimmed, length-bounded plain text, normalized to null when empty, validated on both client and server, and never rendered as HTML.
-- Application submission, recruiter status changes, and Candidate withdrawal now emit in-app notifications inside the same transaction (see In-app notification boundaries). Messaging, bulk actions, and email/push delivery remain deferred.
+- Application submission, recruiter status changes, and Candidate withdrawal emit both in-app notifications and private transactional email intents inside the same transaction (see the notification and email boundaries). Messaging, bulk actions, and push delivery remain deferred.
 
 ## Candidate document boundaries
 
@@ -284,7 +302,65 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Title, message, and destination are bounded, server-generated event snapshots rendered as escaped React text — never HTML or Markdown. Copy never includes Candidate email, CV filenames, internal note bodies, document metadata, or raw database IDs. Destinations are validated through the shared safe-internal-path logic (no external, protocol-relative, or open-redirect targets).
 - Every read is scoped to `recipientUserId = session user`. No Candidate, Recruiter, Admin, or Company OWNER can read another user's notifications, and browser-facing projections expose only `id`, `type`, `title`, `message`, `href`, `readAt`, and `createdAt` — never `dedupeKey`, recipient/actor IDs, or relation IDs. Mark-one and mark-all are IDOR-safe `updateMany`s scoped to the recipient and are idempotent; they never reveal whether another user's notification exists.
 - The `/notifications` Activity Center serves Candidates and Recruiters only (Admins are redirected, signed-out users are sent to sign-in). It offers `ALL`/`UNREAD`/`READ` filters, a bounded page size of 20 with deterministic `createdAt DESC, id DESC` ordering, an empty state, and mark-as-read actions. The header bell shows an unread badge (exact 1–99, then `99+`) that refreshes on navigation and after mark-read — there is no polling and no real-time claim.
-- A notification is retained with its original recipient even after the recipient loses Company ownership; possession of a notification never grants access to the underlying entity. Its destination route re-authorizes independently, so a removed OWNER keeps the historical notification text but is denied the application it references. Application/Job/Company links are nullable and set null (not cascaded) on entity deletion, so history survives without exposing an inaccessible record. Email, SMS, mobile/browser push, WebSockets/SSE real-time delivery, notification preferences, muting, digests, and recruiter-note/CV/saved-job/marketing notifications remain deferred.
+- A notification is retained with its original recipient even after the recipient loses Company ownership; possession of a notification never grants access to the underlying entity. Its destination route re-authorizes independently, so a removed OWNER keeps the historical notification text but is denied the application it references. Application/Job/Company links are nullable and set null (not cascaded) on entity deletion, so history survives without exposing an inaccessible record. SMS, mobile/browser push, WebSockets/SSE, digests, and recruiter-note/CV/saved-job/marketing notifications remain deferred.
+
+## Company team membership boundaries
+
+- A Company OWNER invites existing CareerBridge Recruiter accounts by email. The server normalizes the address and resolves the account itself: no-account, Candidate-account, and Admin-account lookups all return the same safe "no eligible recruiter account" message, self-invites and current members are rejected, and an `inviteeUserId` is never accepted from the browser. There are no public invitation links, tokens, or unregistered-user invitations.
+- Invitations follow an explicit lifecycle — `PENDING`, then terminal `ACCEPTED`, `DECLINED`, `REVOKED`, or `EXPIRED` after a fixed 14 days — driven by compare-and-set transitions, so repeated or concurrent responses produce exactly one outcome and one audit event. A nullable unique `activeKey` makes "one active invitation per Company and invitee" a database guarantee, and historical rows are retained.
+- Acceptance re-validates everything inside one transaction (invitee identity, `PENDING` status, expiry, a still-`RECRUITER` account role, no existing membership) and always creates a `MEMBER` membership; the browser can never choose a role, and OWNER arrives only through later explicit promotion or ownership transfer. Invitation creation writes the invitation, its audit event, and the invitee's in-app notification (plus the Phase 4C email intent) atomically.
+- Promote, demote, remove, ownership transfer, and leave are explicit actions — OWNER-only, except session-scoped leave — that re-authorize inside their transactions and never accept a role, actor, or audit value from the browser. The last-owner invariant ("A company must keep at least one owner.") is enforced under Serializable isolation, so concurrent demotions, removals, and leaves cannot strand a Company; transfer promotes the target before demoting the actor.
+- Every invitation and membership change writes an append-only `CompanyMembershipEvent` with nullable actor/subject retention and no free-text metadata; there is no edit or delete surface, and only Company OWNERs can read it.
+- `/recruiter/companies/[companyId]/team` is OWNER-only and is the only surface that projects member emails; `/recruiter/invitations` is strictly invitee-scoped. MEMBER users see just their own membership on the Company workspace, and unknown, foreign, and MEMBER access share the same not-found behavior. Public Company and Job pages, Candidate surfaces, and search metadata expose no memberships, emails, invitations, counts, or audit events, and possessing an invitation notification grants no access — destination routes re-authorize the session. Custom organization roles, fine-grained permissions, and billing seats remain deferred.
+
+## Transactional email boundaries
+
+- Four explicit events are supported: company invitation received, application submitted, application status changed, and application withdrawn. Recipients come from fresh server-side state: the existing invited Recruiter, the owning Candidate, or current Recruiter OWNERs. Browser input never supplies email intent, recipient, snapshot content, destination, status, attempts, or dedupe data.
+- The authoritative domain transaction writes an immutable `EmailOutbox` snapshot alongside the domain change and in-app notification. Provider I/O never runs in that transaction. Missing preferences default enabled; a disabled event writes `SUPPRESSED` with `USER_PREFERENCE`, preserving audit and dedupe history. Preferences are evaluated only when the event occurs and never alter in-app notifications.
+- `/settings/notifications` is limited to Candidate and Recruiter sessions and shows only role-relevant email toggles. Admin has no implicit settings access. Candidate controls status-change email; Recruiter controls invitations, submissions, and withdrawals.
+- Central templates create bounded subjects, plain text, and escaped HTML from server-resolved values. They contain no Candidate email, CV metadata, internal notes, member lists, invitation keys, user HTML, tracking pixels, or external resources. The outbox stores a validated internal path; delivery combines it with `EMAIL_APP_BASE_URL`, and every destination independently re-authorizes the signed-in user.
+- The internal Node dispatcher is POST-only at `/api/internal/email/dispatch`, uses a constant-time bearer-secret comparison, returns aggregate counts only, and processes a bounded batch. PostgreSQL `FOR UPDATE SKIP LOCKED` claiming sets a per-row lock token, releases the transaction before network I/O, requires that token to finalize, and recovers locks older than ten minutes.
+- Delivery attempts are append-only and body/recipient-free. Retryable network, 429, and 5xx failures follow 1 minute, 5 minute, 30 minute, 2 hour, then 12 hour bounded delays; permanent or exhausted work becomes `DEAD_LETTER`. Resend receives the database dedupe key as its idempotency key. There is no public outbox, attempt, retry, or delivery-status API.
+- Development and automated tests use non-network or injected fake drivers. Production rejects `log`, requires explicit Resend configuration at delivery time, and never silently simulates. Logs contain only safe aggregate counts, driver names, and stable categories—never recipient snapshots, subjects, bodies, credentials, authorization values, provider bodies, cookies, or database URLs.
+
+| Event                       | Recipient                        | Candidate setting          | Recruiter setting       |
+| --------------------------- | -------------------------------- | -------------------------- | ----------------------- |
+| Company invitation received | Existing invited Recruiter       | Not shown                  | Company invitations     |
+| Application submitted       | Current Company Recruiter OWNERs | Not shown                  | New applications        |
+| Application status changed  | Application Candidate            | Application status updates | Not shown               |
+| Application withdrawn       | Current Company Recruiter OWNERs | Not shown                  | Application withdrawals |
+| Interview scheduled         | Application Candidate            | Interview scheduled        | Not shown               |
+| Interview rescheduled       | Application Candidate            | Interview rescheduled      | Not shown               |
+| Interview canceled          | Application Candidate            | Interview canceled         | Not shown               |
+| Interview response received | Current Company Recruiter OWNERs | Not shown                  | Interview responses     |
+
+| Outbox state      | Meaning                                          |
+| ----------------- | ------------------------------------------------ |
+| `PENDING`         | New eligible intent waiting for claim            |
+| `PROCESSING`      | Claimed by one lock-token owner                  |
+| `RETRY_SCHEDULED` | Temporary failure waiting for its bounded delay  |
+| `SENT`            | Provider accepted the idempotent request         |
+| `DEAD_LETTER`     | Permanent failure or retry limit reached         |
+| `SUPPRESSED`      | Disabled at event time; never sent retroactively |
+
+## Interview scheduling boundaries
+
+- An `Interview` belongs to exactly one `JobApplication`; an Application may hold many over time. Only a `RECRUITER` who is a current OWNER of the Application's Job Company can schedule, reschedule, cancel, or complete; only the owning Candidate can accept or decline. MEMBER users, cross-Company Recruiters, other Candidates, and Admins are denied with the same not-found behavior as a nonexistent id — Interview and event IDs never reveal existence.
+- Creation and rescheduling require an active Application (`SUBMITTED`, `UNDER_REVIEW`, `INTERVIEW`, `OFFER`), re-checked inside the transaction. Candidate withdrawal blocks new scheduling but never deletes existing interview history, and interview transitions never mutate the Application status or write `ApplicationStatusHistory` — the two workflows stay separate.
+- Times are stored as UTC instants plus the independently validated IANA timezone that scheduled them. Rendering always uses the stored zone with a DST-aware abbreviation from the IANA database; the browser's ISO instant and zone are validated separately and a formatted display string is never trusted. Schedules must start 10+ minutes out, within 365 days, last 15 minutes to 8 hours, and satisfy format rules (VIDEO needs an HTTPS link, ONSITE a location, PHONE forbids a link, OTHER needs at least one attendance detail). Meeting links are HTTPS-only — `javascript:`, `data:`, `mailto:`, protocol-relative, and credentialed URLs are rejected — and open with `target="_blank" rel="noopener noreferrer"`; instructions render as plain text.
+- Active interviews (`PENDING_RESPONSE`, `ACCEPTED`) cannot overlap for the same Candidate or the same organizer (`existing.startAt < proposed.endAt AND existing.endAt > proposed.startAt`; adjacency allowed). Checks re-run inside a Serializable transaction with the repository's bounded retry, so concurrent overlapping schedules resolve to exactly one winner, and the fixed conflict copy reveals nothing about the conflicting interview. `CANCELED`, `DECLINED`, and `COMPLETED` interviews never block a slot.
+- Every mutation is an explicit operation (accept, decline, reschedule, cancel, complete) guarded by an `expectedVersion` compare-and-set on id + version + allowed status — a concurrency token, never authorization. Stale writers get "This interview changed. Refresh and try again." Rescheduling returns the status to `PENDING_RESPONSE`, clears the response, and makes the acting OWNER the organizer; cancel and complete are terminal with server-set timestamps.
+- Each transition appends an immutable `InterviewEvent` (actor retained as nullable, schedule snapshots for creation/reschedule) in the same transaction — there is no edit, delete, or rewrite surface. The timeline is visible only to the owning Candidate and Company OWNERs.
+- Scheduling, rescheduling, and cancellation notify the Candidate; accept/decline notifies every current Recruiter OWNER — in-app and through the transactional email outbox (or a `SUPPRESSED` row per preference), atomically with the interview write and with deterministic dedupe keys. Copy carries only the Job title and Candidate display name: never the meeting URL, location, instructions, schedule, or Candidate email. Notifications and email grant no access — destination routes re-authorize the session.
+- Public Jobs, public Companies, and search metadata expose no interview data. Candidate projections expose no membership records or internal notes; Recruiter projections expose no email infrastructure or dedupe keys. Calendar provider sync (Google/Outlook/Apple), Meet/Zoom/Teams link generation, ICS files, reminders, self-scheduling links, recurring interviews, interviewer availability, panels, and scorecards remain deferred.
+
+| Interview status   | Candidate may   | Recruiter OWNER may          |
+| ------------------ | --------------- | ---------------------------- |
+| `PENDING_RESPONSE` | Accept, Decline | Reschedule, Cancel           |
+| `ACCEPTED`         | —               | Reschedule, Cancel, Complete |
+| `DECLINED`         | —               | Reschedule, Cancel           |
+| `CANCELED`         | — (terminal)    | — (terminal)                 |
+| `COMPLETED`        | — (terminal)    | — (terminal)                 |
 
 ## Documentation
 

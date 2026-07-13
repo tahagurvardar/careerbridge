@@ -31,6 +31,10 @@ import { ApplicationStatusBadge } from "@/features/applications/components/appli
 import { StatusTimeline } from "@/features/applications/components/status-timeline";
 import { getRecruiterApplication } from "@/features/applications/server/data";
 import { formatFileSize } from "@/features/candidate-documents/documents";
+import { InterviewAgendaList } from "@/features/interviews/components/interview-agenda-list";
+import { InterviewScheduleSheet } from "@/features/interviews/components/interview-schedule-sheet";
+import { isApplicationEligibleForInterview } from "@/features/interviews/interviews";
+import { getRecruiterApplicationInterviews } from "@/features/interviews/server/data";
 import { formatJobDate } from "@/features/jobs/format";
 import {
   employmentTypeLabels,
@@ -63,12 +67,17 @@ export default async function RecruiterApplicationDetailPage({
     `/recruiter/applications/${applicationId}`,
   );
   const prisma = getPrismaClient();
-  const [application, noteData] = await Promise.all([
+  const [application, noteData, interviews] = await Promise.all([
     getRecruiterApplication(prisma, session.user.id, applicationId),
     getApplicationNotes(prisma, session.user.id, applicationId),
+    getRecruiterApplicationInterviews(prisma, session.user.id, applicationId),
   ]);
 
   if (!application || !noteData) notFound();
+
+  const canScheduleInterview = isApplicationEligibleForInterview(
+    application.status,
+  );
 
   const { job, candidate } = application;
   const profile = candidate.candidateProfile;
@@ -301,6 +310,53 @@ export default async function RecruiterApplicationDetailPage({
                     No CV was attached to this application.
                   </p>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <CardTitle>Interviews</CardTitle>
+                    <CardDescription className="mt-1.5">
+                      Scheduling stays separate from the application status
+                      controls.
+                    </CardDescription>
+                  </div>
+                  {canScheduleInterview ? (
+                    <InterviewScheduleSheet
+                      triggerLabel="Schedule interview"
+                      target={{
+                        mode: "schedule",
+                        applicationId: application.id,
+                      }}
+                    />
+                  ) : null}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {canScheduleInterview ? null : (
+                  <p className="text-muted-foreground mb-4 text-sm leading-6">
+                    New interviews are unavailable because this application is
+                    in a final state. Existing interview history remains below.
+                  </p>
+                )}
+                <InterviewAgendaList
+                  items={interviews.map((interview) => ({
+                    id: interview.id,
+                    title: interview.title,
+                    format: interview.format,
+                    status: interview.status,
+                    startAt: interview.startAt,
+                    endAt: interview.endAt,
+                    timeZone: interview.timeZone,
+                    jobTitle: interview.application.job.title,
+                    companyName: interview.application.job.company.name,
+                    candidateName: interview.application.candidate.name,
+                  }))}
+                  detailBasePath="/recruiter/interviews"
+                  emptyMessage="No interviews scheduled for this application yet."
+                />
               </CardContent>
             </Card>
 

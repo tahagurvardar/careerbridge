@@ -12,6 +12,11 @@ import {
 } from "@/features/applications/lifecycle";
 import type { RecruiterTargetStatus } from "@/features/applications/schemas";
 import {
+  emitApplicationStatusChangedEmail,
+  emitApplicationSubmittedEmails,
+  emitApplicationWithdrawnEmails,
+} from "@/features/email/server/emit";
+import {
   emitApplicationStatusChangedNotification,
   emitApplicationSubmittedNotifications,
   emitApplicationWithdrawnNotifications,
@@ -154,6 +159,13 @@ export async function createJobApplication(
         candidateUserId: actor.userId,
         candidateName: candidate?.name,
       });
+      await emitApplicationSubmittedEmails(transaction, {
+        applicationId: application.id,
+        companyId: job.companyId,
+        jobTitle: job.title,
+        candidateUserId: actor.userId,
+        candidateName: candidate?.name,
+      });
 
       return { id: application.id };
     });
@@ -231,6 +243,14 @@ export async function withdrawJobApplication(
       candidateName: candidate?.name,
       statusHistoryId: history.id,
     });
+    await emitApplicationWithdrawnEmails(transaction, {
+      applicationId: application.id,
+      companyId: application.job.companyId,
+      jobTitle: application.job.title,
+      candidateUserId: actor.userId,
+      candidateName: candidate?.name,
+      statusHistoryId: history.id,
+    });
 
     return { status: "WITHDRAWN" as const };
   });
@@ -300,6 +320,15 @@ export async function transitionApplicationByRecruiter(
     await emitApplicationStatusChangedNotification(transaction, {
       applicationId: application.id,
       jobId: application.job.id,
+      companyId: application.job.companyId,
+      jobTitle: application.job.title,
+      status: targetStatus,
+      candidateUserId: application.candidateId,
+      actorUserId: actor.userId,
+      statusHistoryId: history.id,
+    });
+    await emitApplicationStatusChangedEmail(transaction, {
+      applicationId: application.id,
       companyId: application.job.companyId,
       jobTitle: application.job.title,
       status: targetStatus,

@@ -31,12 +31,14 @@ export async function SiteHeader() {
           session.user.role === "CANDIDATE"
             ? [
                 { label: "Applications", href: "/candidate/applications" },
+                { label: "Interviews", href: "/candidate/interviews" },
                 { label: "Documents", href: "/candidate/documents" },
                 { label: "Saved jobs", href: "/candidate/saved-jobs" },
               ]
             : session.user.role === "RECRUITER"
               ? [
                   { label: "Companies", href: "/recruiter/companies" },
+                  { label: "Interviews", href: "/recruiter/interviews" },
                   { label: "Invitations", href: "/recruiter/invitations" },
                 ]
               : [],

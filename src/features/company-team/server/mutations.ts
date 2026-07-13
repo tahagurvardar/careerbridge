@@ -19,6 +19,7 @@ import {
 } from "@/features/company-team/team";
 import type { ValidatedInviteRecruiter } from "@/features/company-team/schemas";
 import { emitCompanyInvitationReceivedNotification } from "@/features/notifications/server/emit";
+import { emitCompanyInvitationReceivedEmail } from "@/features/email/server/emit";
 import {
   isRecruiterActor,
   type RecruiterActor,
@@ -336,6 +337,13 @@ export async function createCompanyInvitation(
       });
 
       await emitCompanyInvitationReceivedNotification(tx, {
+        invitationId: invitation.id,
+        companyId,
+        companyName: company.name,
+        inviteeUserId: invitee.id,
+        invitedByUserId: actor.userId,
+      });
+      await emitCompanyInvitationReceivedEmail(tx, {
         invitationId: invitation.id,
         companyId,
         companyName: company.name,

@@ -5,6 +5,7 @@ import {
   Bell,
   Bookmark,
   Building2,
+  CalendarClock,
   ClipboardList,
   FileText,
   Pencil,
@@ -28,6 +29,9 @@ import {
 } from "@/features/applications/server/data";
 import { requireRole } from "@/features/auth/server/session";
 import { getCandidateCurrentResume } from "@/features/candidate-documents/server/data";
+import { InterviewStatusBadge } from "@/features/interviews/components/interview-status-badge";
+import { formatInterviewRange } from "@/features/interviews/interviews";
+import { getCandidateUpcomingInterviews } from "@/features/interviews/server/data";
 import { CompletionCard } from "@/features/candidate-profile/components/completion-card";
 import { getCompletionFromProfile } from "@/features/candidate-profile/completion";
 import { getCandidateProfile } from "@/features/candidate-profile/server/data";
@@ -64,6 +68,7 @@ export default async function CandidateDashboardPage() {
     savedJobDashboard,
     currentResume,
     notifications,
+    interviewSummary,
   ] = await Promise.all([
     getCandidateProfile(prisma, session.user.id),
     getCandidateApplicationStatusCounts(prisma, session.user.id),
@@ -71,7 +76,9 @@ export default async function CandidateDashboardPage() {
     getCandidateSavedJobDashboard(prisma, session.user.id),
     getCandidateCurrentResume(prisma, session.user.id),
     getNotificationSummary(prisma, session.user.id),
+    getCandidateUpcomingInterviews(prisma, session.user.id, new Date()),
   ]);
+  const nextInterview = interviewSummary.next[0] ?? null;
   const completion = getCompletionFromProfile(profile);
   const active =
     counts.SUBMITTED + counts.UNDER_REVIEW + counts.INTERVIEW + counts.OFFER;
@@ -240,6 +247,68 @@ export default async function CandidateDashboardPage() {
                   <Link href="/jobs">Browse jobs</Link>
                 </Button>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarClock
+                    aria-hidden="true"
+                    className="text-primary size-5"
+                  />
+                  Interviews
+                  {interviewSummary.pendingResponseCount > 0 ? (
+                    <Badge>
+                      {interviewSummary.pendingResponseCount} to answer
+                    </Badge>
+                  ) : null}
+                </CardTitle>
+                <CardDescription>Your next scheduled interview</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/candidate/interviews">View all interviews</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {nextInterview ? (
+              <Link
+                href={`/candidate/interviews/${nextInterview.id}`}
+                className="hover:bg-muted/50 focus-visible:ring-ring -mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 focus-visible:ring-2 focus-visible:outline-none"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">
+                    {nextInterview.title}
+                  </span>
+                  <span className="text-muted-foreground block text-xs">
+                    {nextInterview.application.job.title} ·{" "}
+                    {nextInterview.application.job.company.name}
+                  </span>
+                  <span className="text-muted-foreground mt-1 block text-xs">
+                    {formatInterviewRange(
+                      nextInterview.startAt,
+                      nextInterview.endAt,
+                      nextInterview.timeZone,
+                    )}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <InterviewStatusBadge status={nextInterview.status} />
+                  <ArrowUpRight
+                    aria-hidden="true"
+                    className="text-muted-foreground size-4"
+                  />
+                </span>
+              </Link>
+            ) : (
+              <p className="text-muted-foreground text-sm leading-6">
+                No upcoming interviews. When a company schedules one, it appears
+                here.
+              </p>
             )}
           </CardContent>
         </Card>

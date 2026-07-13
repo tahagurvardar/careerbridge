@@ -1,5 +1,6 @@
 import {
   Bell,
+  CalendarClock,
   Inbox,
   RefreshCw,
   Undo2,
@@ -21,6 +22,7 @@ const iconByKey: Record<NotificationIconKey, LucideIcon> = {
   status: RefreshCw,
   withdrawn: Undo2,
   invitation: UserRoundPlus,
+  interview: CalendarClock,
 };
 
 export function NotificationTypeIcon({
