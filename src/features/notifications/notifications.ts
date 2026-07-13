@@ -127,6 +127,23 @@ export function buildApplicationWithdrawnContent(input: {
   };
 }
 
+export function buildCompanyInvitationReceivedContent(input: {
+  companyName: string;
+}): NotificationContent {
+  // Copy carries only the Company's own name — never the invitee email, the
+  // invitation activeKey, or any private membership data. The destination is
+  // the invitee's authenticated invitation list; membership itself is granted
+  // only by explicit acceptance, never by this notification.
+  return {
+    title: boundedText("Company invitation", NOTIFICATION_TITLE_MAX),
+    message: boundedText(
+      `You were invited to join ${input.companyName}.`,
+      NOTIFICATION_MESSAGE_MAX,
+    ),
+    href: safeNotificationHref("/recruiter/invitations"),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Deterministic dedupe keys (server-only inputs; browser never supplies these)
 // ---------------------------------------------------------------------------
@@ -150,6 +167,13 @@ export function applicationWithdrawnDedupeKey(
   recipientUserId: string,
 ): string {
   return `application-withdrawn:${statusHistoryId}:${recipientUserId}`;
+}
+
+export function companyInvitationReceivedDedupeKey(
+  invitationId: string,
+  recipientUserId: string,
+): string {
+  return `company-invitation-received:${invitationId}:${recipientUserId}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +208,7 @@ export const notificationTypeLabels: Record<NotificationType, string> = {
   APPLICATION_SUBMITTED: "New application",
   APPLICATION_STATUS_CHANGED: "Status update",
   APPLICATION_WITHDRAWN: "Application withdrawn",
+  COMPANY_INVITATION_RECEIVED: "Company invitation",
 };
 
 /**
@@ -195,6 +220,7 @@ export const NOTIFICATION_ICON_KEYS = [
   "inbound",
   "status",
   "withdrawn",
+  "invitation",
 ] as const;
 export type NotificationIconKey = (typeof NOTIFICATION_ICON_KEYS)[number];
 
@@ -205,6 +231,7 @@ export const notificationTypeIconKeys: Record<
   APPLICATION_SUBMITTED: "inbound",
   APPLICATION_STATUS_CHANGED: "status",
   APPLICATION_WITHDRAWN: "withdrawn",
+  COMPANY_INVITATION_RECEIVED: "invitation",
 };
 
 // ---------------------------------------------------------------------------

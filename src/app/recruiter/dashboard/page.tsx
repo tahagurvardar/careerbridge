@@ -25,6 +25,7 @@ import { Progress } from "@/components/ui/progress";
 import { requireRole } from "@/features/auth/server/session";
 import { ApplicationStatusBadge } from "@/features/applications/components/application-status-badge";
 import { getRecruiterApplicationDashboard } from "@/features/applications/server/data";
+import { getPendingIncomingInvitationCount } from "@/features/company-team/server/data";
 import { NotificationSummaryList } from "@/features/notifications/components/notification-summary-list";
 import { formatUnreadBadge } from "@/features/notifications/notifications";
 import { getNotificationSummary } from "@/features/notifications/server/data";
@@ -55,11 +56,13 @@ export default async function RecruiterDashboardPage() {
     jobCounts,
     applicationDashboard,
     notifications,
+    incomingInvitationCount,
   ] = await Promise.all([
     getRecruiterProfileWorkspace(prisma, session.user.id),
     getRecruiterJobStatusCounts(prisma, session.user.id),
     getRecruiterApplicationDashboard(prisma, session.user.id),
     getNotificationSummary(prisma, session.user.id),
+    getPendingIncomingInvitationCount(prisma, session.user.id),
   ]);
   const appCounts = applicationDashboard.statusCounts;
   const activeApplications =
@@ -86,34 +89,39 @@ export default async function RecruiterDashboardPage() {
     jobCounts.CLOSED +
     jobCounts.ARCHIVED;
   const recommendation =
-    !profile || profilePercentage < 100
+    incomingInvitationCount > 0
       ? {
-          label: "Complete your recruiter profile",
-          href: "/recruiter/profile/edit",
+          label: "Review company invitations",
+          href: "/recruiter/invitations",
         }
-      : memberships.length === 0
+      : !profile || profilePercentage < 100
         ? {
-            label: "Create your first company",
-            href: "/recruiter/companies/new",
+            label: "Complete your recruiter profile",
+            href: "/recruiter/profile/edit",
           }
-        : publishedCount === 0
+        : memberships.length === 0
           ? {
-              label: "Complete and publish a company",
-              href: `/recruiter/companies/${memberships[0].company.id}`,
+              label: "Create your first company",
+              href: "/recruiter/companies/new",
             }
-          : totalJobs === 0
-            ? { label: "Create your first job", href: "/recruiter/jobs/new" }
-            : jobCounts.PUBLISHED === 0
-              ? {
-                  label: "Publish a complete job",
-                  href: "/recruiter/jobs?status=DRAFT",
-                }
-              : appCounts.SUBMITTED > 0
+          : publishedCount === 0
+            ? {
+                label: "Complete and publish a company",
+                href: `/recruiter/companies/${memberships[0].company.id}`,
+              }
+            : totalJobs === 0
+              ? { label: "Create your first job", href: "/recruiter/jobs/new" }
+              : jobCounts.PUBLISHED === 0
                 ? {
-                    label: "Review new applications",
-                    href: "/recruiter/applications?status=SUBMITTED",
+                    label: "Publish a complete job",
+                    href: "/recruiter/jobs?status=DRAFT",
                   }
-                : { label: "Manage your jobs", href: "/recruiter/jobs" };
+                : appCounts.SUBMITTED > 0
+                  ? {
+                      label: "Review new applications",
+                      href: "/recruiter/applications?status=SUBMITTED",
+                    }
+                  : { label: "Manage your jobs", href: "/recruiter/jobs" };
 
   return (
     <section className="relative overflow-hidden py-12 sm:py-16">
@@ -205,6 +213,38 @@ export default async function RecruiterDashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <UsersRound
+                    aria-hidden="true"
+                    className="text-primary size-5"
+                  />
+                  Company invitations
+                  {incomingInvitationCount > 0 ? (
+                    <Badge>{incomingInvitationCount} pending</Badge>
+                  ) : null}
+                </CardTitle>
+                <CardDescription>
+                  Invitations sent to your Recruiter account
+                </CardDescription>
+              </div>
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/recruiter/invitations">Review invitations</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground text-sm leading-6">
+              {incomingInvitationCount > 0
+                ? `You have ${incomingInvitationCount} active ${incomingInvitationCount === 1 ? "invitation" : "invitations"} awaiting a response.`
+                : "You have no active company invitations."}
+            </p>
+          </CardContent>
+        </Card>
 
         <Card className="mt-6">
           <CardHeader>

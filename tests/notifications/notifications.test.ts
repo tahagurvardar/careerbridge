@@ -10,8 +10,10 @@ import {
   buildApplicationStatusChangedContent,
   buildApplicationSubmittedContent,
   buildApplicationWithdrawnContent,
+  buildCompanyInvitationReceivedContent,
   CANDIDATE_DISPLAY_FALLBACK,
   dedupeRecipientIds,
+  companyInvitationReceivedDedupeKey,
   formatUnreadBadge,
   isNotificationCenterRole,
   NOTIFICATION_CENTER_ROLES,
@@ -28,6 +30,7 @@ const ALL_TYPES: NotificationType[] = [
   "APPLICATION_SUBMITTED",
   "APPLICATION_STATUS_CHANGED",
   "APPLICATION_WITHDRAWN",
+  "COMPANY_INVITATION_RECEIVED",
 ];
 
 describe("notification type labels and icon keys", () => {
@@ -120,6 +123,18 @@ describe("notification copy generation", () => {
     });
   });
 
+  it("builds a company invitation without private invitation data", () => {
+    const content = buildCompanyInvitationReceivedContent({
+      companyName: "Northstar Labs",
+    });
+    expect(content).toEqual({
+      title: "Company invitation",
+      message: "You were invited to join Northstar Labs.",
+      href: "/recruiter/invitations",
+    });
+    expect(JSON.stringify(content)).not.toContain("activeKey");
+  });
+
   it("uses the display-name fallback in copy and never leaks email", () => {
     const content = buildApplicationSubmittedContent({
       applicationId: "app_4",
@@ -179,6 +194,9 @@ describe("dedupe-key generation", () => {
     );
     expect(applicationWithdrawnDedupeKey("hist_2", "user_c")).toBe(
       "application-withdrawn:hist_2:user_c",
+    );
+    expect(companyInvitationReceivedDedupeKey("invite_1", "user_d")).toBe(
+      "company-invitation-received:invite_1:user_d",
     );
   });
 

@@ -89,32 +89,59 @@ enum NotificationType {
   APPLICATION_SUBMITTED
   APPLICATION_STATUS_CHANGED
   APPLICATION_WITHDRAWN
+  COMPANY_INVITATION_RECEIVED
+}
+
+enum CompanyInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+  EXPIRED
+}
+
+enum CompanyMembershipEventType {
+  INVITATION_CREATED
+  INVITATION_ACCEPTED
+  INVITATION_DECLINED
+  INVITATION_REVOKED
+  INVITATION_EXPIRED
+  MEMBER_PROMOTED_TO_OWNER
+  OWNER_DEMOTED_TO_MEMBER
+  MEMBER_REMOVED
+  OWNER_REMOVED
+  MEMBER_LEFT
+  OWNER_LEFT
 }
 
 model User {
-  id                 String                       @id
-  name               String
-  email              String
-  emailVerified      Boolean                      @default(false)
-  image              String?
-  createdAt          DateTime                     @default(now())
-  updatedAt          DateTime                     @updatedAt
-  role               Role                         @default(CANDIDATE)
-  sessions           Session[]
-  accounts           Account[]
-  candidateProfile   CandidateProfile?
-  recruiterProfile   RecruiterProfile?
-  companyMemberships CompanyMembership[]
-  applications       JobApplication[]             @relation("CandidateApplications")
-  savedJobs          SavedJob[]                   @relation("CandidateSavedJobs")
-  statusChanges      ApplicationStatusHistory[]   @relation("StatusChangedBy")
-  documents          CandidateDocument[]          @relation("CandidateDocuments")
-  currentResume      CandidateResume?             @relation("CandidateCurrentResume")
-  documentAccessLogs CandidateDocumentAccessLog[] @relation("DocumentAccessActor")
-  applicationNotes   ApplicationNote[]            @relation("ApplicationNoteAuthor")
-  noteRevisions      ApplicationNoteRevision[]    @relation("ApplicationNoteRevisionActor")
-  notifications      Notification[]               @relation("NotificationRecipient")
-  actedNotifications Notification[]               @relation("NotificationActor")
+  id                      String                       @id
+  name                    String
+  email                   String
+  emailVerified           Boolean                      @default(false)
+  image                   String?
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+  role                    Role                         @default(CANDIDATE)
+  sessions                Session[]
+  accounts                Account[]
+  candidateProfile        CandidateProfile?
+  recruiterProfile        RecruiterProfile?
+  companyMemberships      CompanyMembership[]
+  applications            JobApplication[]             @relation("CandidateApplications")
+  savedJobs               SavedJob[]                   @relation("CandidateSavedJobs")
+  statusChanges           ApplicationStatusHistory[]   @relation("StatusChangedBy")
+  documents               CandidateDocument[]          @relation("CandidateDocuments")
+  currentResume           CandidateResume?             @relation("CandidateCurrentResume")
+  documentAccessLogs      CandidateDocumentAccessLog[] @relation("DocumentAccessActor")
+  applicationNotes        ApplicationNote[]            @relation("ApplicationNoteAuthor")
+  noteRevisions           ApplicationNoteRevision[]    @relation("ApplicationNoteRevisionActor")
+  notifications           Notification[]               @relation("NotificationRecipient")
+  actedNotifications      Notification[]               @relation("NotificationActor")
+  receivedInvitations     CompanyInvitation[]          @relation("CompanyInvitationInvitee")
+  sentInvitations         CompanyInvitation[]          @relation("CompanyInvitationInviter")
+  membershipEventsActed   CompanyMembershipEvent[]     @relation("CompanyMembershipEventActor")
+  membershipEventsSubject CompanyMembershipEvent[]     @relation("CompanyMembershipEventSubject")
 
   @@unique([email])
   @@map("user")
@@ -149,9 +176,11 @@ model Company {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  memberships   CompanyMembership[]
-  jobs          Job[]
-  notifications Notification[]
+  memberships      CompanyMembership[]
+  jobs             Job[]
+  notifications    Notification[]
+  invitations      CompanyInvitation[]
+  membershipEvents CompanyMembershipEvent[]
 
   @@index([isPublished, name])
   @@map("company")
@@ -172,6 +201,76 @@ model CompanyMembership {
   @@index([companyId, role])
   @@index([userId, role])
   @@map("company_membership")
+}
+
+/// Invitation for an EXISTING CareerBridge Recruiter account to join a Company
+/// as a MEMBER. There are no public invitation links, tokens, or emails in this
+/// phase: the invitee responds from their authenticated in-app invitation list,
+/// so authorization is always `inviteeUserId = session user`. Company and User
+/// display data (names, emails) are read through the relations, never
+/// duplicated here. Rows are retained after resolution as history.
+model CompanyInvitation {
+  id              String                  @id @default(cuid())
+  companyId       String
+  inviteeUserId   String
+  // Nullable so invitation history survives removal of the inviter account.
+  invitedByUserId String?
+  status          CompanyInvitationStatus @default(PENDING)
+  // Server-generated "companyId:inviteeUserId" while the invitation is
+  // PENDING, cleared (null) on every terminal transition. The unique
+  // constraint makes "at most one active invitation per Company + invitee"
+  // database-backed (PostgreSQL permits many NULLs). Not a secret and never a
+  // public link token.
+  activeKey       String?                 @unique @db.VarChar(130)
+  expiresAt       DateTime
+  respondedAt     DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  company   Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitee   User                     @relation("CompanyInvitationInvitee", fields: [inviteeUserId], references: [id], onDelete: Cascade)
+  invitedBy User?                    @relation("CompanyInvitationInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  events    CompanyMembershipEvent[]
+
+  // Invitee incoming list (pending first by status filter) and history.
+  @@index([inviteeUserId, status, createdAt])
+  // Company pending invitations and invitation history for the team page.
+  @@index([companyId, status, createdAt])
+  // Expiration sweeps over active invitations.
+  @@index([status, expiresAt])
+  @@map("company_invitation")
+}
+
+/// Immutable, append-only audit record of Company membership and invitation
+/// changes. Created in the same transaction as the domain change it describes;
+/// never edited or deleted in the normal workflow. Visible only to Company
+/// OWNERs. Actor/subject/invitation references are nullable (`SetNull`) so the
+/// audit trail survives account or invitation removal. No free-text metadata.
+model CompanyMembershipEvent {
+  id            String                     @id @default(cuid())
+  companyId     String
+  // The user who performed the action; null for system transitions (expiry)
+  // or after actor account removal.
+  actorUserId   String?
+  // The user the event is about; null after subject account removal.
+  subjectUserId String?
+  invitationId  String?
+  type          CompanyMembershipEventType
+  fromRole      CompanyMembershipRole?
+  toRole        CompanyMembershipRole?
+  createdAt     DateTime                   @default(now())
+
+  company    Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actor      User?              @relation("CompanyMembershipEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  subject    User?              @relation("CompanyMembershipEventSubject", fields: [subjectUserId], references: [id], onDelete: SetNull)
+  invitation CompanyInvitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+
+  // Company audit timeline, newest first.
+  @@index([companyId, createdAt])
+  // Actor-scoped audit lookups.
+  @@index([actorUserId, createdAt])
+  @@index([invitationId])
+  @@map("company_membership_event")
 }
 
 model Job {

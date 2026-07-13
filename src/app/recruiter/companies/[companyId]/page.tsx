@@ -7,7 +7,6 @@ import {
   ExternalLink,
   Pencil,
   Plus,
-  ShieldCheck,
   UsersRound,
 } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -25,6 +24,11 @@ import { Separator } from "@/components/ui/separator";
 import { requireRole } from "@/features/auth/server/session";
 import { ApplicationStatusBadge } from "@/features/applications/components/application-status-badge";
 import { getCompanyApplicationOverview } from "@/features/applications/server/data";
+import { LeaveCompanyControl } from "@/features/company-team/components/team-action-controls";
+import {
+  getOwnerTeamSummary,
+  getOwnMembershipSummary,
+} from "@/features/company-team/server/data";
 import { JobStatusBadge } from "@/features/jobs/components/job-status-badge";
 import { formatJobDate } from "@/features/jobs/format";
 import { getCompanyJobsOverview } from "@/features/jobs/server/data";
@@ -43,12 +47,6 @@ export const metadata: Metadata = {
 };
 
 const deferredSections = [
-  {
-    icon: ShieldCheck,
-    title: "Team members",
-    description:
-      "Membership invitations and team administration are intentionally deferred.",
-  },
   {
     icon: BarChart3,
     title: "Analytics",
@@ -78,12 +76,19 @@ export default async function CompanyWorkspacePage({
 
   const { company, role } = membership;
   const isOwner = role === "OWNER";
-  const [jobsOverview, applicationOverview] = isOwner
-    ? await Promise.all([
-        getCompanyJobsOverview(prisma, session.user.id, company.id),
-        getCompanyApplicationOverview(prisma, session.user.id, company.id),
-      ])
-    : [null, null];
+  const [jobsOverview, applicationOverview, teamSummary, ownMembership] =
+    await Promise.all([
+      isOwner
+        ? getCompanyJobsOverview(prisma, session.user.id, company.id)
+        : Promise.resolve(null),
+      isOwner
+        ? getCompanyApplicationOverview(prisma, session.user.id, company.id)
+        : Promise.resolve(null),
+      isOwner
+        ? getOwnerTeamSummary(prisma, session.user.id, company.id)
+        : Promise.resolve(null),
+      getOwnMembershipSummary(prisma, session.user.id, company.id),
+    ]);
   const readiness = getCompanyPublicationReadiness(company);
   const website = safeHttpUrlSchema.safeParse(company.websiteUrl ?? "");
 
@@ -364,6 +369,75 @@ export default async function CompanyWorkspacePage({
             ) : null}
           </Card>
         ) : null}
+
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <UsersRound
+                    aria-hidden="true"
+                    className="text-primary size-5"
+                  />
+                  {isOwner ? "Team administration" : "Company membership"}
+                </CardTitle>
+                <CardDescription>
+                  {isOwner
+                    ? "Manage Recruiter invitations, roles, ownership, and audit history."
+                    : "Your private company membership and leave controls."}
+                </CardDescription>
+              </div>
+              {isOwner ? (
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/recruiter/companies/${company.id}/team`}>
+                    Manage team
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            {teamSummary ? (
+              <dl className="grid grid-cols-3 gap-3">
+                <div className="bg-muted/60 rounded-xl p-3">
+                  <dt className="text-muted-foreground text-xs">Owners</dt>
+                  <dd className="mt-1 text-xl font-semibold">
+                    {teamSummary.ownerCount}
+                  </dd>
+                </div>
+                <div className="bg-muted/60 rounded-xl p-3">
+                  <dt className="text-muted-foreground text-xs">Members</dt>
+                  <dd className="mt-1 text-xl font-semibold">
+                    {teamSummary.memberCount}
+                  </dd>
+                </div>
+                <div className="bg-muted/60 rounded-xl p-3">
+                  <dt className="text-muted-foreground text-xs">Pending</dt>
+                  <dd className="mt-1 text-xl font-semibold">
+                    {teamSummary.pendingInvitationCount}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <div>
+                <Badge variant="outline">Member</Badge>
+                <p className="text-muted-foreground mt-2 text-sm leading-6">
+                  Team roster, member emails, invitations, and audit history are
+                  visible only to company owners.
+                </p>
+              </div>
+            )}
+            {ownMembership ? (
+              <LeaveCompanyControl
+                companyId={company.id}
+                isFinalOwner={
+                  ownMembership.role === "OWNER" &&
+                  ownMembership.ownerCount === 1
+                }
+              />
+            ) : null}
+          </CardContent>
+        </Card>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {deferredSections.map((item) => {

@@ -34,7 +34,12 @@ export async function SiteHeader() {
                 { label: "Documents", href: "/candidate/documents" },
                 { label: "Saved jobs", href: "/candidate/saved-jobs" },
               ]
-            : [],
+            : session.user.role === "RECRUITER"
+              ? [
+                  { label: "Companies", href: "/recruiter/companies" },
+                  { label: "Invitations", href: "/recruiter/invitations" },
+                ]
+              : [],
       }
     : null;
 
