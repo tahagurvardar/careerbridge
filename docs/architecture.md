@@ -121,7 +121,7 @@ Private workspace reads require an authenticated Recruiter membership. `MEMBER` 
 
 Publishing is an explicit OWNER command. The server requires name, description, industry, headquarters, and a validated HTTP(S) website before setting `isPublished`. Unpublishing is a separate OWNER command. Public list and detail queries always constrain `isPublished: true`, return no membership identity, and treat an unknown or unpublished slug identically. Publication is a visibility state and never Company verification.
 
-Recruiter routes are `/recruiter/profile`, `/recruiter/profile/edit`, `/recruiter/companies`, `/recruiter/companies/new`, `/recruiter/companies/[companyId]`, and `/recruiter/companies/[companyId]/edit`. Public discovery uses `/companies` with bounded URL filters and `/companies/[slug]` for published detail. Invitations, membership administration, Company verification, and uploads remain deferred.
+Recruiter routes are `/recruiter/profile`, `/recruiter/profile/edit`, `/recruiter/companies`, `/recruiter/companies/new`, `/recruiter/companies/[companyId]`, and `/recruiter/companies/[companyId]/edit`; Phase 4B adds `/recruiter/companies/[companyId]/team` and `/recruiter/invitations` (see the Company team membership domain). Public discovery uses `/companies` with bounded URL filters and `/companies/[slug]` for published detail. Company verification and uploads remain deferred.
 
 ### Job domain
 
@@ -184,6 +184,57 @@ A notification is retained with its original recipient after a role change (owne
 | Read another user's        | no                   | no                      | no             | no                      | no    | no     |
 | Mark own read / all read   | yes                  | yes                     | yes            | yes                     | n/a   | no     |
 | Unread header badge        | yes                  | yes                     | yes            | yes                     | no    | no     |
+
+### Company team membership domain
+
+`CompanyInvitation` joins one `Company` to one invitee `User` (`onDelete: Cascade`) with a nullable `invitedByUserId` (`onDelete: SetNull`) so invitation history survives inviter removal. It carries a `CompanyInvitationStatus` (`PENDING`, then terminal `ACCEPTED`/`DECLINED`/`REVOKED`/`EXPIRED`), a server-set 14-day `expiresAt`, a server-set `respondedAt`, and a nullable unique `activeKey` written as `companyId:inviteeUserId` while PENDING and cleared on every terminal transition — PostgreSQL's many-NULLs unique semantics make "at most one active invitation per Company and invitee" a database constraint rather than an application promise. Indexes cover invitee lists, Company lists, and expiry checks (`status, expiresAt`). Invitations target existing Recruiter accounts only; there are no invitation tokens, public URLs, or unregistered-user invitations, so authorization is always `inviteeUserId = session user` or Company OWNER membership. The additive `20260712232412_company_team_membership` migration creates both tables and enums.
+
+Invitation creation is OWNER-only and fully server-resolved: the email is normalized and looked up on the server, missing/Candidate/Admin accounts share one safe "no eligible recruiter account" result, and self-invites, current members, and duplicate active invitations are rejected. A stale PENDING-but-expired invitation is finalized (`EXPIRED`, key cleared, audit event) before a replacement is created. The invitation row, its `INVITATION_CREATED` audit event, the invitee's in-app notification, and — since Phase 4C — the email intent commit in one transaction. Acceptance re-validates invitee identity, PENDING status, expiry, a still-`RECRUITER` account role, and no existing membership inside the transaction, then compare-and-sets `PENDING → ACCEPTED` and creates a `MEMBER` membership; the browser can never choose a role, and the `unique(userId, companyId)` membership constraint stays authoritative under concurrent accepts. Decline and revoke share the same compare-and-set shape, so repeated or racing responses produce exactly one transition and one audit event.
+
+Membership administration (promote, demote, remove, transfer, leave) re-authorizes the acting OWNER and resolves the target membership by `(membershipId, companyId)` inside every transaction; browser input never carries a role, actor, or audit value. Owner-count-reducing operations run under Serializable isolation with a bounded retry on serialization aborts and re-read the OWNER count in-transaction, so concurrent demotions, removals, and leaves cannot write-skew a Company to zero OWNERs — the invariant is "A company must keep at least one owner." Ownership transfer promotes the target before demoting the actor, so an OWNER exists at every instant, and records both role-change events. `CompanyMembershipEvent` is append-only with nullable `SetNull` actor/subject/invitation references, `fromRole`/`toRole`, and Company/date plus actor/date indexes; it has no edit or delete surface and is readable only through the OWNER-scoped team query.
+
+Team routes are `/recruiter/companies/[companyId]/team` (OWNER-only: roster with the only member-email projection in the system, invite form, pending invitations with revoke, role actions, ownership transfer, and recent audit history) and `/recruiter/invitations` (strictly invitee-scoped accept/decline). A MEMBER sees only their own membership on the Company workspace. Unknown, foreign, and MEMBER-accessed team pages share the same not-found behavior; public Company/Job projections and Candidate surfaces expose no membership, email, invitation, count, or audit data; and an invitation notification grants nothing — every destination re-authorizes the session.
+
+### Interview domain
+
+`Interview` belongs to exactly one `JobApplication` (`onDelete: Cascade`); an Application may hold many Interviews over its lifetime. It carries a nullable server-derived `organizerUserId` (`onDelete: SetNull`, so history survives account removal), a bounded `title`, an `InterviewFormat` (`VIDEO`/`PHONE`/`ONSITE`/`OTHER`), an `InterviewStatus`, UTC `startAt`/`endAt` instants plus the separately stored IANA `timeZone` that scheduled them, bounded optional `location`/`meetingUrl`/`instructions`, an optimistic `version` starting at 1, and server-set `candidateRespondedAt`/`canceledAt`/`completedAt` timestamps. Candidate, Job, Company, and Recruiter data are read through authorized relations, never duplicated. Indexes cover the Application list (`applicationId, startAt`), organizer conflict windows and agendas (`organizerUserId, status, startAt`), status-filtered upcoming/past queries (`status, startAt`), and `createdAt`. `InterviewEvent` is the append-only audit trail: `interviewId`, nullable `actorUserId` (`SetNull`), an `InterviewEventType`, `fromStatus` (null for the initial `CREATED`), `toStatus`, a schedule snapshot (`startAt`/`endAt`/`timeZone`, set for `CREATED` and `RESCHEDULED`), and `createdAt`, indexed by `(interviewId, createdAt)` and `(actorUserId, createdAt)`; it has no edit or delete surface. The additive `20260713130051_interview_scheduling_workflow` migration creates both tables, the three enums, and the four interview values on `NotificationType` and `EmailEventType`.
+
+The lifecycle is centralized and database-free, and every mutation is an explicit operation — never a generic status setter:
+
+| Interview status   | Candidate may   | Recruiter OWNER may          |
+| ------------------ | --------------- | ---------------------------- |
+| `PENDING_RESPONSE` | Accept, Decline | Reschedule, Cancel           |
+| `ACCEPTED`         | —               | Reschedule, Cancel, Complete |
+| `DECLINED`         | —               | Reschedule, Cancel           |
+| `CANCELED`         | — (terminal)    | — (terminal)                 |
+| `COMPLETED`        | — (terminal)    | — (terminal)                 |
+
+Scheduling starts at `PENDING_RESPONSE` with version 1. Rescheduling validates the full new schedule, re-runs conflict checks (excluding the interview's own slot), returns the status to `PENDING_RESPONSE`, clears `candidateRespondedAt`, makes the acting OWNER the organizer, and appends a `RESCHEDULED` snapshot event — prior events are never modified. Completion requires an `ACCEPTED` interview whose `startAt` is no more than five minutes in the future (a small documented clock-skew tolerance). Creation and rescheduling additionally require the Application to be active (`SUBMITTED`/`UNDER_REVIEW`/`INTERVIEW`/`OFFER`), re-read inside the transaction; Candidate withdrawal therefore blocks new scheduling while existing interview history remains visible. Interview transitions never mutate `ApplicationStatus` or write `ApplicationStatusHistory` — interview scheduling and the application pipeline are separate controlled workflows.
+
+Schedule validation is shared Zod plus database-free helpers: bounded trimmed title; ISO instants that must carry an explicit zone designator; a 10-minute minimum lead and 365-day horizon for new schedules; a 15-minute to 8-hour duration; an IANA `Region/City` (or `UTC`) timezone validated through `Intl` — raw offsets and bare abbreviations are rejected; HTTPS-only meeting links (no `javascript:`, `data:`, `mailto:`, protocol-relative, credentialed, or whitespace-bearing URLs); and format rules (VIDEO requires a link, ONSITE a location, PHONE forbids a link, OTHER needs at least one attendance detail). The browser submits a UTC instant plus the selected zone (converted client-side by a pure, DST-tested wall-clock helper); the server re-validates both independently and never trusts a formatted display string. Rendering always formats the stored instant in the stored zone with a DST-aware abbreviation, so Candidate and Recruiter read the same underlying instant.
+
+Conflict detection treats `PENDING_RESPONSE` and `ACCEPTED` as slot-occupying: the same Candidate (across all Companies, through `application.candidateId`) and the same organizer cannot hold two active interviews whose ranges overlap (`existing.startAt < proposed.endAt AND existing.endAt > proposed.startAt`; exact adjacency is allowed, and `DECLINED`/`CANCELED`/`COMPLETED` never block). Checks run inside a Serializable transaction with the repository's bounded three-attempt retry on serialization aborts, so concurrent overlapping creations or reschedules resolve to exactly one winner and the loser re-checks fresh state into a safe fixed conflict message that reveals nothing about the conflicting interview. Accept/decline/cancel/complete are compare-and-set `updateMany`s on id + `expectedVersion` + allowed current status that increment the version exactly once; `expectedVersion` is a concurrency token only, never authorization, and a stale writer receives a fixed refresh message.
+
+Recruiter reads and mutations scope through OWNER membership of the Application's Job Company; Candidate reads and responses scope through `application.candidateId = session user`. MEMBER users, cross-Company Recruiters, other Candidates, Admins, and unknown ids share the same not-found behavior. Scheduling, rescheduling, and cancellation atomically emit the Candidate's in-app notification and email outbox (or `SUPPRESSED`) row; accept/decline atomically notifies every current Recruiter OWNER; completion emits nothing in this phase. Copy carries only the Job title and Candidate display name — never the meeting URL, location, instructions, schedule, or Candidate email — and meeting details stay behind the authenticated detail routes, which re-authorize independently of any notification or email. Routes are `/candidate/interviews`, `/candidate/interviews/[interviewId]`, `/recruiter/interviews`, and `/recruiter/interviews/[interviewId]`, plus interview sections on both application detail pages and dashboard cards. The Interview access matrix:
+
+| Capability                 | Candidate (owner) | Company OWNER Recruiter  | Company MEMBER | Other-Company Recruiter | Admin | Public |
+| -------------------------- | ----------------- | ------------------------ | -------------- | ----------------------- | ----- | ------ |
+| Schedule / reschedule      | no                | yes (active Application) | no             | no                      | no    | no     |
+| Cancel / complete          | no                | yes                      | no             | no                      | no    | no     |
+| Accept / decline           | yes (pending)     | no                       | no             | no                      | no    | no     |
+| View detail + meeting link | yes               | yes                      | no             | no                      | no    | no     |
+| View history timeline      | yes               | yes                      | no             | no                      | no    | no     |
+| Agenda list                | own only          | owned Companies only     | none           | none                    | none  | none   |
+
+The Interview event/recipient matrix (notifications and email intent always share the transaction):
+
+| Event                       | In-app + email recipient         | Actor excluded | MEMBER / Admin / other Company |
+| --------------------------- | -------------------------------- | -------------- | ------------------------------ |
+| INTERVIEW_SCHEDULED         | Application Candidate            | yes            | never                          |
+| INTERVIEW_RESCHEDULED       | Application Candidate            | yes            | never                          |
+| INTERVIEW_CANCELED          | Application Candidate            | yes            | never                          |
+| INTERVIEW_RESPONSE_RECEIVED | Current Company Recruiter OWNERs | yes            | never                          |
+| COMPLETED (this phase)      | none                             | —              | never                          |
 
 ## Authentication and authorization
 
@@ -289,6 +340,12 @@ Private Candidate documents use a provider-agnostic storage abstraction in `src/
 | Server-side upload then DB commit | Best-effort object cleanup on failure prevents pointers to missing storage objects            |
 | In-transaction notification emit  | Notifications commit with the application/history write, so they are never orphaned or lost   |
 | Unique `dedupeKey` notifications  | Deterministic server keys make transaction retries and concurrent duplicate events idempotent |
+| Nullable unique invitation key    | At most one active invitation per Company and invitee is enforced by the database             |
+| Serializable owner-count changes  | Concurrent demotion, removal, leave, and transfer can never leave a Company with zero OWNERs  |
+| Append-only membership events     | Every invitation and membership change commits atomically with an immutable audit record      |
+| Transactional email outbox        | Domain writes stay atomic while external provider I/O runs after commit                       |
+| PostgreSQL skip-locked claiming   | Concurrent dispatchers claim disjoint bounded work without process-local locks                |
+| Event-time preference snapshots   | Disabled email remains auditable and never changes independent in-app delivery                |
 
 ## Local migration workflow
 
@@ -306,3 +363,19 @@ The `npm run admin:bootstrap` command requires `ADMIN_BOOTSTRAP_ENABLED=true`, a
 ## Deployment direction
 
 The application is compatible with standard Node.js hosting and is a natural fit for Vercel. A later deployment phase will add managed PostgreSQL, environment separation, preview deployments, migration policy, observability, backups, and CI quality gates.
+
+## Transactional email outbox
+
+`EmailEventType`, `EmailOutboxStatus`, and `EmailDeliveryAttemptStatus` are independent from `NotificationType`. `UserEmailPreference` is unique by user and event; absence means enabled. The authoritative application, invitation, or interview transaction resolves current recipients, renders a database-free template, evaluates the preference, and creates `PENDING` or `SUPPRESSED` intent with a deterministic unique key. In-app notifications are written independently in the same transaction. Phase 5A adds the four interview events without changing this architecture; the Interview email preference matrix is: Candidate — Interview scheduled, Interview rescheduled, Interview canceled; Recruiter — Interview responses; Admin — none. Interview email bodies never contain the meeting URL, location, instructions, or schedule.
+
+`EmailOutbox` retains the immutable recipient-email snapshot, escaped HTML/plain-text content, safe internal destination, event relations, attempt counter, lock state, and provider result. Context and recipient relations use `SetNull` retention. `EmailDeliveryAttempt` is append-only and contains only the attempt number, status, bounded provider/category data, optional provider id, and timestamps—never the recipient, body, raw response, headers, stack, or secrets.
+
+The dispatcher trust boundary is `POST /api/internal/email/dispatch` on the Node runtime. A constant-time comparison authenticates `Authorization: Bearer` against `EMAIL_DISPATCH_SECRET`; failures reveal no configuration details. The handler returns only `claimed`, `sent`, `retryScheduled`, `deadLettered`, and `skipped`. It never accepts queue fields from the browser and exposes no outbox read route.
+
+Claiming runs in a short PostgreSQL transaction: stale `PROCESSING` rows older than ten minutes return to `RETRY_SCHEDULED`, then due `PENDING`/`RETRY_SCHEDULED` rows are selected with `FOR UPDATE SKIP LOCKED` in a maximum batch of 100. Each receives a fresh lock token. Provider calls run after commit; success/failure finalization and its attempt row are another transaction scoped to `status = PROCESSING` and that token. Resend receives the immutable dedupe key as its idempotency key to cover retries across a crash between provider acceptance and database finalization.
+
+Retry delays are bounded at 1 minute, 5 minutes, 30 minutes, 2 hours, and 12 hours. Network, timeout, HTTP 429, and 5xx categories retry until `maxAttempts`; stable permanent rejection/configuration categories and exhausted work become `DEAD_LETTER`. No public manual retry or Admin delivery dashboard exists.
+
+Templates accept server-resolved display strings only, escape all HTML, require plain text, and store an internal destination validated by the shared same-origin helper. At delivery, a server-only base URL turns that path absolute; production requires HTTPS while localhost is allowed outside production. Email possession never authorizes an application, company, CV, note, invitation, or membership. Destination routes perform their normal session/ownership checks, and company invitations still have no public email token.
+
+The default development/test `log` provider performs no network call and logs only a generic simulation message. Production refuses it and lazily validates the Resend key, sender, and HTTPS base URL during dispatch so static builds do not require production secrets. Unregistered-user invitations, marketing/bulk email, tracking, analytics, Admin delivery UI, attachments, and custom templates remain deferred.

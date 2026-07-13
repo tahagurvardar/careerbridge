@@ -33,6 +33,8 @@ import { getCandidateApplication } from "@/features/applications/server/data";
 import { AttachResumeButton } from "@/features/candidate-documents/components/attach-resume-button";
 import { formatFileSize } from "@/features/candidate-documents/documents";
 import { getCandidateCurrentResume } from "@/features/candidate-documents/server/data";
+import { InterviewAgendaList } from "@/features/interviews/components/interview-agenda-list";
+import { getCandidateApplicationInterviews } from "@/features/interviews/server/data";
 import { formatJobDate } from "@/features/jobs/format";
 import {
   employmentTypeLabels,
@@ -56,12 +58,17 @@ export default async function CandidateApplicationDetailPage({
     `/candidate/applications/${applicationId}`,
   );
   const prisma = getPrismaClient();
-  const [application, currentResume] = await Promise.all([
+  const [application, currentResume, interviews] = await Promise.all([
     getCandidateApplication(prisma, session.user.id, applicationId),
     getCandidateCurrentResume(prisma, session.user.id),
+    getCandidateApplicationInterviews(prisma, session.user.id, applicationId),
   ]);
 
   if (!application) notFound();
+
+  const pendingInterviewCount = interviews.filter(
+    (interview) => interview.status === "PENDING_RESPONSE",
+  ).length;
 
   const { job } = application;
   const jobIsPublic = job.status === "PUBLISHED" && job.company.isPublished;
@@ -150,6 +157,45 @@ export default async function CandidateApplicationDetailPage({
                     }
                   />
                 </dl>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <CardTitle>Interviews</CardTitle>
+                    <CardDescription className="mt-1.5">
+                      {pendingInterviewCount > 0
+                        ? `${pendingInterviewCount} ${
+                            pendingInterviewCount === 1
+                              ? "interview needs"
+                              : "interviews need"
+                          } your response.`
+                        : "Interviews scheduled for this application."}
+                    </CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/candidate/interviews">All interviews</Link>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <InterviewAgendaList
+                  items={interviews.map((interview) => ({
+                    id: interview.id,
+                    title: interview.title,
+                    format: interview.format,
+                    status: interview.status,
+                    startAt: interview.startAt,
+                    endAt: interview.endAt,
+                    timeZone: interview.timeZone,
+                    jobTitle: interview.application.job.title,
+                    companyName: interview.application.job.company.name,
+                  }))}
+                  detailBasePath="/candidate/interviews"
+                  emptyMessage="No interviews have been scheduled for this application."
+                />
               </CardContent>
             </Card>
 

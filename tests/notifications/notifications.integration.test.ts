@@ -228,6 +228,13 @@ databaseDescribe(
       // Cleanup hardened against partial setup: every step is a filtered
       // deleteMany that tolerates missing rows, in FK-safe order.
       try {
+        await prisma.emailOutbox.deleteMany({
+          where: { recipientEmail: { startsWith: testPrefix } },
+        });
+      } catch {
+        /* ignore */
+      }
+      try {
         await prisma.notification.deleteMany({
           where: { recipientUserId: { startsWith: testPrefix } },
         });

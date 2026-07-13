@@ -14,6 +14,10 @@ import {
   applicationStatusLabels,
   type ApplicationStatusValue,
 } from "@/features/applications/schemas";
+import {
+  interviewResponseWords,
+  type InterviewResponseValue,
+} from "@/features/interviews/interviews";
 import type { NotificationType } from "@/generated/prisma/enums";
 
 // Bounds mirror the `notification` table columns so composed copy can never
@@ -127,6 +131,71 @@ export function buildApplicationWithdrawnContent(input: {
   };
 }
 
+// Interview notification copy carries only the Job title, the interview id in
+// a safe internal destination, and (for recruiter-facing responses) the
+// Candidate display name. Never the meeting URL, location, instructions,
+// schedule, Candidate email, or any CV/note data — those stay behind the
+// authenticated destination route, which re-authorizes independently.
+
+export function buildInterviewScheduledContent(input: {
+  interviewId: string;
+  jobTitle: string;
+}): NotificationContent {
+  return {
+    title: boundedText("Interview scheduled", NOTIFICATION_TITLE_MAX),
+    message: boundedText(
+      `An interview was scheduled for your application to ${input.jobTitle}.`,
+      NOTIFICATION_MESSAGE_MAX,
+    ),
+    href: safeNotificationHref(`/candidate/interviews/${input.interviewId}`),
+  };
+}
+
+export function buildInterviewRescheduledContent(input: {
+  interviewId: string;
+  jobTitle: string;
+}): NotificationContent {
+  return {
+    title: boundedText("Interview rescheduled", NOTIFICATION_TITLE_MAX),
+    message: boundedText(
+      `Your interview for ${input.jobTitle} was rescheduled.`,
+      NOTIFICATION_MESSAGE_MAX,
+    ),
+    href: safeNotificationHref(`/candidate/interviews/${input.interviewId}`),
+  };
+}
+
+export function buildInterviewCanceledContent(input: {
+  interviewId: string;
+  jobTitle: string;
+}): NotificationContent {
+  return {
+    title: boundedText("Interview canceled", NOTIFICATION_TITLE_MAX),
+    message: boundedText(
+      `Your interview for ${input.jobTitle} was canceled.`,
+      NOTIFICATION_MESSAGE_MAX,
+    ),
+    href: safeNotificationHref(`/candidate/interviews/${input.interviewId}`),
+  };
+}
+
+export function buildInterviewResponseReceivedContent(input: {
+  interviewId: string;
+  jobTitle: string;
+  candidateName: string | null | undefined;
+  response: InterviewResponseValue;
+}): NotificationContent {
+  const candidate = resolveCandidateDisplayName(input.candidateName);
+  return {
+    title: boundedText("Interview response received", NOTIFICATION_TITLE_MAX),
+    message: boundedText(
+      `${candidate} ${interviewResponseWords[input.response]} the interview for ${input.jobTitle}.`,
+      NOTIFICATION_MESSAGE_MAX,
+    ),
+    href: safeNotificationHref(`/recruiter/interviews/${input.interviewId}`),
+  };
+}
+
 export function buildCompanyInvitationReceivedContent(input: {
   companyName: string;
 }): NotificationContent {
@@ -176,6 +245,44 @@ export function companyInvitationReceivedDedupeKey(
   return `company-invitation-received:${invitationId}:${recipientUserId}`;
 }
 
+/** Creation happens once per interview, so the interview id keys the event. */
+export function interviewScheduledDedupeKey(
+  interviewId: string,
+  recipientUserId: string,
+): string {
+  return `interview-scheduled:${interviewId}:${recipientUserId}`;
+}
+
+/**
+ * Each reschedule writes its own immutable RESCHEDULED event, so that event id
+ * keys the notification — every distinct reschedule notifies exactly once.
+ */
+export function interviewRescheduledDedupeKey(
+  rescheduleEventId: string,
+  recipientUserId: string,
+): string {
+  return `interview-rescheduled:${rescheduleEventId}:${recipientUserId}`;
+}
+
+/** Cancellation is a terminal one-time transition; the interview id keys it. */
+export function interviewCanceledDedupeKey(
+  interviewId: string,
+  recipientUserId: string,
+): string {
+  return `interview-canceled:${interviewId}:${recipientUserId}`;
+}
+
+/**
+ * A Candidate may respond once per pending cycle (rescheduling opens a new
+ * cycle), so the immutable response event id keys each response notification.
+ */
+export function interviewResponseReceivedDedupeKey(
+  responseEventId: string,
+  recipientUserId: string,
+): string {
+  return `interview-response-received:${responseEventId}:${recipientUserId}`;
+}
+
 // ---------------------------------------------------------------------------
 // Recipient resolution helpers
 // ---------------------------------------------------------------------------
@@ -209,6 +316,10 @@ export const notificationTypeLabels: Record<NotificationType, string> = {
   APPLICATION_STATUS_CHANGED: "Status update",
   APPLICATION_WITHDRAWN: "Application withdrawn",
   COMPANY_INVITATION_RECEIVED: "Company invitation",
+  INTERVIEW_SCHEDULED: "Interview scheduled",
+  INTERVIEW_RESCHEDULED: "Interview rescheduled",
+  INTERVIEW_CANCELED: "Interview canceled",
+  INTERVIEW_RESPONSE_RECEIVED: "Interview response",
 };
 
 /**
@@ -221,6 +332,7 @@ export const NOTIFICATION_ICON_KEYS = [
   "status",
   "withdrawn",
   "invitation",
+  "interview",
 ] as const;
 export type NotificationIconKey = (typeof NOTIFICATION_ICON_KEYS)[number];
 
@@ -232,6 +344,10 @@ export const notificationTypeIconKeys: Record<
   APPLICATION_STATUS_CHANGED: "status",
   APPLICATION_WITHDRAWN: "withdrawn",
   COMPANY_INVITATION_RECEIVED: "invitation",
+  INTERVIEW_SCHEDULED: "interview",
+  INTERVIEW_RESCHEDULED: "interview",
+  INTERVIEW_CANCELED: "interview",
+  INTERVIEW_RESPONSE_RECEIVED: "inbound",
 };
 
 // ---------------------------------------------------------------------------

@@ -90,6 +90,60 @@ enum NotificationType {
   APPLICATION_STATUS_CHANGED
   APPLICATION_WITHDRAWN
   COMPANY_INVITATION_RECEIVED
+  INTERVIEW_SCHEDULED
+  INTERVIEW_RESCHEDULED
+  INTERVIEW_CANCELED
+  INTERVIEW_RESPONSE_RECEIVED
+}
+
+enum EmailEventType {
+  COMPANY_INVITATION_RECEIVED
+  APPLICATION_SUBMITTED
+  APPLICATION_STATUS_CHANGED
+  APPLICATION_WITHDRAWN
+  INTERVIEW_SCHEDULED
+  INTERVIEW_RESCHEDULED
+  INTERVIEW_CANCELED
+  INTERVIEW_RESPONSE_RECEIVED
+}
+
+enum InterviewFormat {
+  VIDEO
+  PHONE
+  ONSITE
+  OTHER
+}
+
+enum InterviewStatus {
+  PENDING_RESPONSE
+  ACCEPTED
+  DECLINED
+  CANCELED
+  COMPLETED
+}
+
+enum InterviewEventType {
+  CREATED
+  ACCEPTED
+  DECLINED
+  RESCHEDULED
+  CANCELED
+  COMPLETED
+}
+
+enum EmailOutboxStatus {
+  PENDING
+  PROCESSING
+  RETRY_SCHEDULED
+  SENT
+  DEAD_LETTER
+  SUPPRESSED
+}
+
+enum EmailDeliveryAttemptStatus {
+  SENT
+  RETRYABLE_FAILURE
+  PERMANENT_FAILURE
 }
 
 enum CompanyInvitationStatus {
@@ -142,6 +196,10 @@ model User {
   sentInvitations         CompanyInvitation[]          @relation("CompanyInvitationInviter")
   membershipEventsActed   CompanyMembershipEvent[]     @relation("CompanyMembershipEventActor")
   membershipEventsSubject CompanyMembershipEvent[]     @relation("CompanyMembershipEventSubject")
+  emailPreferences        UserEmailPreference[]
+  emailOutbox             EmailOutbox[]                @relation("EmailOutboxRecipient")
+  organizedInterviews     Interview[]                  @relation("InterviewOrganizer")
+  interviewEvents         InterviewEvent[]             @relation("InterviewEventActor")
 
   @@unique([email])
   @@map("user")
@@ -181,6 +239,7 @@ model Company {
   notifications    Notification[]
   invitations      CompanyInvitation[]
   membershipEvents CompanyMembershipEvent[]
+  emailOutbox      EmailOutbox[]
 
   @@index([isPublished, name])
   @@map("company")
@@ -227,10 +286,11 @@ model CompanyInvitation {
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
 
-  company   Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  invitee   User                     @relation("CompanyInvitationInvitee", fields: [inviteeUserId], references: [id], onDelete: Cascade)
-  invitedBy User?                    @relation("CompanyInvitationInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
-  events    CompanyMembershipEvent[]
+  company     Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitee     User                     @relation("CompanyInvitationInvitee", fields: [inviteeUserId], references: [id], onDelete: Cascade)
+  invitedBy   User?                    @relation("CompanyInvitationInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  events      CompanyMembershipEvent[]
+  emailOutbox EmailOutbox[]
 
   // Invitee incoming list (pending first by status filter) and history.
   @@index([inviteeUserId, status, createdAt])
@@ -359,6 +419,8 @@ model JobApplication {
   documentAccessLogs CandidateDocumentAccessLog[]
   notes              ApplicationNote[]
   notifications      Notification[]
+  emailOutbox        EmailOutbox[]
+  interviews         Interview[]
 
   // One application per Candidate per Job, enforced at the database layer.
   @@unique([jobId, candidateId])
@@ -383,6 +445,85 @@ model ApplicationStatusHistory {
 
   @@index([applicationId, createdAt])
   @@map("application_status_history")
+}
+
+/// One scheduled Interview for a JobApplication. An Application may hold many
+/// Interviews over its lifetime. `startAt`/`endAt` are UTC instants; the
+/// separately stored IANA `timeZone` drives display (including DST), never
+/// authorization. `organizerUserId` is always server-derived from the acting
+/// Company OWNER session and survives account removal as null. `version`
+/// starts at 1 and increments on every state or schedule change (optimistic
+/// concurrency token only — never authorization). Interviews are never
+/// hard-deleted in the normal workflow; terminal rows remain as history even
+/// after the Application itself terminates. Candidate, Job, Company, and
+/// Recruiter data are read through authorized relations, never duplicated
+/// here. Meeting URL, location, and instructions are private schedule details
+/// exposed only on authenticated, re-authorized Interview routes.
+model Interview {
+  id                   String          @id @default(cuid())
+  applicationId        String
+  // Null once the organizing user account is removed.
+  organizerUserId      String?
+  title                String          @db.VarChar(120)
+  format               InterviewFormat
+  status               InterviewStatus @default(PENDING_RESPONSE)
+  startAt              DateTime
+  endAt                DateTime
+  timeZone             String          @db.VarChar(100)
+  location             String?         @db.VarChar(300)
+  meetingUrl           String?         @db.VarChar(1000)
+  instructions         String?         @db.VarChar(3000)
+  version              Int             @default(1)
+  candidateRespondedAt DateTime?
+  canceledAt           DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  application JobApplication   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  organizer   User?            @relation("InterviewOrganizer", fields: [organizerUserId], references: [id], onDelete: SetNull)
+  events      InterviewEvent[]
+
+  // Application interview list, oldest schedule first.
+  @@index([applicationId, startAt])
+  // Organizer conflict windows and organizer agenda scans.
+  @@index([organizerUserId, status, startAt])
+  // Status-filtered upcoming/past agenda queries.
+  @@index([status, startAt])
+  @@index([createdAt])
+  @@map("interview")
+}
+
+/// Append-only, immutable audit record of one Interview transition. Created in
+/// the same transaction as the Interview change it describes; never edited or
+/// deleted in the normal workflow and never exposed through an edit/delete
+/// surface. `startAt`/`endAt`/`timeZone` snapshot the schedule for CREATED and
+/// RESCHEDULED events so the full scheduling history survives later changes.
+/// Actor references are nullable (`SetNull`) so history outlives account
+/// removal. No emails, CV metadata, note content, or raw HTML are ever stored.
+model InterviewEvent {
+  id          String             @id @default(cuid())
+  interviewId String
+  // Null for events whose acting user account was later removed.
+  actorUserId String?
+  type        InterviewEventType
+  // Null fromStatus marks the initial CREATED event.
+  fromStatus  InterviewStatus?
+  toStatus    InterviewStatus
+  // Schedule snapshot, set for CREATED and RESCHEDULED events.
+  startAt     DateTime?
+  endAt       DateTime?
+  timeZone    String?            @db.VarChar(100)
+  createdAt   DateTime           @default(now())
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  actor     User?     @relation("InterviewEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  // Interview history timeline, oldest first.
+  @@index([interviewId, createdAt])
+  // Actor-scoped audit lookups.
+  @@index([actorUserId, createdAt])
+  @@map("interview_event")
 }
 
 /// Immutable Candidate document version. Each upload creates a new row; the
@@ -545,6 +686,85 @@ model Notification {
   // Application-scoped notification lookups.
   @@index([applicationId])
   @@map("notification")
+}
+
+/// A User's email-only preference for one supported transactional event.
+/// Missing rows mean enabled. These settings never affect in-app Notifications.
+model UserEmailPreference {
+  id        String         @id @default(cuid())
+  userId    String
+  eventType EmailEventType
+  enabled   Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventType])
+  @@index([userId])
+  @@map("user_email_preference")
+}
+
+/// Private, immutable email-intent snapshot created in the authoritative
+/// business transaction. External provider I/O happens only after queue claim.
+model EmailOutbox {
+  id                String            @id @default(cuid())
+  recipientUserId   String?
+  recipientEmail    String            @db.VarChar(320)
+  eventType         EmailEventType
+  subject           String            @db.VarChar(200)
+  textBody          String            @db.Text
+  htmlBody          String            @db.Text
+  destinationPath   String            @db.VarChar(512)
+  dedupeKey         String            @unique @db.VarChar(200)
+  status            EmailOutboxStatus @default(PENDING)
+  attemptCount      Int               @default(0)
+  maxAttempts       Int               @default(5)
+  nextAttemptAt     DateTime          @default(now())
+  lockedAt          DateTime?
+  lockToken         String?           @db.VarChar(64)
+  sentAt            DateTime?
+  lastErrorCode     String?           @db.VarChar(120)
+  providerMessageId String?           @db.VarChar(255)
+  applicationId     String?
+  companyId         String?
+  invitationId      String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  recipient   User?                  @relation("EmailOutboxRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
+  application JobApplication?        @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  company     Company?               @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  invitation  CompanyInvitation?     @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+  attempts    EmailDeliveryAttempt[]
+
+  @@index([status, nextAttemptAt, createdAt])
+  @@index([status, lockedAt])
+  @@index([recipientUserId, createdAt])
+  @@index([applicationId])
+  @@index([companyId])
+  @@index([invitationId])
+  @@map("email_outbox")
+}
+
+/// Append-only, privacy-bounded audit record for one provider attempt.
+model EmailDeliveryAttempt {
+  id                String                     @id @default(cuid())
+  outboxId          String
+  attemptNumber     Int
+  status            EmailDeliveryAttemptStatus
+  provider          String                     @db.VarChar(40)
+  providerMessageId String?                    @db.VarChar(255)
+  errorCode         String?                    @db.VarChar(120)
+  startedAt         DateTime
+  finishedAt        DateTime
+  createdAt         DateTime                   @default(now())
+
+  outbox EmailOutbox @relation(fields: [outboxId], references: [id], onDelete: Cascade)
+
+  @@unique([outboxId, attemptNumber])
+  @@index([outboxId, createdAt])
+  @@map("email_delivery_attempt")
 }
 
 model CandidateProfile {

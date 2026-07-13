@@ -62,7 +62,7 @@ Status: implemented on `feat/company-recruiter-workspace`.
 
 Exit criteria: a Recruiter can securely represent and publish a Company while unpublished and foreign Company data remains protected.
 
-Deferred from Phase 2B: invitations, membership administration, Company verification, uploads, jobs, applications, Candidate search/CV access, messaging, notifications, AI, and billing.
+Deferred from Phase 2B: invitations, membership administration, Company verification, uploads, jobs, applications, Candidate search/CV access, messaging, notifications, AI, and billing. Invitations and membership administration later shipped in Phase 4B.
 
 ## Phase 2C — Job lifecycle and discovery
 
@@ -177,18 +177,58 @@ Status: implemented on `feat/notifications-activity-center`. This delivers the i
 - Retention with independent destination re-authorization, so a notification never grants access to its underlying entity
 - Unit coverage plus isolated database event, ownership, read-state, privacy, and retention coverage
 
-Deferred from Phase 4A: email/SMS/mobile/browser push, WebSocket/SSE real-time delivery, notification preferences and muting, digest and scheduled notifications, and recruiter-note/CV/saved-job/marketing notifications.
+Deferred from Phase 4A: SMS/mobile/browser push, WebSocket/SSE real-time delivery, in-app muting, digest and scheduled notifications, and recruiter-note/CV/saved-job/marketing notifications. Transactional email and its email-only preferences ship in Phase 4C.
 
 Exit criteria: Candidates and Recruiters receive private, in-app notifications for the application events that concern them, with a secure Activity Center and unread badge, while public and cross-user boundaries stay intact.
 
-## Phase 4 — Membership administration
+## Phase 4B — Company team membership
 
-- Recruiter invitations and email delivery
-- OWNER-managed membership changes
-- Ownership-transfer and last-owner invariants
-- Auditable membership events
+Status: implemented on `feat/company-team-membership`.
 
-Exit criteria: Company owners can safely manage team access without leaving a Company ownerless.
+- Company invitations for existing Recruiter accounts, entered as a normalized email and resolved entirely server-side — no public invitation links, tokens, or unregistered-user invitations
+- Explicit PENDING → ACCEPTED / DECLINED / REVOKED / EXPIRED lifecycle with a fixed 14-day expiry and a database-backed single-active-invitation key
+- Invitee-scoped `/recruiter/invitations` accept/decline flow, with the in-app invitation notification created in the same transaction as the invitation
+- OWNER-only `/recruiter/companies/[companyId]/team` administration: roster with private member emails, invite, revoke, promote, demote, remove, and ownership transfer
+- Serializable last-owner enforcement so demotion, removal, leave, and transfer can never leave a Company without an OWNER
+- Append-only, OWNER-visible `CompanyMembershipEvent` audit history for every invitation and membership change
+- Unit coverage plus isolated database lifecycle, authorization, concurrency, and privacy coverage
+
+Deferred from Phase 4B: external invitation email (shipped in Phase 4C), unregistered-user invitations, public invitation URLs, custom organization roles, fine-grained permissions, billing seats, and Admin membership moderation.
+
+Exit criteria: Company owners safely manage team access, invited Recruiters join only through explicit acceptance, and no operation can leave a Company ownerless.
+
+## Phase 4C — Transactional email delivery
+
+Status: implemented on `feat/transactional-email-delivery`.
+
+- Transactional `EmailOutbox` intent for company invitations and application submission, status-change, and withdrawal events
+- Role-relevant email-only preferences with enabled-by-default absence and auditable event-time `SUPPRESSED` snapshots
+- Central bounded plain-text/escaped-HTML templates and safe internal destinations whose routes re-authorize independently
+- Development/test no-send driver and lazy production Resend adapter with provider idempotency keys
+- Bearer-protected bounded dispatcher, PostgreSQL `SKIP LOCKED` claiming, per-row lock tokens, and ten-minute stale recovery
+- Bounded exponential retry, terminal dead letters, and append-only privacy-safe attempt history
+- Unit and isolated integration coverage for event creation, preferences, claiming, delivery, retry, and privacy boundaries
+
+Deferred from Phase 4C: unregistered-user email invitations, marketing/bulk email, analytics/tracking, custom templates, attachments, public retries, and an Admin delivery dashboard.
+
+Exit criteria: application and invitation events durably create independently configurable email intent without provider work inside business transactions or exposure of delivery infrastructure.
+
+## Phase 5A — Interview scheduling and calendar workflow
+
+Status: implemented on `feat/interview-scheduling`.
+
+- `Interview` and append-only `InterviewEvent` domain with explicit format/status/event enums and OWNER-derived organizers
+- Explicit lifecycle operations — schedule, candidate accept/decline, reschedule, cancel, complete — with optimistic `expectedVersion` compare-and-set and terminal-state protection
+- UTC instants plus independently validated IANA timezone storage, DST-aware display, and format-specific schedule validation (HTTPS-only meeting links)
+- Candidate and organizer overlap prevention for active interviews under Serializable isolation with bounded retry; adjacent slots allowed and terminal statuses non-blocking
+- Active-Application eligibility re-checked in-transaction; interview scheduling and Application status remain separate controlled workflows
+- Atomic in-app notifications and email outbox (or `SUPPRESSED`) rows for scheduled/rescheduled/canceled (Candidate) and responses (Recruiter OWNERs), with role-scoped email preferences
+- Candidate and Recruiter agenda routes, interview detail/management routes, application-detail sections, dashboard cards, and navigation
+- Unit and isolated integration coverage for lifecycle, validation, conflicts, concurrency, atomicity, privacy, and retention
+
+Deferred from Phase 5A: Google/Outlook/Apple calendar sync, OAuth calendar connections, Meet/Zoom/Teams link generation, calendar webhooks, drag-and-drop/FullCalendar UI, recurring interviews, interviewer availability and panels, candidate self-scheduling and public booking links, ICS attachments/download, automated/SMS/push reminders, scorecards, feedback forms, video calling, recording, transcription, and AI interview summaries or scoring.
+
+Exit criteria: Company OWNERs can safely schedule and manage conflict-free interviews that Candidates can answer, with immutable history and transactional notification/email intent, without weakening any existing authorization or privacy boundary.
 
 ## Phase 5 — Admin, trust, and analytics
 
@@ -203,7 +243,7 @@ Exit criteria: platform operators can safely manage and understand production ac
 ## Phase 6 — Communication
 
 - In-product notifications (initial application-event delivery shipped in Phase 4A)
-- Email notification infrastructure and preferences
+- Transactional email infrastructure and preferences (shipped in Phase 4C)
 - Candidate-recruiter messaging if validated by product needs
 - Delivery, read, and retry behavior
 

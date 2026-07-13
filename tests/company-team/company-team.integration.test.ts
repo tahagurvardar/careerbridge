@@ -125,6 +125,9 @@ databaseDescribe(
 
     afterAll(async () => {
       if (prisma) {
+        await prisma.emailOutbox.deleteMany({
+          where: { recipientEmail: { startsWith: testPrefix } },
+        });
         await prisma.company.deleteMany({
           where: { id: { in: [...companyIds] } },
         });

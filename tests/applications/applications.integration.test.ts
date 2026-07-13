@@ -297,6 +297,9 @@ databaseDescribe(
     afterAll(async () => {
       if (!prisma) return;
       // Prefix matches guarantee cleanup even after a partial setup failure.
+      await prisma.emailOutbox.deleteMany({
+        where: { recipientEmail: { startsWith: testPrefix } },
+      });
       await prisma.company.deleteMany({
         where: {
           OR: [

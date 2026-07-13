@@ -53,10 +53,11 @@ The initial product MVP is expected to include:
 4. Job listing lifecycle and public discovery
 5. Saved jobs and application submission
 6. Candidate and recruiter application tracking
-7. Basic admin moderation and operational views
-8. Essential product analytics and audit records
+7. Interview scheduling with candidate responses
+8. Basic admin moderation and operational views
+9. Essential product analytics and audit records
 
-## Current phase: In-app notifications and activity center
+## In-app notifications and activity center (Phase 4A)
 
 Phase 4A adds in-app notifications on the completed identity, profile, Company, Job, application, saved-job, CV-document, and Recruiter-note foundations:
 
@@ -71,7 +72,7 @@ Phase 4A adds in-app notifications on the completed identity, profile, Company, 
 
 Notifications are private to their recipient. A notification is retained with its original recipient after a role change and never grants access to the entity it references — the destination route re-authorizes independently. No public, cross-user, MEMBER, Admin, or search surface exposes a notification record, count, title, message, read state, recipient, or dedupe key. Every prior authorization, privacy, CV-access, and note-privacy boundary remains unchanged.
 
-Email ownership is not verified in Phase 1, and no email, SMS, push, or real-time delivery exists yet. The product must not claim real-time delivery or that an address has been verified until that infrastructure is implemented.
+Email address ownership is still not verified, and no SMS, push, or real-time delivery exists. Transactional email arrives in Phase 4C as an explicitly asynchronous queue; the product must not claim real-time delivery or that an address has been verified until that infrastructure is implemented.
 
 ## Candidate profile access matrix
 
@@ -171,22 +172,105 @@ Notes are internal to the hiring team: only a Recruiter who OWNs the application
 | Other-Company Recr. | No                      | No                         | No                      | Own only                 | Denied              | Own only      | Yes         |
 | Admin               | No                      | No                         | No                      | Redirect to Admin        | Denied              | n/a           | None        |
 
-Recipients are resolved server-side from fresh OWNER membership (with a `RECRUITER` user role) or the owning Candidate; the browser never supplies a recipient, actor, type, title, message, destination, read time, or dedupe key. Every read and mark-read is scoped to the session user's own rows, so no Candidate, Recruiter, Company OWNER, or Admin can read or modify another user's notifications, and browser-facing projections omit the dedupe key, recipient/actor ids, and relation ids. The `/notifications` Activity Center serves Candidates and Recruiters only; Admins have no implicit Notification Center. A notification is retained with its original recipient after a role change and never authorizes the underlying application — the destination route re-authorizes independently. No public Job, Company, or search surface exposes any notification data.
+Recipients are resolved server-side from fresh OWNER membership (with a `RECRUITER` user role) or the owning Candidate; the browser never supplies a recipient, actor, type, title, message, destination, read time, or dedupe key. Every read and mark-read is scoped to the session user's own rows, so no Candidate, Recruiter, Company OWNER, or Admin can read or modify another user's notifications, and browser-facing projections omit the dedupe key, recipient/actor ids, and relation ids. The `/notifications` Activity Center serves Candidates and Recruiters only; Admins have no implicit Notification Center. A notification is retained with its original recipient after a role change and never authorizes the underlying application — the destination route re-authorizes independently. No public Job, Company, or search surface exposes any notification data. Phase 4B adds the company-invitation notification and Phase 5A adds the four interview events under these same ownership, atomicity, and dedupe rules: scheduled/rescheduled/canceled notify the owning Candidate, and interview responses notify every current Company OWNER.
 
-## Intentionally deferred after Phase 4A
+## Company team membership (Phase 4B)
 
-- Email verification and real email delivery
+A Company OWNER builds a hiring team by inviting existing CareerBridge Recruiter accounts by email. The server normalizes the address and resolves the account itself: missing accounts, Candidate accounts, and Admin accounts all receive the same safe "no eligible recruiter account" response, the inviter cannot invite themselves or a current member, and there are no public invitation links, tokens, or unregistered-user invitations. Each invitation stays PENDING until the invitee accepts or declines it, an OWNER revokes it, or its fixed 14-day expiry passes; all four outcomes are terminal, historical rows are retained, and a database-backed key allows at most one active invitation per Company and invitee. Creating an invitation writes the invitation, its audit event, and the invitee's in-app notification in one transaction.
+
+Acceptance re-checks everything server-side — invitee identity, PENDING status, expiry, a still-RECRUITER account role, and no existing membership — and always creates a MEMBER membership. The browser can never choose a role; OWNER is granted only later through explicit promotion or ownership transfer. Every administration action (promote, demote, remove, transfer, leave) re-authorizes the acting OWNER inside its transaction, writes an immutable `CompanyMembershipEvent`, and respects the last-owner invariant — "A company must keep at least one owner." — enforced with Serializable transactions so even concurrent demotions, removals, or leaves cannot strand a Company. Ownership transfer promotes the target MEMBER before demoting the acting OWNER, so the Company holds an OWNER at every instant.
+
+## Company Team access matrix
+
+| Actor               | Team page + member emails | Invite / revoke     | Promote / demote / remove / transfer | Audit history       | Leave own membership         |
+| ------------------- | ------------------------- | ------------------- | ------------------------------------ | ------------------- | ---------------------------- |
+| Signed out          | Redirect to sign-in       | Redirect to sign-in | Redirect to sign-in                  | Redirect to sign-in | Redirect to sign-in          |
+| Candidate           | Redirect to own dashboard | Denied              | Denied                               | Denied              | n/a (no membership)          |
+| Recruiter OWNER     | Own Company only          | Own Company only    | Own Company only                     | Own Company only    | Only while another OWNER     |
+| Recruiter MEMBER    | Not found                 | Denied              | Denied                               | Denied              | Allowed                      |
+| Other-Company Recr. | Not found                 | Denied              | Denied                               | Denied              | n/a (no membership)          |
+| Admin               | Redirect to Admin         | Denied              | Denied                               | Denied              | n/a (no implicit membership) |
+
+## Invitation access matrix
+
+| Actor             | Create                            | View incoming        | Accept                 | Decline                | Revoke                   |
+| ----------------- | --------------------------------- | -------------------- | ---------------------- | ---------------------- | ------------------------ |
+| Company OWNER     | Own Company only                  | Own invitations only | n/a                    | n/a                    | Own Company PENDING only |
+| Company MEMBER    | Denied                            | Own invitations only | n/a                    | n/a                    | Denied                   |
+| Invited Recruiter | n/a                               | Own invitations only | Own PENDING, unexpired | Own PENDING, unexpired | n/a                      |
+| Other Recruiter   | Denied (unless OWNER elsewhere)   | Own invitations only | Denied                 | Denied                 | Denied                   |
+| Candidate / Admin | Denied (cannot be invited either) | No access            | Denied                 | Denied                 | Denied                   |
+
+## Membership action matrix
+
+| Action             | Allowed actor | Target requirement                                     | Last-owner rule             | Audit event                                            |
+| ------------------ | ------------- | ------------------------------------------------------ | --------------------------- | ------------------------------------------------------ |
+| Promote            | Company OWNER | Same-Company MEMBER with a Recruiter account           | n/a                         | `MEMBER_PROMOTED_TO_OWNER`                             |
+| Demote             | Company OWNER | Same-Company OWNER                                     | Blocked for the final OWNER | `OWNER_DEMOTED_TO_MEMBER`                              |
+| Remove             | Company OWNER | Same-Company member, not self                          | Blocked for the final OWNER | `MEMBER_REMOVED` / `OWNER_REMOVED`                     |
+| Transfer ownership | Company OWNER | Same-Company MEMBER with a Recruiter account, not self | Never drops below one OWNER | `MEMBER_PROMOTED_TO_OWNER` + `OWNER_DEMOTED_TO_MEMBER` |
+| Leave              | Member (self) | Own membership derived from the session                | Final OWNER cannot leave    | `MEMBER_LEFT` / `OWNER_LEFT`                           |
+
+Team data is private: member emails appear only on the OWNER-scoped team page, MEMBER users see only their own membership on the Company workspace, and no public Company or Job surface, Candidate page, or search metadata exposes memberships, emails, invitations, counts, or audit events. Possessing an invitation notification grants nothing — membership exists only after explicit acceptance, and every destination route re-authorizes the session. Custom organization roles, fine-grained permissions, and billing seats remain deferred.
+
+## Transactional email delivery (Phase 4C)
+
+Candidates and Recruiters can manage role-relevant transactional email preferences at `/settings/notifications`; missing rows default enabled, in-app notifications always remain enabled, and preferences are snapshotted when an event occurs. Supported delivery is limited to existing-Recruiter company invitations, OWNER notification of new/withdrawn applications, and Candidate notification of application status changes.
+
+Every email intent is written atomically with its business event and in-app notification, then delivered asynchronously by a private authenticated dispatcher. Bounded templates provide escaped HTML, plain text, and independently authorized CareerBridge destinations. The production provider is Resend behind a server-only interface; development/test cannot send network email. Retry, stale-lock recovery, idempotent claiming, unique event keys, dead letters, and append-only attempts provide durable delivery without exposing infrastructure to users.
+
+## Interview scheduling (Phase 5A)
+
+A Company OWNER Recruiter schedules interviews for active applications to Jobs their Company owns, then reschedules, cancels, or (after an accepted interview starts) marks them completed. The owning Candidate reviews each interview's schedule, format, and attendance details on an authenticated detail page, accepts or declines while it is pending, and must respond again after every reschedule. Both roles get an agenda (`/candidate/interviews`, `/recruiter/interviews`) with upcoming/past/all filters and pending-response counts, interview sections on the application detail pages, dashboard cards for the next upcoming interview, and navigation entries.
+
+Times are stored as UTC instants with the scheduling IANA timezone preserved separately and rendered DST-aware, so both parties always see the same instant. Active interviews (awaiting response or accepted) can never overlap for the same Candidate or the same organizer; back-to-back slots are allowed, and declined/canceled/completed interviews do not block a time. Every change appends an immutable history event with actor and schedule snapshot — visible only to the owning Candidate and Company OWNERs — and stale concurrent edits are rejected with a refresh prompt rather than overwriting newer changes. Scheduling never changes the application's pipeline status; the two workflows stay independent.
+
+The Candidate is notified in-app (and by preference-respecting email) when an interview is scheduled, rescheduled, or canceled; every current Company OWNER is notified when the Candidate responds. Completion sends nothing in this phase. Notification and email copy carry only the Job title and Candidate display name — meeting links, locations, and instructions stay behind the authenticated interview pages, and possessing a notification or email never grants access.
+
+## Interview access matrix
+
+| Capability                 | Candidate (owner) | Company OWNER Recruiter  | Company MEMBER | Other-Company Recruiter | Admin | Public |
+| -------------------------- | ----------------- | ------------------------ | -------------- | ----------------------- | ----- | ------ |
+| Schedule / reschedule      | no                | yes (active application) | no             | no                      | no    | no     |
+| Cancel / complete          | no                | yes                      | no             | no                      | no    | no     |
+| Accept / decline (pending) | yes               | no                       | no             | no                      | no    | no     |
+| View schedule + details    | yes               | yes                      | no             | no                      | no    | no     |
+| View history timeline      | yes               | yes                      | no             | no                      | no    | no     |
+| Agenda list                | own only          | owned Companies only     | none           | none                    | none  | none   |
+
+## Interview email preference matrix
+
+| Email event                 | Candidate setting     | Recruiter setting   | Admin     |
+| --------------------------- | --------------------- | ------------------- | --------- |
+| Interview scheduled         | Interview scheduled   | Not shown           | Not shown |
+| Interview rescheduled       | Interview rescheduled | Not shown           | Not shown |
+| Interview canceled          | Interview canceled    | Not shown           | Not shown |
+| Interview response received | Not shown             | Interview responses | Not shown |
+
+Missing preferences default to enabled; disabling an event suppresses only email (an auditable `SUPPRESSED` record is kept) while in-app notifications always remain.
+
+## Intentionally deferred after Phase 5A
+
+- Google, Outlook, and Apple calendar synchronization and OAuth calendar connections
+- Google Meet, Zoom, and Microsoft Teams link generation and calendar provider webhooks
+- FullCalendar-style drag-and-drop calendar UI and recurring interviews
+- Interview panels, interviewer availability rules, and candidate self-scheduling or public booking links
+- ICS attachments and downloads
+- Automated interview reminders (email, SMS, or push)
+- Interview scorecards, feedback forms, video calling, recording, transcription, and AI interview summaries or scoring
+- Email address ownership verification
 - Password reset and account recovery
 - Social authentication
 - Avatar upload and public Candidate document sharing
 - Dedicated CV malware scanning and quarantine
 - AI resume parsing, OCR, CV scoring, and match analysis
-- Recruiter invitations, email invitations, and membership administration
+- Custom organization roles, fine-grained team permissions, and billing seats
 - Company verification and logo/document upload
 - Recruiter document uploads, offer documents, and identity/certificate documents
 - Note @mentions, note notifications, rich-text/Markdown notes, note attachments, and AI note summarization
-- Email, SMS, mobile push, browser push, and real-time (WebSocket/SSE) notification delivery
-- Notification preferences, muting, digests, and scheduled notifications
+- SMS, mobile push, browser push, and real-time (WebSocket/SSE) notification delivery
+- In-app muting, digests, and scheduled notifications
+- Unregistered-user email invitations, marketing/bulk email, delivery analytics, and an Admin delivery dashboard
 - Recruiter-note, CV-download, saved-job, job-recommendation, and marketing notifications
 - Bulk application actions
 - Candidate matching, job recommendations, and saved-search alerts
