@@ -285,14 +285,32 @@ Deferred from Phase 6C: automatic translation, external translation APIs, a cont
 
 Exit criteria: all application-owned product surfaces and existing delivery events are available in four locales while authorization, privacy, stored content, delivery guarantees, public visibility, and analytics values remain unchanged.
 
-## Phase 7 — Deployment and operational hardening
+## Phase 7A — Production deployment and operational hardening
 
-- Managed PostgreSQL environment and migration promotion policy
-- Preview/production environment separation and secret management
-- CI quality gates, preview deployments, and rollback procedures
-- Observability, alerting, backups, and recovery exercises
-- Production email-provider configuration and controlled dispatcher scheduling
-- Performance, accessibility, security, rate-limit, and abuse testing
+Status: repository implementation complete on `feat/production-deployment-devops`; external production infrastructure and deployment are not yet verified.
+
+- Production-aware server-only environment validation with safe name-only failures
+- Dedicated Neon production pooled/runtime and direct/migration policy
+- Build-before-migrate `prisma migrate deploy` and expand-and-contract compatibility
+- GitHub pull-request/main CI with explicit isolated integration database gating
+- Manual protected GitHub `production` Environment workflow using a Vercel prebuilt artifact
+- Exact production/Preview Better Auth origins, secure cookies, and no wildcard trust
+- Production-only private S3-compatible CV policy and Resend delivery policy
+- Separate bearer-authenticated Vercel Cron GET adapter over the existing lock-safe dispatcher
+- Bounded database readiness endpoint, production headers, redacted structured logging, and cache review
+- Canonical four-locale metadata, moderated sitemap, private-route robots policy, and read-only smoke tooling
+- Deployment/operations, rollback, recovery, provider-outage, and incident runbooks
+
+External setup still required: Vercel project/domain, dedicated Neon production database and recovery policy, private object storage, Resend sender/key, GitHub secrets/approval rules, Cron schedule after plan review, production migration/deployment, and launch QA.
+
+## Phase 7B — Final QA, Security, Portfolio Launch
+
+- Full production Candidate, Recruiter, Admin, role-denial, suspension, membership, CV, note, Interview, Notification, EmailOutbox, Analytics, and locale smoke matrix with approved synthetic fixtures
+- Desktop, 390px mobile, light/dark, keyboard, screen-reader, hydration, console, and cross-locale editorial verification
+- Nonce-based Content Security Policy design/test, rate-limit/abuse verification, dependency/security review, and secret-rotation rehearsal
+- Performance/Core Web Vitals and accessibility testing against the production domain
+- Backup restore exercise, migration recovery drill, alerting/monitoring ownership, and incident tabletop
+- Approved real-email/provider and Cron verification, synthetic CV storage verification, cleanup, and final portfolio launch decision
 
 ## Phase 8 — Responsible AI assistance
 

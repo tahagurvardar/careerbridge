@@ -1,0 +1,108 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Full commit SHA already reviewed for production
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: careerbridge-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 22.23.1
+  VERCEL_CLI_VERSION: 56.1.0
+
+jobs:
+  deploy:
+    name: Build, migrate, deploy, and smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      DIRECT_URL: ${{ secrets.PRODUCTION_DIRECT_URL }}
+    steps:
+      - name: Check out the exact production commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 1
+
+      - name: Verify exact commit and required deployment secrets
+        shell: bash
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit_sha }}
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$REQUESTED_COMMIT" ]; then
+            echo "::error::The checked-out commit does not match commit_sha."
+            exit 1
+          fi
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID DIRECT_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Required production secret is missing: $name"
+              exit 1
+            fi
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Pull Vercel production configuration
+        run: >-
+          npx --yes vercel@${VERCEL_CLI_VERSION} pull
+          --yes
+          --environment=production
+          --token="$VERCEL_TOKEN"
+
+      - name: Validate production environment
+        run: npm run env:validate:production
+
+      - name: Generate and validate Prisma Client
+        run: |
+          npx prisma generate
+          npx prisma validate
+
+      - name: Run production quality gates
+        run: |
+          npm test
+          npm run lint
+          npm run typecheck
+          npm run format:check
+
+      - name: Build the Vercel production artifact
+        run: >-
+          npx --yes vercel@${VERCEL_CLI_VERSION} build
+          --prod
+          --token="$VERCEL_TOKEN"
+
+      - name: Apply pending production migrations after the build succeeds
+        run: npm run prisma:migrate:deploy
+
+      - name: Deploy the already-built artifact
+        id: deploy
+        shell: bash
+        run: |
+          deployment_url="$(npx --yes vercel@${VERCEL_CLI_VERSION} deploy --prebuilt --prod --token="$VERCEL_TOKEN" | tail -n 1)"
+          if [ -z "$deployment_url" ]; then
+            echo "::error::Vercel did not return a deployment URL."
+            exit 1
+          fi
+          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
+
+      - name: Run production smoke checks
+        run: npm run smoke:production -- "${{ steps.deploy.outputs.url }}"

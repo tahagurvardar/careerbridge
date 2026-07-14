@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { getSecurityHeaders } from "./src/lib/security-headers";
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   logging: {
@@ -17,6 +19,14 @@ const nextConfig: NextConfig = {
   },
   turbopack: {
     root: process.cwd(),
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: getSecurityHeaders(process.env),
+      },
+    ];
   },
 };
 

@@ -6,6 +6,7 @@ import { betterAuth } from "better-auth/minimal";
 import { nextCookies } from "better-auth/next-js";
 
 import { isPublicRole } from "@/features/auth/roles";
+import { resolveAuthRuntimeConfiguration } from "@/lib/env/server";
 import { getPrismaClient } from "@/lib/prisma";
 
 const serverOwnedModerationFields = [
@@ -19,28 +20,6 @@ const serverOwnedModerationFields = [
 // action (src/i18n/actions.ts) — never through generic auth user updates.
 const serverOwnedPreferenceFields = ["preferredLocale"] as const;
 
-function getAuthEnvironment() {
-  const baseURL = process.env.BETTER_AUTH_URL;
-  const secret = process.env.BETTER_AUTH_SECRET;
-
-  if (!baseURL || !secret) {
-    throw new Error(
-      "Better Auth is not configured. Set BETTER_AUTH_URL and BETTER_AUTH_SECRET.",
-    );
-  }
-
-  const parsedBaseURL = new URL(baseURL);
-
-  if (
-    process.env.NODE_ENV === "production" &&
-    parsedBaseURL.protocol !== "https:"
-  ) {
-    throw new Error("BETTER_AUTH_URL must use HTTPS in production.");
-  }
-
-  return { baseURL: parsedBaseURL.origin, secret };
-}
-
 export function createAuth({
   enableNextCookies = true,
   prismaClient,
@@ -48,10 +27,9 @@ export function createAuth({
   enableNextCookies?: boolean;
   prismaClient?: ReturnType<typeof getPrismaClient>;
 } = {}) {
-  const { baseURL, secret } = getAuthEnvironment();
+  const { baseURL, secret, trustedOrigins, secureCookies } =
+    resolveAuthRuntimeConfiguration();
   const databaseClient = prismaClient ?? getPrismaClient();
-  const isProduction = process.env.NODE_ENV === "production";
-  const developmentOrigins = ["http://localhost:3000", "http://127.0.0.1:3000"];
 
   return betterAuth({
     appName: "CareerBridge",
@@ -60,9 +38,7 @@ export function createAuth({
     database: prismaAdapter(databaseClient, {
       provider: "postgresql",
     }),
-    trustedOrigins: isProduction
-      ? [baseURL]
-      : Array.from(new Set([baseURL, ...developmentOrigins])),
+    trustedOrigins,
     emailAndPassword: {
       enabled: true,
       autoSignIn: true,
@@ -157,11 +133,11 @@ export function createAuth({
     },
     advanced: {
       cookiePrefix: "careerbridge",
-      useSecureCookies: isProduction,
+      useSecureCookies: secureCookies,
       defaultCookieAttributes: {
         httpOnly: true,
         sameSite: "lax",
-        secure: isProduction,
+        secure: secureCookies,
       },
     },
     plugins: enableNextCookies ? [nextCookies()] : [],

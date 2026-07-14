@@ -2,7 +2,7 @@
 
 CareerBridge is a production-oriented job and internship platform designed to connect ambitious candidates with thoughtful employers. The long-term product combines structured hiring workflows with responsible AI assistance while keeping transparency, accessibility, and human decision-making at the center.
 
-> **Project status:** Phase 4C Transactional Email Delivery is implemented on **feat/transactional-email-delivery**, on top of the merged Phase 4B Company Team Membership. Company OWNERs invite existing Recruiter accounts, administer roles with a database-enforced last-owner invariant, and review audit history; application and invitation events now also queue private, preference-aware transactional email delivered by an authenticated dispatcher. SMS, push, and real-time delivery remain deferred.
+> **Project status:** Phase 7A repository hardening is implemented on **feat/production-deployment-devops** after the four-locale Phase 6C product. The repository now includes production environment validation, Vercel/Neon deployment policy, CI and manual prebuilt deployment workflows, secure Cron and health adapters, production headers/log redaction, smoke tooling, and operator runbooks. No production infrastructure, migration, deployment, Cron schedule, real email, or public launch is claimed; those remain explicitly configured and verified external steps.
 
 ## Foundation preview
 
@@ -54,7 +54,7 @@ The current application provides:
 
 ### Prerequisites
 
-- Node.js 20.9 or newer
+- Node.js 20.9 or newer (Node 22.23.1 is pinned for CI/deployment)
 - npm
 - A Neon PostgreSQL development database
 
@@ -74,6 +74,7 @@ Configure the required values without committing them:
 
 - `DATABASE_URL`: pooled Neon application connection
 - `DIRECT_URL`: direct Neon Prisma CLI/migration connection
+- `APP_BASE_URL`: canonical application origin (production HTTPS origin for metadata and operations)
 - `BETTER_AUTH_SECRET`: high-entropy secret of at least 32 characters
 - `BETTER_AUTH_URL`: application origin, normally `http://localhost:3000` locally
 - `DOCUMENT_STORAGE_DRIVER`: `local` for development/test (default) or `s3` for production-oriented private storage
@@ -103,22 +104,25 @@ The command refuses production execution, validates all inputs, writes only thro
 
 ## Commands
 
-| Command                    | Purpose                                      |
-| -------------------------- | -------------------------------------------- |
-| npm run dev                | Start the local Next.js development server   |
-| npm run build              | Create a production build                    |
-| npm run start              | Serve the production build                   |
-| npm run lint               | Run ESLint                                   |
-| npm run typecheck          | Run TypeScript without emitting files        |
-| npm run format             | Format the repository with Prettier          |
-| npm run format:check       | Verify formatting                            |
-| npm test                   | Run database-free unit tests                 |
-| npm run test:integration   | Run explicitly enabled database tests        |
-| npm run admin:bootstrap    | Intentionally create a development Admin     |
-| npm run prisma:generate    | Generate the Prisma client                   |
-| npm run prisma:migrate:dev | Create/apply a development migration         |
-| npm run prisma:validate    | Validate the Prisma configuration and schema |
-| npm run prisma:studio      | Open Prisma Studio after database setup      |
+| Command                         | Purpose                                                 |
+| ------------------------------- | ------------------------------------------------------- |
+| npm run dev                     | Start the local Next.js development server              |
+| npm run build                   | Create a production build                               |
+| npm run start                   | Serve the production build                              |
+| npm run lint                    | Run ESLint                                              |
+| npm run typecheck               | Run TypeScript without emitting files                   |
+| npm run format                  | Format the repository with Prettier                     |
+| npm run format:check            | Verify formatting                                       |
+| npm test                        | Run database-free unit tests                            |
+| npm run test:integration        | Run explicitly enabled database tests                   |
+| npm run admin:bootstrap         | Intentionally create a development Admin                |
+| npm run prisma:generate         | Generate the Prisma client                              |
+| npm run prisma:migrate:dev      | Create/apply a development migration                    |
+| npm run prisma:migrate:deploy   | Apply source-controlled migrations noninteractively     |
+| npm run prisma:validate         | Validate the Prisma configuration and schema            |
+| npm run prisma:studio           | Open Prisma Studio after database setup                 |
+| npm run env:validate:production | Validate production policy without printing values      |
+| npm run smoke:production        | Run read-only public checks against an HTTPS deployment |
 
 ## Public routes
 
@@ -470,13 +474,25 @@ The language switcher preserves the canonical internal route and query string, w
 
 Public landing, Job, and Company metadata are localized with canonical locale URLs and `en`/`tr`/`az`/`ru` alternates. User-authored Job titles and Company names remain unchanged, and metadata queries retain publication and moderation predicates. Analytics labels and Intl presentation change by locale, while the authorized inputs, UTC windows, aggregate values, funnel membership, and privacy boundaries remain identical.
 
-Phase 6B analytics was completed before Phase 6C localization. Deployment and operational hardening are the next phase.
+Phase 6B analytics was completed before Phase 6C localization. Phase 7A adds repository-level production and operational hardening without changing locale, authorization, privacy, moderation, analytics, or delivery semantics.
+
+## Production deployment and operations
+
+CareerBridge targets Vercel with a dedicated Neon production database. Runtime application traffic uses the pooled `DATABASE_URL`; Prisma production migrations use the distinct direct connection and only `prisma migrate deploy`. The manual GitHub production workflow checks out an exact reviewed commit, installs from the lockfile, pulls Vercel Production configuration, validates environment policy, runs quality gates, builds a prebuilt Vercel artifact, applies migrations only after that build succeeds, deploys the exact artifact, then runs read-only smoke checks. Its protected `production` Environment and non-canceling concurrency must be configured in GitHub before use.
+
+Vercel Production startup rejects missing/placeholder production settings, localhost origins, local CV storage, the email log driver, missing private S3/Resend/dispatcher configuration, and unsafe connection/origin relationships. Better Auth uses the canonical production origin, exact preview origins, explicit trusted origins, and secure cookies. Candidate CVs retain the existing private application-authorized download path. The Cron GET adapter authenticates with a separate secret and calls the existing lock-safe dispatcher directly; no schedule is committed until the actual Vercel plan is known.
+
+`GET /api/health` performs a bounded read-only database probe and returns only a minimal ready/unavailable state. Global production-safe headers are enabled; strict CSP is deferred to Phase 7B for a tested nonce design. Canonical localized metadata, robots, and sitemap use the validated production origin and existing publication/moderation predicates. Server diagnostics remain aggregate/redacted.
+
+Repository readiness is implemented and locally verifiable. Vercel project/domain linking, dedicated Neon provisioning, private S3-compatible storage, Resend sender/key, GitHub secrets/approval, Cron activation, production migration/deployment, real email, and full production QA require authorized external configuration. See the deployment and operations runbooks for exact checklists and rollback/incident behavior.
 
 ## Documentation
 
 - [Product specification](docs/product-spec.md)
 - [Architecture](docs/architecture.md)
 - [Roadmap](docs/roadmap.md)
+- [Production deployment](docs/deployment.md)
+- [Operations runbook](docs/operations-runbook.md)
 
 ## Project principles
 

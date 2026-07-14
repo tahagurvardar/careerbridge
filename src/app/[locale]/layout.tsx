@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/shared/theme-provider";
 import { getHtmlLang, localeDefinitions, ROUTE_LOCALES } from "@/i18n/config";
 import { LocaleProvider } from "@/i18n/client";
 import { getDictionary, resolvePageLocale } from "@/i18n/server";
+import { resolveApplicationOrigin } from "@/lib/env/server";
 
 import "../globals.css";
 
@@ -33,6 +34,7 @@ export async function generateMetadata({
   const { metadata } = await getDictionary(locale);
 
   return {
+    metadataBase: new URL(resolveApplicationOrigin()),
     title: {
       default: metadata.root.defaultTitle,
       template: metadata.root.template,

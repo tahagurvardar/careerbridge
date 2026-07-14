@@ -328,7 +328,13 @@ Analytics keeps the Phase 6B numeric contract. For the same actor, scope, range,
 
 Acceptance requires dictionary/key/placeholder parity, native script preservation, equivalent validation rejection, safe legacy redirects, no double prefixes or open redirects, canonical API exclusions, localized event snapshots, immutable history, public metadata alternates, authorization/privacy equality, responsive light/dark UI, and no hydration, console, overflow, or Phase 6C server errors. Automated translation services and arbitrary runtime dictionary imports are outside scope; native-speaker editorial review may refine wording later without changing keys or behavior.
 
-Deployment and operational hardening are the next product phase.
+## Phase 7A production and operational contract
+
+Phase 7A prepares the completed four-locale product for a controlled Vercel launch without changing product workflows. Production uses a dedicated Neon database with pooled runtime and direct migration connections, private S3-compatible CV storage, Better Auth on the canonical HTTPS origin, Resend behind the existing transactional outbox, and an authenticated scheduled dispatcher adapter. Development, test, Preview, and Production resources are isolated.
+
+Release acceptance is build-before-migrate: an exact commit and lockfile must pass environment, Prisma, unit, lint, type, formatting, and Vercel artifact gates before `prisma migrate deploy`; only that prebuilt artifact may then deploy. Production health exposes a bounded ready/unavailable signal, logs omit private/security data, and conservative security headers apply without a fragile CSP. Localized canonical metadata, four language alternates, robots, and sitemap preserve publication/moderation visibility and never include Candidate or analytics data.
+
+Phase 7A repository implementation is complete, but external production status is deliberately unclaimed. Vercel/domain, dedicated Neon, private bucket, Resend sender/key, GitHub Environment/secrets, Cron frequency, production migration/deployment, real email, and full production desktop/mobile/light/dark/four-locale QA require authorized configuration and verification. Phase 7B is **Final QA, Security, Portfolio Launch**.
 
 ## Intentionally deferred after Phase 6C
 

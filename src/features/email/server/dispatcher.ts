@@ -16,6 +16,7 @@ import {
 } from "@/features/email/server/provider";
 import { dbLocaleToRoute } from "@/i18n/config";
 import { localizeInternalPath } from "@/i18n/paths";
+import { logServerEvent } from "@/lib/server-logging";
 
 const STALE_LOCK_MS = 10 * 60 * 1_000;
 const RETRY_DELAYS_MS = [
@@ -248,8 +249,13 @@ export async function dispatchEmailBatch(
     }
   }
 
-  console.info(
-    `Email batch complete: driver=${provider.name} claimed=${result.claimed} sent=${result.sent} retry=${result.retryScheduled} dead=${result.deadLettered} skipped=${result.skipped}`,
-  );
+  logServerEvent("info", "email.dispatch.complete", {
+    driver: provider.name,
+    claimed: result.claimed,
+    sent: result.sent,
+    retryScheduled: result.retryScheduled,
+    deadLettered: result.deadLettered,
+    skipped: result.skipped,
+  });
   return result;
 }
