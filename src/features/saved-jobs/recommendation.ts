@@ -5,12 +5,22 @@ export type CandidateDashboardRecommendationInput = {
   activeApplicationCount: number;
 };
 
+export type CandidateDashboardRecommendationKey =
+  | "completeProfile"
+  | "reviewSavedJobs"
+  | "trackActiveApplications"
+  | "findJobsToSave"
+  | "findNextRole";
+
 export type CandidateDashboardRecommendation = {
-  label: string;
-  description: string;
+  key: CandidateDashboardRecommendationKey;
+  /** Present for the reviewSavedJobs recommendation's plural copy. */
+  count?: number;
   href: string;
 };
 
+// Copy is resolved from the candidate dictionary by key at render time, so the
+// deterministic decision logic stays locale-free and unit-testable.
 export function getCandidateDashboardRecommendation({
   profileComplete,
   savedJobCount,
@@ -18,42 +28,24 @@ export function getCandidateDashboardRecommendation({
   activeApplicationCount,
 }: CandidateDashboardRecommendationInput): CandidateDashboardRecommendation {
   if (!profileComplete) {
-    return {
-      label: "Complete your profile",
-      description:
-        "Finish your candidate profile before your next application.",
-      href: "/candidate/profile/edit",
-    };
+    return { key: "completeProfile", href: "/candidate/profile/edit" };
   }
 
   if (savedOpenUnappliedCount > 0) {
     return {
-      label: "Review saved jobs",
-      description: `You have ${savedOpenUnappliedCount} open saved ${savedOpenUnappliedCount === 1 ? "job" : "jobs"} you have not applied to yet.`,
+      key: "reviewSavedJobs",
+      count: savedOpenUnappliedCount,
       href: "/candidate/saved-jobs?availability=OPEN",
     };
   }
 
   if (activeApplicationCount > 0) {
-    return {
-      label: "Track active applications",
-      description: "Check the latest status of your active applications.",
-      href: "/candidate/applications",
-    };
+    return { key: "trackActiveApplications", href: "/candidate/applications" };
   }
 
   if (savedJobCount === 0) {
-    return {
-      label: "Find jobs to save",
-      description:
-        "Browse open roles and save promising opportunities for later.",
-      href: "/jobs",
-    };
+    return { key: "findJobsToSave", href: "/jobs" };
   }
 
-  return {
-    label: "Find your next role",
-    description: "Explore newly published jobs that match your goals.",
-    href: "/jobs",
-  };
+  return { key: "findNextRole", href: "/jobs" };
 }

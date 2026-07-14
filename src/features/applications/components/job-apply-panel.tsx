@@ -14,31 +14,39 @@ import {
   getCandidateApplyProfile,
   getJobForApplication,
 } from "@/features/applications/server/data";
+import type { AppDictionary } from "@/i18n/dictionary";
+import type { RouteLocale } from "@/i18n/config";
+import { localizeInternalPath } from "@/i18n/paths";
 import { getPrismaClient } from "@/lib/prisma";
-
-const privacyNote =
-  "Applying shares your profile — name, headline, location, skills, education, and experience — with this company's hiring team.";
 
 export async function JobApplyPanel({
   slug,
   applicationDeadline,
+  locale,
+  dictionary,
 }: {
   slug: string;
   applicationDeadline: Date | null;
+  locale: RouteLocale;
+  dictionary: AppDictionary;
 }) {
+  const t = dictionary.public.applyPanel;
   const session = await getCurrentSession();
   const deadlinePassed = isApplicationDeadlinePassed(applicationDeadline);
+  const localize = (path: string) => localizeInternalPath(path, locale);
 
   if (!session) {
     const callbackPath = getSafeInternalPath(`/jobs/${slug}`, "/jobs");
     return (
-      <PanelShell note="Sign in as a candidate to apply for this role.">
+      <PanelShell note={t.signInNote}>
         <Button asChild className="h-10 w-full">
           <Link
-            href={`/login?callbackPath=${encodeURIComponent(callbackPath)}`}
+            href={localize(
+              `/login?callbackPath=${encodeURIComponent(callbackPath)}`,
+            )}
           >
             <LogIn aria-hidden="true" data-icon="inline-start" />
-            Sign in to apply
+            {t.signInToApply}
           </Link>
         </Button>
       </PanelShell>
@@ -48,15 +56,11 @@ export async function JobApplyPanel({
   if (session.user.role !== "CANDIDATE") {
     return (
       <PanelShell
-        note={
-          session.user.role === "RECRUITER"
-            ? "You are signed in as a recruiter. Recruiters manage jobs and cannot apply to them."
-            : "You are signed in as an admin. Admin accounts cannot apply to jobs."
-        }
+        note={session.user.role === "RECRUITER" ? t.recruiterNote : t.adminNote}
       >
         <Button type="button" className="h-10 w-full" disabled>
           <Lock aria-hidden="true" data-icon="inline-start" />
-          Applying is candidate-only
+          {t.candidateOnly}
         </Button>
       </PanelShell>
     );
@@ -66,9 +70,9 @@ export async function JobApplyPanel({
   const job = await getJobForApplication(prisma, slug);
   if (!job) {
     return (
-      <PanelShell note="This job is no longer accepting applications.">
+      <PanelShell note={t.closedNote}>
         <Button type="button" className="h-10 w-full" disabled>
-          Applications closed
+          {t.applicationsClosed}
         </Button>
       </PanelShell>
     );
@@ -81,14 +85,17 @@ export async function JobApplyPanel({
 
   if (application) {
     return (
-      <PanelShell note="You have already applied to this job.">
+      <PanelShell note={t.alreadyAppliedNote}>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-muted-foreground text-sm">Your status</span>
-          <ApplicationStatusBadge status={application.status} />
+          <span className="text-muted-foreground text-sm">{t.yourStatus}</span>
+          <ApplicationStatusBadge
+            status={application.status}
+            label={dictionary.labels.applicationStatus[application.status]}
+          />
         </div>
         <Button asChild variant="outline" className="h-10 w-full">
-          <Link href={`/candidate/applications/${application.id}`}>
-            View your application
+          <Link href={localize(`/candidate/applications/${application.id}`)}>
+            {t.viewYourApplication}
           </Link>
         </Button>
       </PanelShell>
@@ -97,9 +104,9 @@ export async function JobApplyPanel({
 
   if (deadlinePassed) {
     return (
-      <PanelShell note="The application deadline for this job has passed.">
+      <PanelShell note={t.deadlinePassedNote}>
         <Button type="button" className="h-10 w-full" disabled>
-          Applications closed
+          {t.applicationsClosed}
         </Button>
       </PanelShell>
     );
@@ -113,16 +120,16 @@ export async function JobApplyPanel({
 
   if (!readiness.isReady) {
     return (
-      <PanelShell note="Complete your profile before applying:">
+      <PanelShell note={t.completeProfileNote}>
         <ul className="text-muted-foreground -mt-2 list-disc space-y-1 pl-5 text-sm">
-          {readiness.missingFields.map(({ field, label }) => (
-            <li key={field}>{label}</li>
+          {readiness.missingFields.map(({ field }) => (
+            <li key={field}>{dictionary.candidate.profileReadiness[field]}</li>
           ))}
         </ul>
         <Button asChild variant="outline" className="h-10 w-full">
-          <Link href="/candidate/profile/edit">
+          <Link href={localize("/candidate/profile/edit")}>
             <CircleAlert aria-hidden="true" data-icon="inline-start" />
-            Complete your profile
+            {t.completeProfile}
           </Link>
         </Button>
       </PanelShell>
@@ -130,11 +137,11 @@ export async function JobApplyPanel({
   }
 
   return (
-    <PanelShell note={privacyNote}>
+    <PanelShell note={t.privacyNote}>
       <Button asChild className="h-10 w-full">
-        <Link href={`/jobs/${slug}/apply`}>
+        <Link href={localize(`/jobs/${slug}/apply`)}>
           <Send aria-hidden="true" data-icon="inline-start" />
-          Apply now
+          {t.applyNow}
         </Link>
       </Button>
     </PanelShell>

@@ -35,7 +35,6 @@ import {
   INTERVIEW_LOCATION_MAX,
   INTERVIEW_MEETING_URL_MAX,
   INTERVIEW_TITLE_MAX,
-  interviewFormatLabels,
   isValidIanaTimeZone,
   zonedWallTimeToUtcInstant,
 } from "@/features/interviews/interviews";
@@ -44,61 +43,65 @@ import {
   scheduleInterviewAction,
   type InterviewActionResult,
 } from "@/features/interviews/server/actions";
+import { useLocale } from "@/i18n/client";
+import type { AppDictionary } from "@/i18n/dictionary";
+import { formatInteger } from "@/i18n/formatter";
+import { formatMessage } from "@/i18n/translate";
 
 // Wall-clock form model. Submission converts date + time + timezone to a UTC
 // instant client-side; the server independently re-validates the instant, the
 // timezone, and every schedule rule.
-const scheduleFormSchema = z.object({
-  title: z
-    .string()
-    .trim()
-    .min(1, "Give the interview a title.")
-    .max(
-      INTERVIEW_TITLE_MAX,
-      `Title must be ${INTERVIEW_TITLE_MAX} characters or fewer.`,
-    ),
-  format: z.enum(INTERVIEW_FORMATS, { error: "Choose an interview format." }),
-  date: z.string().min(1, "Choose a date."),
-  time: z.string().min(1, "Choose a start time."),
-  durationMinutes: z.string().min(1, "Choose a duration."),
-  timeZone: z
-    .string()
-    .min(1, "Choose a timezone.")
-    .refine(isValidIanaTimeZone, "Choose a valid timezone."),
-  location: z
-    .string()
-    .trim()
-    .max(
-      INTERVIEW_LOCATION_MAX,
-      `Location must be ${INTERVIEW_LOCATION_MAX} characters or fewer.`,
-    ),
-  meetingUrl: z
-    .string()
-    .trim()
-    .max(INTERVIEW_MEETING_URL_MAX, "Meeting link is too long."),
-  instructions: z
-    .string()
-    .trim()
-    .max(
-      INTERVIEW_INSTRUCTIONS_MAX,
-      `Instructions must be ${INTERVIEW_INSTRUCTIONS_MAX.toLocaleString()} characters or fewer.`,
-    ),
-});
+function buildScheduleFormSchema(
+  labels: AppDictionary["interviews"]["scheduleForm"],
+) {
+  const validation = labels.validation;
+  return z.object({
+    title: z
+      .string()
+      .trim()
+      .min(1, validation.titleRequired)
+      .max(
+        INTERVIEW_TITLE_MAX,
+        formatMessage(validation.titleTooLong, { max: INTERVIEW_TITLE_MAX }),
+      ),
+    format: z.enum(INTERVIEW_FORMATS, { error: validation.formatRequired }),
+    date: z.string().min(1, validation.dateRequired),
+    time: z.string().min(1, validation.timeRequired),
+    durationMinutes: z.string().min(1, validation.durationRequired),
+    timeZone: z
+      .string()
+      .min(1, validation.timezoneRequired)
+      .refine(isValidIanaTimeZone, validation.timezoneInvalid),
+    location: z
+      .string()
+      .trim()
+      .max(
+        INTERVIEW_LOCATION_MAX,
+        formatMessage(validation.locationTooLong, {
+          max: INTERVIEW_LOCATION_MAX,
+        }),
+      ),
+    meetingUrl: z
+      .string()
+      .trim()
+      .max(INTERVIEW_MEETING_URL_MAX, validation.meetingLinkTooLong),
+    instructions: z
+      .string()
+      .trim()
+      .max(
+        INTERVIEW_INSTRUCTIONS_MAX,
+        formatMessage(validation.instructionsTooLong, {
+          max: INTERVIEW_INSTRUCTIONS_MAX,
+        }),
+      ),
+  });
+}
 
-export type InterviewScheduleFormValues = z.input<typeof scheduleFormSchema>;
+export type InterviewScheduleFormValues = z.input<
+  ReturnType<typeof buildScheduleFormSchema>
+>;
 
-const DURATION_OPTIONS = [
-  { value: "15", label: "15 minutes" },
-  { value: "30", label: "30 minutes" },
-  { value: "45", label: "45 minutes" },
-  { value: "60", label: "1 hour" },
-  { value: "90", label: "1 hour 30 minutes" },
-  { value: "120", label: "2 hours" },
-  { value: "180", label: "3 hours" },
-  { value: "240", label: "4 hours" },
-  { value: "360", label: "6 hours" },
-  { value: "480", label: "8 hours" },
-] as const;
+const DURATION_VALUES = [15, 30, 45, 60, 90, 120, 180, 240, 360, 480] as const;
 
 /** Maps server-side wire-field errors back onto the wall-clock form fields. */
 const SERVER_FIELD_MAP: Record<string, keyof InterviewScheduleFormValues> = {
@@ -137,16 +140,22 @@ export function InterviewScheduleSheet({
   target,
   triggerLabel,
   triggerVariant = "default",
+  labels,
+  formatLabels,
 }: {
   target: InterviewScheduleTarget;
   triggerLabel: string;
   triggerVariant?: "default" | "outline";
+  labels: AppDictionary["interviews"]["scheduleForm"];
+  formatLabels: AppDictionary["labels"]["interviewFormat"];
 }) {
   const router = useRouter();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<InterviewActionResult | null>(null);
   const defaults =
     target.mode === "reschedule" ? target.defaults : EMPTY_DEFAULTS;
+  const schema = useMemo(() => buildScheduleFormSchema(labels), [labels]);
   const {
     register,
     control,
@@ -156,7 +165,7 @@ export function InterviewScheduleSheet({
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<InterviewScheduleFormValues>({
-    resolver: zodResolver(scheduleFormSchema),
+    resolver: zodResolver(schema),
     defaultValues: defaults,
   });
   const format = useWatch({ control, name: "format" });
@@ -177,6 +186,28 @@ export function InterviewScheduleSheet({
       Intl.supportedValuesOf("timeZone").filter(isValidIanaTimeZone);
     return zones.includes("UTC") ? zones : ["UTC", ...zones];
   }, []);
+  const durationOptions = useMemo(
+    () =>
+      DURATION_VALUES.map((minutes) => {
+        const hours = Math.floor(minutes / 60);
+        const remaining = minutes % 60;
+        const label =
+          hours === 0
+            ? formatMessage(labels.minutes, {
+                minutes: formatInteger(locale, minutes),
+              })
+            : remaining > 0
+              ? formatMessage(labels.hourMinutes, {
+                  hours: formatInteger(locale, hours),
+                  minutes: formatInteger(locale, remaining),
+                })
+              : formatMessage(hours === 1 ? labels.hour : labels.hours, {
+                  hours: formatInteger(locale, hours),
+                });
+        return { value: String(minutes), label };
+      }),
+    [labels, locale],
+  );
 
   const submit = handleSubmit(async (values) => {
     setResult(null);
@@ -185,7 +216,7 @@ export function InterviewScheduleSheet({
       values.timeZone,
     );
     if (!startAt) {
-      setError("date", { message: "Choose a valid date and time." });
+      setError("date", { message: labels.validation.invalidDateTime });
       return;
     }
     const endAt = new Date(
@@ -246,31 +277,30 @@ export function InterviewScheduleSheet({
       </SheetTrigger>
       <SheetContent
         side="right"
+        closeLabel={labels.cancel}
         className="w-[min(94vw,28rem)] overflow-y-auto"
       >
         <SheetHeader className="border-b px-5 py-5">
           <SheetTitle>
-            {target.mode === "schedule"
-              ? "Schedule interview"
-              : "Reschedule interview"}
+            {target.mode === "schedule" ? labels.schedule : labels.reschedule}
           </SheetTitle>
           <SheetDescription>
             {target.mode === "schedule"
-              ? "The candidate is asked to accept or decline this time."
-              : "Rescheduling asks the candidate to respond to the new time."}
+              ? labels.scheduleDescription
+              : labels.rescheduleDescription}
           </SheetDescription>
         </SheetHeader>
 
         <form className="grid gap-5 px-5 py-6" onSubmit={submit} noValidate>
           <FormField
             id="interview-title"
-            label="Title"
+            label={labels.title}
             error={errors.title?.message}
           >
             <Input
               id="interview-title"
               maxLength={INTERVIEW_TITLE_MAX}
-              placeholder="Technical interview"
+              placeholder={labels.titlePlaceholder}
               aria-invalid={Boolean(errors.title)}
               aria-describedby={
                 errors.title ? "interview-title-error" : undefined
@@ -281,7 +311,7 @@ export function InterviewScheduleSheet({
 
           <FormField
             id="interview-format"
-            label="Format"
+            label={labels.format}
             error={errors.format?.message}
           >
             <Controller
@@ -294,12 +324,12 @@ export function InterviewScheduleSheet({
                     className="h-9 w-full"
                     aria-invalid={Boolean(errors.format)}
                   >
-                    <SelectValue placeholder="Choose a format" />
+                    <SelectValue placeholder={labels.chooseFormat} />
                   </SelectTrigger>
                   <SelectContent position="popper">
                     {INTERVIEW_FORMATS.map((value) => (
                       <SelectItem key={value} value={value}>
-                        {interviewFormatLabels[value]}
+                        {formatLabels[value]}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -311,7 +341,7 @@ export function InterviewScheduleSheet({
           <div className="grid gap-5 sm:grid-cols-2">
             <FormField
               id="interview-date"
-              label="Date"
+              label={labels.date}
               error={errors.date?.message}
             >
               <Controller
@@ -332,7 +362,7 @@ export function InterviewScheduleSheet({
             </FormField>
             <FormField
               id="interview-time"
-              label="Start time"
+              label={labels.startTime}
               error={errors.time?.message}
             >
               <Controller
@@ -356,7 +386,7 @@ export function InterviewScheduleSheet({
           <div className="grid gap-5 sm:grid-cols-2">
             <FormField
               id="interview-duration"
-              label="Duration"
+              label={labels.duration}
               error={errors.durationMinutes?.message}
             >
               <Controller
@@ -369,10 +399,10 @@ export function InterviewScheduleSheet({
                       className="h-9 w-full"
                       aria-invalid={Boolean(errors.durationMinutes)}
                     >
-                      <SelectValue placeholder="Choose a duration" />
+                      <SelectValue placeholder={labels.chooseDuration} />
                     </SelectTrigger>
                     <SelectContent position="popper">
-                      {DURATION_OPTIONS.map((option) => (
+                      {durationOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
@@ -384,7 +414,7 @@ export function InterviewScheduleSheet({
             </FormField>
             <FormField
               id="interview-timezone"
-              label="Timezone"
+              label={labels.timezone}
               error={errors.timeZone?.message}
             >
               <Controller
@@ -397,7 +427,7 @@ export function InterviewScheduleSheet({
                       className="h-9 w-full"
                       aria-invalid={Boolean(errors.timeZone)}
                     >
-                      <SelectValue placeholder="Choose a timezone" />
+                      <SelectValue placeholder={labels.chooseTimezone} />
                     </SelectTrigger>
                     <SelectContent position="popper">
                       {timeZoneOptions.map((zone) => (
@@ -415,13 +445,15 @@ export function InterviewScheduleSheet({
           {format === "ONSITE" || format === "OTHER" ? (
             <FormField
               id="interview-location"
-              label={format === "ONSITE" ? "Location" : "Location (optional)"}
+              label={
+                format === "ONSITE" ? labels.location : labels.locationOptional
+              }
               error={errors.location?.message}
             >
               <Input
                 id="interview-location"
                 maxLength={INTERVIEW_LOCATION_MAX}
-                placeholder="12 Harbor Street, 4th floor"
+                placeholder={labels.locationPlaceholder}
                 aria-invalid={Boolean(errors.location)}
                 aria-describedby={
                   errors.location ? "interview-location-error" : undefined
@@ -435,9 +467,11 @@ export function InterviewScheduleSheet({
             <FormField
               id="interview-meeting-url"
               label={
-                format === "VIDEO" ? "Meeting link" : "Meeting link (optional)"
+                format === "VIDEO"
+                  ? labels.meetingLink
+                  : labels.meetingLinkOptional
               }
-              hint="HTTPS links only. Shared with the candidate on the interview page."
+              hint={labels.meetingLinkHint}
               error={errors.meetingUrl?.message}
             >
               <Input
@@ -459,11 +493,9 @@ export function InterviewScheduleSheet({
 
           <FormField
             id="interview-instructions"
-            label="Instructions (optional)"
+            label={labels.instructionsOptional}
             hint={
-              format === "PHONE"
-                ? "Explain who calls whom and any preparation."
-                : "Preparation notes shared with the candidate."
+              format === "PHONE" ? labels.phoneHint : labels.instructionsHint
             }
             error={errors.instructions?.message}
           >
@@ -492,9 +524,7 @@ export function InterviewScheduleSheet({
               ) : (
                 <CalendarPlus aria-hidden="true" />
               )}
-              {target.mode === "schedule"
-                ? "Schedule interview"
-                : "Reschedule interview"}
+              {target.mode === "schedule" ? labels.schedule : labels.reschedule}
             </Button>
             <Button
               type="button"
@@ -502,7 +532,7 @@ export function InterviewScheduleSheet({
               onClick={() => setOpen(false)}
               disabled={isSubmitting}
             >
-              Cancel
+              {labels.cancel}
             </Button>
           </div>
         </form>

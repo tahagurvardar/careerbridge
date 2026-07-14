@@ -1,7 +1,7 @@
 "use server";
 
 import { isAPIError } from "better-auth/api";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import {
@@ -10,14 +10,22 @@ import {
   isDashboardPathAllowedForRole,
   platformRoleSchema,
 } from "@/features/auth/roles";
-import { registrationSchema, signInSchema } from "@/features/auth/schemas";
+import {
+  createRegistrationSchema,
+  createSignInSchema,
+} from "@/features/auth/schemas";
 import {
   AuthRequestError,
   executeAuthRequest,
 } from "@/features/auth/server/auth-request";
 import { logAuthFailure } from "@/features/auth/server/logging";
 import { requireGuest, requireUser } from "@/features/auth/server/session";
+import { dbLocaleToRoute, routeLocaleToDb } from "@/i18n/config";
+import { getLocaleCookieOptions, LOCALE_COOKIE_NAME } from "@/i18n/cookie";
+import { canonicalizeInternalPath, localizeInternalPath } from "@/i18n/paths";
+import { getRequestDictionary } from "@/i18n/server";
 import { getAuth } from "@/lib/auth";
+import { getPrismaClient } from "@/lib/prisma";
 
 type FieldErrors = Record<string, string | undefined>;
 
@@ -53,12 +61,16 @@ export async function registerUserAction(
 ): Promise<AuthActionResult> {
   await requireGuest();
 
-  const parsed = registrationSchema.safeParse(input);
+  const { locale, dictionary } = await getRequestDictionary();
+  const messages = dictionary.auth.serverMessages;
+  const parsed = createRegistrationSchema(dictionary.validation).safeParse(
+    input,
+  );
 
   if (!parsed.success) {
     return {
       success: false,
-      message: "Check the highlighted fields and try again.",
+      message: messages.checkFields,
       fieldErrors: getFieldErrors(parsed.error),
     };
   }
@@ -83,14 +95,34 @@ export async function registerUserAction(
       });
       return {
         success: false,
-        message: "We could not create your account. Please try again.",
+        message: messages.registrationFailed,
       };
     }
 
+    // Adopt the registration UI language as the initial stored preference and
+    // mirror it into the locale cookie. The value is the server-validated
+    // request locale — never a browser-supplied field — and later changes go
+    // through the dedicated locale action only.
+    try {
+      await getPrismaClient().user.update({
+        where: { email },
+        data: { preferredLocale: routeLocaleToDb(locale) },
+        select: { id: true },
+      });
+    } catch {
+      // Preference initialization is best-effort; the account stays at the
+      // migration default (EN) if this write races account state.
+    }
+    const cookieStore = await cookies();
+    cookieStore.set(LOCALE_COOKIE_NAME, locale, getLocaleCookieOptions());
+
     return {
       success: true,
-      redirectTo: getDashboardPathForRole(storedRole.data),
-      message: "Your CareerBridge account is ready.",
+      redirectTo: localizeInternalPath(
+        getDashboardPathForRole(storedRole.data),
+        locale,
+      ),
+      message: messages.accountReady,
     };
   } catch (error) {
     const statusCode = getAuthStatusCode(error);
@@ -102,17 +134,16 @@ export async function registerUserAction(
       });
       return {
         success: false,
-        message: "Too many attempts. Please wait a minute and try again.",
+        message: messages.tooManyAttempts,
       };
     }
 
     if (statusCode && [409, 422].includes(statusCode)) {
       return {
         success: false,
-        message:
-          "We could not create an account with that email. Try signing in or use another email.",
+        message: messages.emailUnavailable,
         fieldErrors: {
-          email: "This email cannot be used for a new account.",
+          email: messages.emailUnavailableField,
         },
       };
     }
@@ -123,7 +154,7 @@ export async function registerUserAction(
 
     return {
       success: false,
-      message: "We could not create your account. Please try again shortly.",
+      message: messages.registrationFailedRetry,
     };
   }
 }
@@ -133,12 +164,14 @@ export async function signInUserAction(
 ): Promise<AuthActionResult> {
   await requireGuest();
 
-  const parsed = signInSchema.safeParse(input);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.auth.serverMessages;
+  const parsed = createSignInSchema(dictionary.validation).safeParse(input);
 
   if (!parsed.success) {
     return {
       success: false,
-      message: "Check the highlighted fields and try again.",
+      message: messages.checkFields,
       fieldErrors: getFieldErrors(parsed.error),
     };
   }
@@ -160,22 +193,43 @@ export async function signInUserAction(
       });
       return {
         success: false,
-        message: "Email or password is incorrect.",
+        message: messages.invalidCredentials,
       };
     }
 
+    // Locale source-of-truth tier 1: the authenticated user's stored
+    // preference. Sign-in mirrors it into the device cookie so every later
+    // locale-neutral request resolves to it without database reads.
+    const account = await getPrismaClient().user.findUnique({
+      where: { email: parsed.data.email },
+      select: { preferredLocale: true },
+    });
+    const preferredLocale = dbLocaleToRoute(account?.preferredLocale);
+    const cookieStore = await cookies();
+    cookieStore.set(
+      LOCALE_COOKIE_NAME,
+      preferredLocale,
+      getLocaleCookieOptions(),
+    );
+
     const dashboardPath = getDashboardPathForRole(storedRole.data);
-    const callbackPath = getSafeInternalPath(
-      parsed.data.callbackPath,
+    // Callback paths are stored canonical (locale-neutral); strip any locale
+    // prefix before validating so the role-dashboard check stays exact, then
+    // localize the final destination once.
+    const callbackPath = canonicalizeInternalPath(
+      getSafeInternalPath(parsed.data.callbackPath, dashboardPath),
       dashboardPath,
     );
 
     return {
       success: true,
-      redirectTo: isDashboardPathAllowedForRole(storedRole.data, callbackPath)
-        ? callbackPath
-        : dashboardPath,
-      message: "Signed in successfully.",
+      redirectTo: localizeInternalPath(
+        isDashboardPathAllowedForRole(storedRole.data, callbackPath)
+          ? callbackPath
+          : dashboardPath,
+        preferredLocale,
+      ),
+      message: messages.signedIn,
     };
   } catch (error) {
     const statusCode = getAuthStatusCode(error);
@@ -187,14 +241,14 @@ export async function signInUserAction(
       });
       return {
         success: false,
-        message: "Too many attempts. Please wait a minute and try again.",
+        message: messages.tooManyAttempts,
       };
     }
 
     if (statusCode && [400, 401, 403, 422].includes(statusCode)) {
       return {
         success: false,
-        message: "Email or password is incorrect.",
+        message: messages.invalidCredentials,
       };
     }
 
@@ -204,17 +258,18 @@ export async function signInUserAction(
 
     return {
       success: false,
-      message: "We could not sign you in. Please try again shortly.",
+      message: messages.signInFailed,
     };
   }
 }
 
 export async function signOutAction() {
   await requireUser();
+  const { locale } = await getRequestDictionary();
 
   await getAuth().api.signOut({
     headers: await headers(),
   });
 
-  redirect("/");
+  redirect(localizeInternalPath("/", locale));
 }

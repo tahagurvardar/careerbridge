@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { PrismaClient } from "@/generated/prisma/client";
+import type { RouteLocale } from "@/i18n/config";
 import {
   countActiveApplications,
   countTerminalApplications,
@@ -66,6 +67,7 @@ export async function getCandidateAnalytics(
   actor: AnalyticsActor,
   range: AnalyticsDateRange,
   now = range.endAt,
+  locale: RouteLocale = "en",
 ): Promise<CandidateAnalyticsResult> {
   await assertActiveCandidate(prisma, actor);
 
@@ -74,7 +76,7 @@ export async function getCandidateAnalytics(
     range.preset === "ALL"
       ? await queryScopedApplicationTrendEarliest(prisma, scope)
       : range.startAt;
-  const buckets = createTrendBuckets(range, earliestAt);
+  const buckets = createTrendBuckets(range, earliestAt, locale);
   const createdRange = createdAtWhere(range);
   const applicationWhere = { candidateId: actor.userId } as const;
   const interviewScope = { application: applicationWhere } as const;

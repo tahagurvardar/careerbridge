@@ -11,13 +11,16 @@ import {
   type RecruiterCompanyActionResult,
   unpublishCompanyAction,
 } from "@/features/recruiter-company/server/actions";
+import type { RecruiterDictionary } from "@/i18n/dictionary";
 
 export function PublicationControl({
   companyId,
   isPublished,
+  labels,
 }: {
   companyId: string;
   isPublished: boolean;
+  labels: RecruiterDictionary["publication"];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -52,10 +55,10 @@ export function PublicationControl({
           <Eye aria-hidden="true" />
         )}
         {pending
-          ? "Updating…"
+          ? labels.updating
           : isPublished
-            ? "Unpublish profile"
-            : "Publish profile"}
+            ? labels.unpublish
+            : labels.publish}
       </Button>
       {result ? (
         <FormStatus message={result.message} success={result.success} />

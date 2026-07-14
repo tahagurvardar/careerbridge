@@ -17,17 +17,21 @@ import {
   EMPLOYMENT_TYPES,
   EXPERIENCE_LEVELS,
   WORKPLACE_TYPES,
-  employmentTypeLabels,
-  experienceLevelLabels,
-  jobCreateSchema,
+  createJobSchemas,
   type JobCreateInput,
-  workplaceTypeLabels,
 } from "@/features/jobs/schemas";
 import {
   createJobAction,
   type JobActionResult,
   updateJobAction,
 } from "@/features/jobs/server/actions";
+import { useLocale } from "@/i18n/client";
+import type {
+  AppDictionary,
+  RecruiterDictionary,
+  ValidationDictionary,
+} from "@/i18n/dictionary";
+import { localizeInternalPath } from "@/i18n/paths";
 
 type OwnedCompanyOption = { id: string; name: string; isPublished: boolean };
 
@@ -38,12 +42,22 @@ export function JobForm({
   jobId,
   companies,
   defaultValues,
+  recruiter,
+  validation,
+  enumLabels,
+  cancelLabel,
 }: {
   jobId?: string;
   companies?: OwnedCompanyOption[];
   defaultValues: JobCreateInput;
+  recruiter: RecruiterDictionary;
+  validation: ValidationDictionary;
+  enumLabels: AppDictionary["labels"];
+  cancelLabel: string;
 }) {
+  const labels = recruiter.jobs.form;
   const router = useRouter();
+  const locale = useLocale();
   const isEditing = Boolean(jobId);
   const [result, setResult] = useState<JobActionResult | null>(null);
   const {
@@ -55,7 +69,9 @@ export function JobForm({
     // The create schema shares every content rule with the edit schema and only
     // adds companyId, which is always populated (and ignored server-side on
     // edit). Using it for both keeps one resolver type for the form.
-    resolver: zodResolver(jobCreateSchema),
+    resolver: zodResolver(
+      createJobSchemas(validation, recruiter).jobCreateSchema,
+    ),
     defaultValues,
   });
 
@@ -75,7 +91,9 @@ export function JobForm({
       return;
     }
 
-    router.push(nextResult.redirectTo ?? "/recruiter/jobs");
+    router.push(
+      localizeInternalPath(nextResult.redirectTo ?? "/recruiter/jobs", locale),
+    );
   });
 
   return (
@@ -83,8 +101,8 @@ export function JobForm({
       {!isEditing && companies ? (
         <FormField
           id="companyId"
-          label="Company"
-          hint="You can only create jobs for companies you own."
+          label={labels.company}
+          hint={labels.companyHint}
           error={errors.companyId?.message}
         >
           <select
@@ -96,11 +114,11 @@ export function JobForm({
             }
             {...register("companyId")}
           >
-            <option value="">Select a company</option>
+            <option value="">{labels.selectCompany}</option>
             {companies.map((company) => (
               <option key={company.id} value={company.id}>
                 {company.name}
-                {company.isPublished ? "" : " (unpublished)"}
+                {company.isPublished ? "" : ` (${labels.unpublished})`}
               </option>
             ))}
           </select>
@@ -109,14 +127,14 @@ export function JobForm({
 
       <FormField
         id="title"
-        label="Job title"
+        label={labels.title}
         error={errors.title?.message}
-        hint="A clear role title, for example “Frontend Engineer”."
+        hint={labels.titleHint}
       >
         <Input
           id="title"
           maxLength={160}
-          placeholder="Frontend Engineer"
+          placeholder={labels.titlePlaceholder}
           aria-invalid={Boolean(errors.title)}
           aria-describedby={errors.title ? "title-error" : "title-hint"}
           {...register("title")}
@@ -125,15 +143,15 @@ export function JobForm({
 
       <FormField
         id="summary"
-        label="Summary"
-        hint="A concise one or two sentence overview. Required before publishing."
+        label={labels.summary}
+        hint={labels.summaryHint}
         error={errors.summary?.message}
       >
         <Textarea
           id="summary"
           rows={3}
           maxLength={320}
-          placeholder="What the role is about, in a sentence or two."
+          placeholder={labels.summaryPlaceholder}
           aria-invalid={Boolean(errors.summary)}
           aria-describedby={errors.summary ? "summary-error" : "summary-hint"}
           {...register("summary")}
@@ -142,15 +160,15 @@ export function JobForm({
 
       <FormField
         id="description"
-        label="Description"
-        hint="Plain text only. Required before publishing."
+        label={labels.description}
+        hint={labels.descriptionHint}
         error={errors.description?.message}
       >
         <Textarea
           id="description"
           rows={7}
           maxLength={8000}
-          placeholder="Describe the role, team, and what success looks like."
+          placeholder={labels.descriptionPlaceholder}
           aria-invalid={Boolean(errors.description)}
           aria-describedby={
             errors.description ? "description-error" : "description-hint"
@@ -162,15 +180,15 @@ export function JobForm({
       <div className="grid gap-6 lg:grid-cols-2">
         <FormField
           id="responsibilities"
-          label="Responsibilities"
-          hint="One per line works well. Required before publishing."
+          label={labels.responsibilities}
+          hint={labels.responsibilitiesHint}
           error={errors.responsibilities?.message}
         >
           <Textarea
             id="responsibilities"
             rows={6}
             maxLength={6000}
-            placeholder={"Lead feature delivery\nCollaborate on design reviews"}
+            placeholder={labels.responsibilitiesPlaceholder}
             aria-invalid={Boolean(errors.responsibilities)}
             aria-describedby={
               errors.responsibilities
@@ -182,15 +200,15 @@ export function JobForm({
         </FormField>
         <FormField
           id="requirements"
-          label="Requirements"
-          hint="One per line works well. Required before publishing."
+          label={labels.requirements}
+          hint={labels.requirementsHint}
           error={errors.requirements?.message}
         >
           <Textarea
             id="requirements"
             rows={6}
             maxLength={6000}
-            placeholder={"3+ years with React\nStrong communication"}
+            placeholder={labels.requirementsPlaceholder}
             aria-invalid={Boolean(errors.requirements)}
             aria-describedby={
               errors.requirements ? "requirements-error" : "requirements-hint"
@@ -202,14 +220,14 @@ export function JobForm({
 
       <FormField
         id="location"
-        label="Location"
-        hint="City, region, or “Remote”. Required before publishing."
+        label={labels.location}
+        hint={labels.locationHint}
         error={errors.location?.message}
       >
         <Input
           id="location"
           maxLength={160}
-          placeholder="Baku, Azerbaijan"
+          placeholder={labels.locationPlaceholder}
           aria-invalid={Boolean(errors.location)}
           aria-describedby={
             errors.location ? "location-error" : "location-hint"
@@ -221,7 +239,7 @@ export function JobForm({
       <div className="grid gap-5 sm:grid-cols-3">
         <FormField
           id="employmentType"
-          label="Employment type"
+          label={labels.employmentType}
           error={errors.employmentType?.message}
         >
           <select
@@ -230,17 +248,17 @@ export function JobForm({
             aria-invalid={Boolean(errors.employmentType)}
             {...register("employmentType")}
           >
-            <option value="">Not specified</option>
+            <option value="">{labels.notSpecified}</option>
             {EMPLOYMENT_TYPES.map((type) => (
               <option key={type} value={type}>
-                {employmentTypeLabels[type]}
+                {enumLabels.employmentType[type]}
               </option>
             ))}
           </select>
         </FormField>
         <FormField
           id="workplaceType"
-          label="Workplace type"
+          label={labels.workplaceType}
           error={errors.workplaceType?.message}
         >
           <select
@@ -249,17 +267,17 @@ export function JobForm({
             aria-invalid={Boolean(errors.workplaceType)}
             {...register("workplaceType")}
           >
-            <option value="">Not specified</option>
+            <option value="">{labels.notSpecified}</option>
             {WORKPLACE_TYPES.map((type) => (
               <option key={type} value={type}>
-                {workplaceTypeLabels[type]}
+                {enumLabels.workplaceType[type]}
               </option>
             ))}
           </select>
         </FormField>
         <FormField
           id="experienceLevel"
-          label="Experience level"
+          label={labels.experienceLevel}
           error={errors.experienceLevel?.message}
         >
           <select
@@ -268,10 +286,10 @@ export function JobForm({
             aria-invalid={Boolean(errors.experienceLevel)}
             {...register("experienceLevel")}
           >
-            <option value="">Not specified</option>
+            <option value="">{labels.notSpecified}</option>
             {EXPERIENCE_LEVELS.map((level) => (
               <option key={level} value={level}>
-                {experienceLevelLabels[level]}
+                {enumLabels.experienceLevel[level]}
               </option>
             ))}
           </select>
@@ -280,11 +298,11 @@ export function JobForm({
 
       <fieldset className="grid gap-5 sm:grid-cols-3">
         <legend className="text-muted-foreground mb-2 text-sm font-medium">
-          Salary range (optional, whole amounts)
+          {labels.salaryLegend}
         </legend>
         <FormField
           id="salaryMin"
-          label="Minimum"
+          label={labels.minimum}
           error={errors.salaryMin?.message}
         >
           <Input
@@ -297,7 +315,7 @@ export function JobForm({
         </FormField>
         <FormField
           id="salaryMax"
-          label="Maximum"
+          label={labels.maximum}
           error={errors.salaryMax?.message}
         >
           <Input
@@ -310,8 +328,8 @@ export function JobForm({
         </FormField>
         <FormField
           id="salaryCurrency"
-          label="Currency"
-          hint="3-letter code, e.g. USD."
+          label={labels.currency}
+          hint={labels.currencyHint}
           error={errors.salaryCurrency?.message}
         >
           <Input
@@ -332,8 +350,8 @@ export function JobForm({
 
       <FormField
         id="applicationDeadline"
-        label="Application deadline"
-        hint="Optional. Cannot be in the past when publishing."
+        label={labels.deadline}
+        hint={labels.deadlineHint}
         error={errors.applicationDeadline?.message}
       >
         <Input
@@ -364,10 +382,10 @@ export function JobForm({
             <BriefcaseBusiness aria-hidden="true" />
           )}
           {isSubmitting
-            ? "Saving…"
+            ? labels.saving
             : isEditing
-              ? "Save job"
-              : "Create draft job"}
+              ? labels.save
+              : labels.createDraft}
         </Button>
         <Button
           type="button"
@@ -375,7 +393,7 @@ export function JobForm({
           size="lg"
           onClick={() => router.back()}
         >
-          Cancel
+          {cancelLabel}
         </Button>
       </div>
     </form>

@@ -13,6 +13,7 @@ import type {
   InterviewFormat,
   InterviewStatus,
 } from "@/generated/prisma/enums";
+import { getIntlLocale, type RouteLocale } from "@/i18n/config";
 
 // ---------------------------------------------------------------------------
 // Enumerations and bounds (mirroring the `interview` table columns)
@@ -336,7 +337,11 @@ export function utcInstantToZonedWall(
   };
 }
 
-/** Short zone label (e.g. "EDT", "GMT+3") for the instant, DST-aware. */
+/**
+ * Short zone label (e.g. "EDT", "GMT+3") for the instant, DST-aware. The
+ * localized formatter variants below render zone names through the display
+ * locale; this English-form helper remains for locale-independent internals.
+ */
 export function getTimeZoneAbbreviation(value: Date, timeZone: string): string {
   const part = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -347,8 +352,26 @@ export function getTimeZoneAbbreviation(value: Date, timeZone: string): string {
   return part?.value ?? timeZone;
 }
 
-function formatZonedDate(value: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-US", {
+function getLocalizedZoneAbbreviation(
+  locale: RouteLocale,
+  value: Date,
+  timeZone: string,
+): string {
+  const part = new Intl.DateTimeFormat(getIntlLocale(locale), {
+    timeZone,
+    timeZoneName: "short",
+  })
+    .formatToParts(value)
+    .find((entry) => entry.type === "timeZoneName");
+  return part?.value ?? timeZone;
+}
+
+function formatZonedDate(
+  locale: RouteLocale,
+  value: Date,
+  timeZone: string,
+): string {
+  return new Intl.DateTimeFormat(getIntlLocale(locale), {
     timeZone,
     weekday: "short",
     month: "short",
@@ -357,54 +380,82 @@ function formatZonedDate(value: Date, timeZone: string): string {
   }).format(value);
 }
 
-function formatZonedTime(value: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-US", {
+function formatZonedTime(
+  locale: RouteLocale,
+  value: Date,
+  timeZone: string,
+): string {
+  return new Intl.DateTimeFormat(getIntlLocale(locale), {
     timeZone,
     hour: "numeric",
     minute: "2-digit",
   }).format(value);
 }
 
-/** "Mon, Jul 20, 2026" in the interview's stored zone. */
-export function formatInterviewDate(value: Date, timeZone: string): string {
-  return formatZonedDate(value, timeZone);
+/** Locale-aware "Mon, Jul 20, 2026" in the interview's stored zone. */
+export function formatInterviewDate(
+  locale: RouteLocale,
+  value: Date,
+  timeZone: string,
+): string {
+  return formatZonedDate(locale, value, timeZone);
 }
 
-/** "2:00 PM" in the interview's stored zone. */
-export function formatInterviewTime(value: Date, timeZone: string): string {
-  return formatZonedTime(value, timeZone);
+/** Locale-aware "2:00 PM" in the interview's stored zone. */
+export function formatInterviewTime(
+  locale: RouteLocale,
+  value: Date,
+  timeZone: string,
+): string {
+  return formatZonedTime(locale, value, timeZone);
 }
 
 /**
  * Full schedule line, always rendered in the stored IANA zone with its
  * DST-aware abbreviation, e.g. "Mon, Jul 20, 2026 · 2:00 PM – 3:00 PM EDT".
- * Ranges that cross midnight in the zone repeat the end date.
+ * The stored UTC instants and zone never change — locale only reshapes the
+ * words and digits. Ranges that cross midnight in the zone repeat the end
+ * date.
  */
 export function formatInterviewRange(
+  locale: RouteLocale,
   startAt: Date,
   endAt: Date,
   timeZone: string,
 ): string {
-  const startDate = formatZonedDate(startAt, timeZone);
-  const endDate = formatZonedDate(endAt, timeZone);
-  const zone = getTimeZoneAbbreviation(startAt, timeZone);
+  const startDate = formatZonedDate(locale, startAt, timeZone);
+  const endDate = formatZonedDate(locale, endAt, timeZone);
+  const zone = getLocalizedZoneAbbreviation(locale, startAt, timeZone);
   const end =
     startDate === endDate
-      ? formatZonedTime(endAt, timeZone)
-      : `${endDate}, ${formatZonedTime(endAt, timeZone)}`;
-  return `${startDate} · ${formatZonedTime(startAt, timeZone)} – ${end} ${zone}`;
+      ? formatZonedTime(locale, endAt, timeZone)
+      : `${endDate}, ${formatZonedTime(locale, endAt, timeZone)}`;
+  return `${startDate} · ${formatZonedTime(locale, startAt, timeZone)} – ${end} ${zone}`;
 }
 
-/** "45 min", "1 hr", "1 hr 30 min". */
-export function formatInterviewDuration(startAt: Date, endAt: Date): string {
+/**
+ * Locale-aware "45 min", "1 hr", "1 hr 30 min" through Intl unit formatting —
+ * never hand-written unit words.
+ */
+export function formatInterviewDuration(
+  locale: RouteLocale,
+  startAt: Date,
+  endAt: Date,
+): string {
   const totalMinutes = Math.round(
     (endAt.getTime() - startAt.getTime()) / 60_000,
   );
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  if (hours <= 0) return `${minutes} min`;
-  if (minutes === 0) return `${hours} hr`;
-  return `${hours} hr ${minutes} min`;
+  const formatUnit = (value: number, unit: "hour" | "minute") =>
+    new Intl.NumberFormat(getIntlLocale(locale), {
+      style: "unit",
+      unit,
+      unitDisplay: "short",
+    }).format(value);
+  if (hours <= 0) return formatUnit(minutes, "minute");
+  if (minutes === 0) return formatUnit(hours, "hour");
+  return `${formatUnit(hours, "hour")} ${formatUnit(minutes, "minute")}`;
 }
 
 // ---------------------------------------------------------------------------

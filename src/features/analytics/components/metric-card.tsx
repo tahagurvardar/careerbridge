@@ -7,17 +7,21 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type { RouteLocale } from "@/i18n/config";
+import { formatInteger } from "@/i18n/formatter";
 
 export function MetricCard({
   label,
   value,
   description,
   icon,
+  locale,
 }: {
   label: string;
   value: number | string;
   description: string;
   icon?: ReactNode;
+  locale: RouteLocale;
 }) {
   return (
     <Card className="h-full">
@@ -33,7 +37,7 @@ export function MetricCard({
       </CardHeader>
       <CardContent>
         <p className="text-3xl font-semibold tracking-tight tabular-nums">
-          {value}
+          {typeof value === "number" ? formatInteger(locale, value) : value}
         </p>
         <CardDescription className="mt-2 leading-5">
           {description}

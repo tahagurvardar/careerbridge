@@ -3,13 +3,15 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import {
   ANALYTICS_RANGE_PRESETS,
-  getAnalyticsRangeLabel,
   type AnalyticsRangePreset,
 } from "@/features/analytics/analytics";
 import type {
   RecruiterAnalyticsCompanyOption,
   RecruiterAnalyticsJobOption,
 } from "@/features/analytics/server/recruiter";
+import type { RouteLocale } from "@/i18n/config";
+import type { AnalyticsDictionary } from "@/i18n/dictionary";
+import { localizeInternalPath } from "@/i18n/paths";
 
 function analyticsHref(
   basePath: string,
@@ -50,22 +52,29 @@ function FilterLink({
 export function AnalyticsRangeFilter({
   basePath,
   currentRange,
+  locale,
+  labels,
   preserve = {},
 }: {
   basePath: string;
   currentRange: AnalyticsRangePreset;
+  locale: RouteLocale;
+  labels: AnalyticsDictionary["range"];
   preserve?: Record<string, string | undefined>;
 }) {
   return (
-    <nav aria-label="Analytics date range" className="flex flex-wrap gap-2">
+    <nav aria-label={labels.navigation} className="flex flex-wrap gap-2">
       {ANALYTICS_RANGE_PRESETS.map((range) => (
         <FilterLink
           key={range}
           active={range === currentRange}
-          href={analyticsHref(basePath, { ...preserve, range })}
+          href={localizeInternalPath(
+            analyticsHref(basePath, { ...preserve, range }),
+            locale,
+          )}
         >
           {range}
-          <span className="sr-only"> — {getAnalyticsRangeLabel(range)}</span>
+          <span className="sr-only"> — {labels[range]}</span>
         </FilterLink>
       ))}
     </nav>
@@ -78,21 +87,30 @@ export function RecruiterAnalyticsFilters({
   selectedCompanyId,
   jobs,
   selectedJobId,
+  locale,
+  labels,
 }: {
   range: AnalyticsRangePreset;
   companies: RecruiterAnalyticsCompanyOption[];
   selectedCompanyId: string;
   jobs: RecruiterAnalyticsJobOption[];
   selectedJobId: string | null;
+  locale: RouteLocale;
+  labels: Pick<AnalyticsDictionary, "range" | "filters">;
 }) {
   const basePath = "/recruiter/analytics";
+  const href = (values: Record<string, string | undefined>) =>
+    localizeInternalPath(analyticsHref(basePath, values), locale);
+
   return (
     <div className="grid gap-5">
       <div>
-        <p className="mb-2 text-sm font-medium">Date range</p>
+        <p className="mb-2 text-sm font-medium">{labels.filters.dateRange}</p>
         <AnalyticsRangeFilter
           basePath={basePath}
           currentRange={range}
+          locale={locale}
+          labels={labels.range}
           preserve={{
             companyId: selectedCompanyId,
             jobId: selectedJobId ?? undefined,
@@ -100,47 +118,47 @@ export function RecruiterAnalyticsFilters({
         />
       </div>
       <div>
-        <p className="mb-2 text-sm font-medium">Company</p>
-        <nav aria-label="Analytics Company" className="flex flex-wrap gap-2">
+        <p className="mb-2 text-sm font-medium">{labels.filters.company}</p>
+        <nav
+          aria-label={labels.filters.companyAria}
+          className="flex flex-wrap gap-2"
+        >
           {companies.map((company) => (
             <FilterLink
               key={company.id}
               active={company.id === selectedCompanyId}
-              href={analyticsHref(basePath, {
-                range,
-                companyId: company.id,
-              })}
+              href={href({ range, companyId: company.id })}
             >
               {company.name}
               {company.moderationStatus === "HIDDEN" ? (
                 <Badge variant="outline" className="ml-2">
-                  Hidden
+                  {labels.filters.hidden}
                 </Badge>
               ) : null}
             </FilterLink>
           ))}
         </nav>
         <p className="text-muted-foreground mt-2 text-xs">
-          Changing Company intentionally resets the Job filter.
+          {labels.filters.companyReset}
         </p>
       </div>
       <div>
-        <p className="mb-2 text-sm font-medium">Job</p>
-        <nav aria-label="Analytics Job" className="flex flex-wrap gap-2">
+        <p className="mb-2 text-sm font-medium">{labels.filters.job}</p>
+        <nav
+          aria-label={labels.filters.jobAria}
+          className="flex flex-wrap gap-2"
+        >
           <FilterLink
             active={!selectedJobId}
-            href={analyticsHref(basePath, {
-              range,
-              companyId: selectedCompanyId,
-            })}
+            href={href({ range, companyId: selectedCompanyId })}
           >
-            All jobs
+            {labels.filters.allJobs}
           </FilterLink>
           {jobs.map((job) => (
             <FilterLink
               key={job.id}
               active={job.id === selectedJobId}
-              href={analyticsHref(basePath, {
+              href={href({
                 range,
                 companyId: selectedCompanyId,
                 jobId: job.id,
@@ -149,7 +167,7 @@ export function RecruiterAnalyticsFilters({
               {job.title}
               {job.moderationStatus === "HIDDEN" ? (
                 <Badge variant="outline" className="ml-2">
-                  Hidden
+                  {labels.filters.hidden}
                 </Badge>
               ) : null}
             </FilterLink>

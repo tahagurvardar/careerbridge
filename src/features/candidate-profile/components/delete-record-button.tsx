@@ -17,13 +17,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import type { ProfileActionResult } from "@/features/candidate-profile/server/actions";
+import type { CandidateDictionary } from "@/i18n/dictionary";
 
 export function DeleteRecordButton({
   recordLabel,
   action,
+  t,
 }: {
   recordLabel: "education" | "experience";
   action: () => Promise<ProfileActionResult>;
+  t: CandidateDictionary["profile"]["deleteRecord"];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -48,26 +51,23 @@ export function DeleteRecordButton({
         <AlertDialogTrigger asChild>
           <Button variant="ghost" size="sm">
             <Trash2 aria-hidden="true" />
-            Delete
+            {t.trigger}
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete this {recordLabel} record?
+              {recordLabel === "education"
+                ? t.educationTitle
+                : t.experienceTitle}
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently removes the record from your profile. This action
-              cannot be undone.
-            </AlertDialogDescription>
+            <AlertDialogDescription>{t.description}</AlertDialogDescription>
           </AlertDialogHeader>
           <p aria-live="polite" className="text-destructive text-sm">
             {message}
           </p>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>
-              Keep record
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={pending}>{t.keep}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={pending}
@@ -81,7 +81,7 @@ export function DeleteRecordButton({
               ) : (
                 <Trash2 aria-hidden="true" />
               )}
-              {pending ? "Deleting…" : "Delete record"}
+              {pending ? t.deleting : t.confirm}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

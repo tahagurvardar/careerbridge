@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
+import type { RouteLocale } from "@/i18n/config";
 import {
   calculateConversion,
   countActiveApplications,
@@ -190,6 +191,7 @@ export async function getRecruiterAnalytics(
   actor: AnalyticsActor,
   filters: RecruiterAnalyticsSearch,
   range: AnalyticsDateRange,
+  locale: RouteLocale = "en",
 ): Promise<RecruiterAnalyticsResult> {
   await assertActiveRecruiter(prisma, actor);
 
@@ -236,7 +238,7 @@ export async function getRecruiterAnalytics(
     range.preset === "ALL"
       ? await queryScopedApplicationTrendEarliest(prisma, scope)
       : range.startAt;
-  const buckets = createTrendBuckets(range, earliestAt);
+  const buckets = createTrendBuckets(range, earliestAt, locale);
   const createdRange = createdAtWhere(range);
   const applicationWhere = {
     job: {

@@ -4,6 +4,13 @@ import {
   EMPLOYMENT_TYPES,
   employmentTypeLabels,
 } from "@/features/candidate-profile/schemas";
+import type {
+  RecruiterDictionary,
+  ValidationDictionary,
+} from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
+import { recruiter as englishRecruiter } from "@/i18n/dictionaries/en/recruiter";
+import { validation as englishValidation } from "@/i18n/dictionaries/en/validation";
 
 export { EMPLOYMENT_TYPES, employmentTypeLabels };
 
@@ -55,68 +62,6 @@ export const jobStatusLabels: Record<JobStatusValue, string> = {
  */
 export const MAX_SALARY = 1_000_000_000;
 
-function optionalText(maxLength: number, label: string) {
-  return z
-    .string()
-    .trim()
-    .max(
-      maxLength,
-      `${label} must be ${maxLength.toLocaleString()} characters or fewer.`,
-    );
-}
-
-const jobTitleSchema = z
-  .string()
-  .trim()
-  .min(2, "Job title must be at least 2 characters.")
-  .max(160, "Job title must be 160 characters or fewer.");
-
-export const salaryAmountSchema = z
-  .union([
-    z
-      .string()
-      .trim()
-      .refine(
-        (value) => value === "" || /^\d{1,10}$/.test(value),
-        "Enter a whole, non-negative amount.",
-      )
-      .transform((value) => (value ? Number(value) : null)),
-    z
-      .number()
-      .int("Enter a whole amount.")
-      .nonnegative("Salary cannot be negative."),
-    z.null(),
-  ])
-  .refine(
-    (value) => value === null || (value >= 0 && value <= MAX_SALARY),
-    `Salary must be between 0 and ${MAX_SALARY.toLocaleString()}.`,
-  );
-
-export const salaryCurrencySchema = z
-  .string()
-  .trim()
-  .transform((value) => value.toUpperCase())
-  .refine(
-    (value) => value === "" || /^[A-Z]{3}$/.test(value),
-    "Use a 3-letter ISO currency code, e.g. USD.",
-  );
-
-const calendarDateSchema = z
-  .string()
-  .trim()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date.")
-  .refine((value) => {
-    const date = new Date(`${value}T00:00:00.000Z`);
-    return (
-      !Number.isNaN(date.valueOf()) && date.toISOString().startsWith(value)
-    );
-  }, "Enter a valid date.");
-
-export const applicationDeadlineSchema = z.union([
-  calendarDateSchema,
-  z.literal(""),
-]);
-
 /**
  * Treats calendar dates in UTC so timezone offsets never shift a deadline
  * across the day boundary. The deadline day itself is not considered past.
@@ -135,58 +80,129 @@ type SalaryShape = {
   salaryMax: number | null;
   salaryCurrency: string;
 };
-
-function refineSalary(value: SalaryShape, context: z.RefinementCtx) {
-  if (
-    value.salaryMin !== null &&
-    value.salaryMax !== null &&
-    value.salaryMin > value.salaryMax
-  ) {
-    context.addIssue({
-      code: "custom",
-      path: ["salaryMax"],
-      message: "Maximum salary cannot be lower than the minimum.",
-    });
-  }
-
-  const hasSalary = value.salaryMin !== null || value.salaryMax !== null;
-  if (hasSalary && !value.salaryCurrency) {
-    context.addIssue({
-      code: "custom",
-      path: ["salaryCurrency"],
-      message: "Add a currency for the salary range.",
-    });
-  }
+export function createJobSchemas(
+  validation: ValidationDictionary,
+  recruiter: RecruiterDictionary,
+) {
+  const v = validation.jobs;
+  const labels = recruiter.jobs.form;
+  const optionalText = (maxLength: number, label: string) =>
+    z
+      .string()
+      .trim()
+      .max(
+        maxLength,
+        formatMessage(v.fieldTooLong, { field: label, max: maxLength }),
+      );
+  const jobTitleSchema = z
+    .string()
+    .trim()
+    .min(2, formatMessage(v.titleMin, { min: 2 }))
+    .max(160, formatMessage(v.titleMax, { max: 160 }));
+  const salaryAmountSchema = z
+    .union([
+      z
+        .string()
+        .trim()
+        .refine(
+          (value) => value === "" || /^\d{1,10}$/.test(value),
+          v.wholeNonNegative,
+        )
+        .transform((value) => (value ? Number(value) : null)),
+      z.number().int(v.wholeAmount).nonnegative(v.salaryNonNegative),
+      z.null(),
+    ])
+    .refine(
+      (value) => value === null || (value >= 0 && value <= MAX_SALARY),
+      formatMessage(v.salaryBetween, { min: 0, max: MAX_SALARY }),
+    );
+  const salaryCurrencySchema = z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .refine(
+      (value) => value === "" || /^[A-Z]{3}$/.test(value),
+      v.currencyCode,
+    );
+  const calendarDateSchema = z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, v.validDate)
+    .refine((value) => {
+      const date = new Date(`${value}T00:00:00.000Z`);
+      return (
+        !Number.isNaN(date.valueOf()) && date.toISOString().startsWith(value)
+      );
+    }, v.validDate);
+  const applicationDeadlineSchema = z.union([
+    calendarDateSchema,
+    z.literal(""),
+  ]);
+  const refineSalary = (value: SalaryShape, context: z.RefinementCtx) => {
+    if (
+      value.salaryMin !== null &&
+      value.salaryMax !== null &&
+      value.salaryMin > value.salaryMax
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["salaryMax"],
+        message: v.salaryOrder,
+      });
+    }
+    if (
+      (value.salaryMin !== null || value.salaryMax !== null) &&
+      !value.salaryCurrency
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["salaryCurrency"],
+        message: v.currencyRequired,
+      });
+    }
+  };
+  const jobContentShape = {
+    title: jobTitleSchema,
+    summary: optionalText(320, labels.summary),
+    description: optionalText(8000, labels.description),
+    responsibilities: optionalText(6000, labels.responsibilities),
+    requirements: optionalText(6000, labels.requirements),
+    location: optionalText(160, labels.location),
+    employmentType: z.union([z.enum(EMPLOYMENT_TYPES), z.literal("")]),
+    workplaceType: z.union([z.enum(WORKPLACE_TYPES), z.literal("")]),
+    experienceLevel: z.union([z.enum(EXPERIENCE_LEVELS), z.literal("")]),
+    salaryMin: salaryAmountSchema,
+    salaryMax: salaryAmountSchema,
+    salaryCurrency: salaryCurrencySchema,
+    applicationDeadline: applicationDeadlineSchema,
+  } as const;
+  const jobContentSchema = z
+    .object(jobContentShape)
+    .strip()
+    .superRefine(refineSalary);
+  const jobCreateSchema = z
+    .object({
+      companyId: z.string().trim().min(1, v.chooseCompany),
+      ...jobContentShape,
+    })
+    .strip()
+    .superRefine(refineSalary);
+  return {
+    salaryAmountSchema,
+    salaryCurrencySchema,
+    applicationDeadlineSchema,
+    jobContentSchema,
+    jobCreateSchema,
+  };
 }
 
-const jobContentShape = {
-  title: jobTitleSchema,
-  summary: optionalText(320, "Summary"),
-  description: optionalText(8000, "Description"),
-  responsibilities: optionalText(6000, "Responsibilities"),
-  requirements: optionalText(6000, "Requirements"),
-  location: optionalText(160, "Location"),
-  employmentType: z.union([z.enum(EMPLOYMENT_TYPES), z.literal("")]),
-  workplaceType: z.union([z.enum(WORKPLACE_TYPES), z.literal("")]),
-  experienceLevel: z.union([z.enum(EXPERIENCE_LEVELS), z.literal("")]),
-  salaryMin: salaryAmountSchema,
-  salaryMax: salaryAmountSchema,
-  salaryCurrency: salaryCurrencySchema,
-  applicationDeadline: applicationDeadlineSchema,
-} as const;
-
-export const jobContentSchema = z
-  .object(jobContentShape)
-  .strip()
-  .superRefine(refineSalary);
-
-export const jobCreateSchema = z
-  .object({
-    companyId: z.string().trim().min(1, "Choose a company you own."),
-    ...jobContentShape,
-  })
-  .strip()
-  .superRefine(refineSalary);
+const defaultSchemas = createJobSchemas(englishValidation, englishRecruiter);
+export const salaryAmountSchema = defaultSchemas.salaryAmountSchema;
+export const salaryCurrencySchema = defaultSchemas.salaryCurrencySchema;
+export const applicationDeadlineSchema =
+  defaultSchemas.applicationDeadlineSchema;
+export const jobContentSchema = defaultSchemas.jobContentSchema;
+export const jobCreateSchema = defaultSchemas.jobCreateSchema;
 
 // Reuse the shared, normalized Skill catalog rules from candidate profiles.
 export {

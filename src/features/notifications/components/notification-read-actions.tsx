@@ -18,8 +18,10 @@ import {
  */
 export function MarkNotificationReadButton({
   notificationId,
+  label,
 }: {
   notificationId: string;
+  label: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -54,7 +56,7 @@ export function MarkNotificationReadButton({
         ) : (
           <Check aria-hidden="true" />
         )}
-        Mark read
+        {label}
       </Button>
     </div>
   );
@@ -66,8 +68,10 @@ export function MarkNotificationReadButton({
  */
 export function MarkAllNotificationsReadButton({
   unreadCount,
+  label,
 }: {
   unreadCount: number;
+  label: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -103,7 +107,7 @@ export function MarkAllNotificationsReadButton({
         ) : (
           <CheckCheck aria-hidden="true" />
         )}
-        Mark all as read
+        {label}
       </Button>
     </div>
   );

@@ -7,15 +7,23 @@ import {
 } from "@/components/ui/card";
 import { AnalyticsEmptyState } from "@/features/analytics/components/analytics-empty-state";
 import type { TrendPoint } from "@/features/analytics/analytics";
+import type { RouteLocale } from "@/i18n/config";
+import type { AnalyticsDictionary } from "@/i18n/dictionary";
+import { formatInteger } from "@/i18n/formatter";
+import { formatMessage } from "@/i18n/translate";
 
 export function TrendChart({
   title,
   description,
   points,
+  locale,
+  t,
 }: {
   title: string;
   description: string;
   points: TrendPoint[];
+  locale: RouteLocale;
+  t: AnalyticsDictionary["shared"];
 }) {
   const total = points.reduce((sum, point) => sum + point.value, 0);
   const peak = points.reduce<TrendPoint | null>(
@@ -24,6 +32,9 @@ export function TrendChart({
     null,
   );
   const maximum = Math.max(0, ...points.map((point) => point.value));
+  const totalLabel = formatInteger(locale, total);
+  const peakLabel = formatInteger(locale, peak?.value ?? 0);
+  const period = peak?.label ?? t.noBucket;
 
   return (
     <Card className="min-w-0">
@@ -33,25 +44,33 @@ export function TrendChart({
       </CardHeader>
       <CardContent>
         {total === 0 ? (
-          <AnalyticsEmptyState />
+          <AnalyticsEmptyState title={t.noTrendData} />
         ) : (
           <>
             <p
               className="text-muted-foreground mb-4 text-sm"
               aria-live="polite"
             >
-              Total {total.toLocaleString()}; peak{" "}
-              {peak?.value.toLocaleString()} in {peak?.label}.
+              {formatMessage(t.trendSummary, {
+                total: totalLabel,
+                peak: peakLabel,
+                period,
+              })}
             </p>
             <div
               role="img"
-              aria-label={`${title}. ${total} total. Peak ${peak?.value ?? 0} in ${peak?.label ?? "no bucket"}.`}
+              aria-label={formatMessage(t.trendAria, {
+                title,
+                total: totalLabel,
+                peak: peakLabel,
+                period,
+              })}
               className="border-border/60 bg-muted/20 flex h-44 min-w-0 items-end gap-px rounded-xl border px-2 pt-4 pb-2"
             >
               {points.map((point) => (
                 <span
                   key={point.key}
-                  title={`${point.label}: ${point.value}`}
+                  title={`${point.label}: ${formatInteger(locale, point.value)}`}
                   className="bg-primary/80 min-w-0 flex-1 rounded-t-sm"
                   style={{
                     height:
@@ -68,20 +87,20 @@ export function TrendChart({
             </div>
             <details className="mt-4">
               <summary className="focus-visible:ring-ring w-fit cursor-pointer rounded text-sm font-medium focus-visible:ring-2 focus-visible:outline-none">
-                View accessible data table
+                {t.viewTable}
               </summary>
               <div className="mt-3 max-h-72 overflow-auto rounded-lg border">
                 <table className="w-full text-sm">
                   <caption className="sr-only">
-                    {title} values by UTC bucket
+                    {formatMessage(t.trendCaption, { title })}
                   </caption>
                   <thead className="bg-muted sticky top-0">
                     <tr>
                       <th scope="col" className="px-3 py-2 text-left">
-                        Period
+                        {t.period}
                       </th>
                       <th scope="col" className="px-3 py-2 text-right">
-                        Count
+                        {t.count}
                       </th>
                     </tr>
                   </thead>
@@ -95,7 +114,7 @@ export function TrendChart({
                           {point.label}
                         </th>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {point.value.toLocaleString()}
+                          {formatInteger(locale, point.value)}
                         </td>
                       </tr>
                     ))}

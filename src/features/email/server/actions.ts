@@ -1,10 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { revalidateLocalizedPath } from "@/i18n/revalidate";
 import { requireUser } from "@/features/auth/server/session";
 import { replaceOwnEmailPreferences } from "@/features/email/server/preferences";
+import { getRequestDictionary } from "@/i18n/server";
 import { getPrismaClient } from "@/lib/prisma";
 
 const candidatePreferenceSchema = z
@@ -31,8 +32,10 @@ export async function saveEmailPreferencesAction(
   input: unknown,
 ): Promise<EmailPreferenceActionResult> {
   const session = await requireUser("/settings/notifications");
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.email.actions;
   if (session.user.role === "ADMIN") {
-    return { success: false, message: "Email settings are not available." };
+    return { success: false, message: messages.notAvailable };
   }
 
   const schema =
@@ -43,7 +46,7 @@ export async function saveEmailPreferencesAction(
   if (!parsed.success) {
     return {
       success: false,
-      message: "Those email settings could not be saved.",
+      message: messages.invalid,
     };
   }
 
@@ -54,12 +57,12 @@ export async function saveEmailPreferencesAction(
       session.user.role,
       parsed.data,
     );
-    revalidatePath("/settings/notifications");
-    return { success: true, message: "Email settings saved." };
+    revalidateLocalizedPath("/settings/notifications");
+    return { success: true, message: messages.saved };
   } catch {
     return {
       success: false,
-      message: "We could not save your email settings. Please try again.",
+      message: messages.saveFailed,
     };
   }
 }

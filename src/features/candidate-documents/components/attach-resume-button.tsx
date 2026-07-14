@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { attachResumeToApplicationAction } from "@/features/candidate-documents/server/actions";
+import type { CandidateDictionary } from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
 
 /**
  * Lets a Candidate attach their current CV to an eligible existing application
@@ -26,9 +28,11 @@ import { attachResumeToApplicationAction } from "@/features/candidate-documents/
 export function AttachResumeButton({
   applicationId,
   currentResumeFilename,
+  t,
 }: {
   applicationId: string;
   currentResumeFilename: string;
+  t: CandidateDictionary["attachResume"];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -51,23 +55,21 @@ export function AttachResumeButton({
       <AlertDialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Paperclip aria-hidden="true" />
-          Attach current CV
+          {t.trigger}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Attach your current CV?</AlertDialogTitle>
+          <AlertDialogTitle>{t.title}</AlertDialogTitle>
           <AlertDialogDescription>
-            Your current CV ({currentResumeFilename}) will be attached to this
-            application and shared with the hiring team. This can only be done
-            once and cannot be changed later, even if you replace your CV.
+            {formatMessage(t.description, { filename: currentResumeFilename })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <p aria-live="polite" className="text-destructive text-sm">
           {message}
         </p>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{t.cancel}</AlertDialogCancel>
           <AlertDialogAction
             disabled={pending}
             onClick={(event) => {
@@ -80,7 +82,7 @@ export function AttachResumeButton({
             ) : (
               <Paperclip aria-hidden="true" />
             )}
-            {pending ? "Attaching…" : "Attach CV"}
+            {pending ? t.attaching : t.confirm}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

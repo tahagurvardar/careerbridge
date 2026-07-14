@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  basicProfileSchema,
+  createCandidateProfileSchemas,
   type BasicProfileInput,
 } from "@/features/candidate-profile/schemas";
 import {
@@ -18,13 +18,25 @@ import {
   type ProfileActionResult,
 } from "@/features/candidate-profile/server/actions";
 import { FormField, FormStatus } from "./form-field";
+import { useLocale } from "@/i18n/client";
+import type {
+  CandidateDictionary,
+  ValidationDictionary,
+} from "@/i18n/dictionary";
+import { localizeInternalPath } from "@/i18n/paths";
 
 export function BasicProfileForm({
   defaultValues,
+  candidate,
+  validation,
 }: {
   defaultValues: BasicProfileInput;
+  candidate: CandidateDictionary;
+  validation: ValidationDictionary;
 }) {
+  const t = candidate.profile.basicForm;
   const router = useRouter();
+  const locale = useLocale();
   const [result, setResult] = useState<ProfileActionResult | null>(null);
   const {
     register,
@@ -32,7 +44,9 @@ export function BasicProfileForm({
     setError,
     formState: { errors, isSubmitting },
   } = useForm<BasicProfileInput>({
-    resolver: zodResolver(basicProfileSchema),
+    resolver: zodResolver(
+      createCandidateProfileSchemas(validation, candidate).basicProfileSchema,
+    ),
     defaultValues,
   });
 
@@ -53,7 +67,10 @@ export function BasicProfileForm({
     }
 
     router.push(
-      `/candidate/profile?updated=${encodeURIComponent(nextResult.message)}`,
+      localizeInternalPath(
+        `/candidate/profile?updated=${encodeURIComponent(nextResult.feedbackCode ?? "")}`,
+        locale,
+      ),
     );
   });
 
@@ -62,13 +79,13 @@ export function BasicProfileForm({
       <div className="grid gap-5 sm:grid-cols-2">
         <FormField
           id="headline"
-          label="Professional headline"
-          hint="A focused summary, such as “Frontend engineer building accessible products.”"
+          label={t.headlineLabel}
+          hint={t.headlineHint}
           error={errors.headline?.message}
         >
           <Input
             id="headline"
-            placeholder="Product designer focused on fintech"
+            placeholder={t.headlinePlaceholder}
             maxLength={160}
             aria-invalid={Boolean(errors.headline)}
             aria-describedby={
@@ -80,13 +97,13 @@ export function BasicProfileForm({
 
         <FormField
           id="location"
-          label="Location"
-          hint="City and country, or a remote-work preference."
+          label={t.locationLabel}
+          hint={t.locationHint}
           error={errors.location?.message}
         >
           <Input
             id="location"
-            placeholder="Baku, Azerbaijan"
+            placeholder={t.locationPlaceholder}
             maxLength={120}
             aria-invalid={Boolean(errors.location)}
             aria-describedby={
@@ -99,15 +116,15 @@ export function BasicProfileForm({
 
       <FormField
         id="bio"
-        label="Professional bio"
-        hint="Describe your experience, strengths, and the work you want to do."
+        label={t.bioLabel}
+        hint={t.bioHint}
         error={errors.bio?.message}
       >
         <Textarea
           id="bio"
           rows={7}
           maxLength={2000}
-          placeholder="Share a concise overview of your professional background."
+          placeholder={t.bioPlaceholder}
           aria-invalid={Boolean(errors.bio)}
           aria-describedby={errors.bio ? "bio-error" : "bio-hint"}
           {...register("bio")}
@@ -117,7 +134,7 @@ export function BasicProfileForm({
       <div className="grid gap-5 sm:grid-cols-2">
         <FormField
           id="websiteUrl"
-          label="Website"
+          label={t.websiteLabel}
           error={errors.websiteUrl?.message}
         >
           <Input
@@ -135,7 +152,7 @@ export function BasicProfileForm({
 
         <FormField
           id="linkedinUrl"
-          label="LinkedIn"
+          label={t.linkedInLabel}
           error={errors.linkedinUrl?.message}
         >
           <Input
@@ -153,7 +170,7 @@ export function BasicProfileForm({
 
         <FormField
           id="githubUrl"
-          label="GitHub"
+          label={t.gitHubLabel}
           error={errors.githubUrl?.message}
         >
           <Input
@@ -179,7 +196,7 @@ export function BasicProfileForm({
           ) : (
             <Save aria-hidden="true" />
           )}
-          {isSubmitting ? "Saving…" : "Save profile"}
+          {isSubmitting ? t.saving : t.save}
         </Button>
         <Button
           type="button"
@@ -187,7 +204,7 @@ export function BasicProfileForm({
           size="lg"
           onClick={() => router.back()}
         >
-          Cancel
+          {t.cancel}
         </Button>
       </div>
     </form>

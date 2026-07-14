@@ -10,12 +10,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { skillSchema, type SkillInput } from "@/features/jobs/schemas";
+import { type SkillInput } from "@/features/jobs/schemas";
+import { createCandidateProfileSchemas } from "@/features/candidate-profile/schemas";
 import {
   addJobSkillAction,
   type JobActionResult,
   removeJobSkillAction,
 } from "@/features/jobs/server/actions";
+import type {
+  AppDictionary,
+  CandidateDictionary,
+  ValidationDictionary,
+} from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
 
 type SkillItem = { id: string; name: string };
 
@@ -23,10 +30,16 @@ export function JobSkillManager({
   jobId,
   skills,
   editable,
+  labels,
+  candidate,
+  validation,
 }: {
   jobId: string;
   skills: SkillItem[];
   editable: boolean;
+  labels: AppDictionary["recruiter"]["jobs"]["skills"];
+  candidate: CandidateDictionary;
+  validation: ValidationDictionary;
 }) {
   const router = useRouter();
   const [result, setResult] = useState<JobActionResult | null>(null);
@@ -38,7 +51,9 @@ export function JobSkillManager({
     setError,
     formState: { errors, isSubmitting },
   } = useForm<SkillInput>({
-    resolver: zodResolver(skillSchema),
+    resolver: zodResolver(
+      createCandidateProfileSchemas(validation, candidate).skillSchema,
+    ),
     defaultValues: { name: "" },
   });
 
@@ -70,7 +85,7 @@ export function JobSkillManager({
   return (
     <div className="grid gap-5">
       {skills.length ? (
-        <ul className="flex flex-wrap gap-2" aria-label="Required skills">
+        <ul className="flex flex-wrap gap-2" aria-label={labels.listLabel}>
           {skills.map((skill) => (
             <li key={skill.id}>
               <Badge variant="secondary" className="gap-1 py-1 pl-3">
@@ -81,7 +96,9 @@ export function JobSkillManager({
                     variant="ghost"
                     size="icon-xs"
                     className="-mr-1 rounded-full"
-                    aria-label={`Remove ${skill.name}`}
+                    aria-label={formatMessage(labels.removeLabel, {
+                      skill: skill.name,
+                    })}
                     disabled={removing}
                     onClick={() => remove(skill.id)}
                   >
@@ -94,14 +111,13 @@ export function JobSkillManager({
         </ul>
       ) : (
         <p className="text-muted-foreground text-sm leading-6">
-          No required skills yet. Add at least one skill before publishing so
-          candidates understand what the role needs.
+          {labels.empty}
         </p>
       )}
 
       {editable ? (
         <form className="grid gap-2 sm:max-w-md" onSubmit={submit} noValidate>
-          <Label htmlFor="job-skill-name">Add a required skill</Label>
+          <Label htmlFor="job-skill-name">{labels.addLabel}</Label>
           <div className="flex gap-2">
             <Input
               id="job-skill-name"
@@ -120,7 +136,7 @@ export function JobSkillManager({
               ) : (
                 <Plus aria-hidden="true" />
               )}
-              <span className="sr-only sm:not-sr-only">Add</span>
+              <span className="sr-only sm:not-sr-only">{labels.add}</span>
             </Button>
           </div>
           {errors.name ? (
@@ -144,9 +160,7 @@ export function JobSkillManager({
           </p>
         </form>
       ) : (
-        <p className="text-muted-foreground text-sm">
-          Skills can only be changed while a job is a draft or published.
-        </p>
+        <p className="text-muted-foreground text-sm">{labels.readOnly}</p>
       )}
     </div>
   );

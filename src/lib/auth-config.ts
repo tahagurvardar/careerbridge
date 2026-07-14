@@ -15,6 +15,10 @@ const serverOwnedModerationFields = [
   "restoredAt",
 ] as const;
 
+// preferredLocale is mutable only through the dedicated validated locale
+// action (src/i18n/actions.ts) — never through generic auth user updates.
+const serverOwnedPreferenceFields = ["preferredLocale"] as const;
+
 function getAuthEnvironment() {
   const baseURL = process.env.BETTER_AUTH_URL;
   const secret = process.env.BETTER_AUTH_SECRET;
@@ -104,6 +108,17 @@ export function createAuth({
                 code: "ACCOUNT_MODERATION_UPDATE_FORBIDDEN",
                 message:
                   "Account moderation cannot be changed through auth APIs.",
+              });
+            }
+            if (
+              serverOwnedPreferenceFields.some((field) =>
+                Object.prototype.hasOwnProperty.call(user, field),
+              )
+            ) {
+              throw new APIError("FORBIDDEN", {
+                code: "LOCALE_PREFERENCE_UPDATE_FORBIDDEN",
+                message:
+                  "Language preference is changed through the dedicated locale action.",
               });
             }
           },

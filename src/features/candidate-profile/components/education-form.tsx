@@ -12,22 +12,34 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  educationSchema,
+  createCandidateProfileSchemas,
   type EducationInput,
 } from "@/features/candidate-profile/schemas";
 import type { ProfileActionResult } from "@/features/candidate-profile/server/actions";
 import { FormField, FormStatus } from "./form-field";
+import { useLocale } from "@/i18n/client";
+import type {
+  CandidateDictionary,
+  ValidationDictionary,
+} from "@/i18n/dictionary";
+import { localizeInternalPath } from "@/i18n/paths";
 
 export function EducationForm({
   defaultValues,
   action,
   submitLabel,
+  candidate,
+  validation,
 }: {
   defaultValues: EducationInput;
   action: (input: unknown) => Promise<ProfileActionResult>;
   submitLabel: string;
+  candidate: CandidateDictionary;
+  validation: ValidationDictionary;
 }) {
+  const t = candidate.profile.educationForm;
   const router = useRouter();
+  const locale = useLocale();
   const [result, setResult] = useState<ProfileActionResult | null>(null);
   const {
     register,
@@ -37,7 +49,9 @@ export function EducationForm({
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<EducationInput>({
-    resolver: zodResolver(educationSchema),
+    resolver: zodResolver(
+      createCandidateProfileSchemas(validation, candidate).educationSchema,
+    ),
     defaultValues,
   });
   const isCurrent = useWatch({ control, name: "isCurrent" });
@@ -57,13 +71,16 @@ export function EducationForm({
     }
 
     router.push(
-      `/candidate/profile?updated=${encodeURIComponent(nextResult.message)}`,
+      localizeInternalPath(
+        `/candidate/profile?updated=${encodeURIComponent(nextResult.feedbackCode ?? "")}`,
+        locale,
+      ),
     );
   });
 
   return (
     <form className="grid gap-6" onSubmit={submit} noValidate>
-      <FormField id="school" label="School" error={errors.school?.message}>
+      <FormField id="school" label={t.school} error={errors.school?.message}>
         <Input
           id="school"
           autoComplete="organization"
@@ -75,10 +92,10 @@ export function EducationForm({
       </FormField>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <FormField id="degree" label="Degree" error={errors.degree?.message}>
+        <FormField id="degree" label={t.degree} error={errors.degree?.message}>
           <Input
             id="degree"
-            placeholder="Bachelor of Science"
+            placeholder={t.degreePlaceholder}
             maxLength={120}
             aria-invalid={Boolean(errors.degree)}
             aria-describedby={errors.degree ? "degree-error" : undefined}
@@ -87,12 +104,12 @@ export function EducationForm({
         </FormField>
         <FormField
           id="fieldOfStudy"
-          label="Field of study"
+          label={t.fieldOfStudy}
           error={errors.fieldOfStudy?.message}
         >
           <Input
             id="fieldOfStudy"
-            placeholder="Computer Science"
+            placeholder={t.fieldPlaceholder}
             maxLength={120}
             aria-invalid={Boolean(errors.fieldOfStudy)}
             aria-describedby={
@@ -106,7 +123,7 @@ export function EducationForm({
       <div className="grid gap-5 sm:grid-cols-2">
         <FormField
           id="startYear"
-          label="Start year"
+          label={t.startYear}
           error={errors.startYear?.message}
         >
           <Input
@@ -120,7 +137,7 @@ export function EducationForm({
         </FormField>
         <FormField
           id="endYear"
-          label="End year"
+          label={t.endYear}
           error={errors.endYear?.message}
         >
           <Input
@@ -153,13 +170,13 @@ export function EducationForm({
             />
           )}
         />
-        <Label htmlFor="education-is-current">I currently study here</Label>
+        <Label htmlFor="education-is-current">{t.current}</Label>
       </div>
 
       <FormField
         id="education-description"
-        label="Description"
-        hint="Optional coursework, achievements, or context."
+        label={t.description}
+        hint={t.descriptionHint}
         error={errors.description?.message}
       >
         <Textarea
@@ -187,7 +204,7 @@ export function EducationForm({
           ) : (
             <Save aria-hidden="true" />
           )}
-          {isSubmitting ? "Saving…" : submitLabel}
+          {isSubmitting ? t.saving : submitLabel}
         </Button>
         <Button
           type="button"
@@ -195,7 +212,7 @@ export function EducationForm({
           size="lg"
           onClick={() => router.back()}
         >
-          Cancel
+          {t.cancel}
         </Button>
       </div>
     </form>

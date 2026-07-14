@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { ValidationDictionary } from "@/i18n/dictionary";
+import { validation as englishValidation } from "@/i18n/dictionaries/en/validation";
 
 export const INVITATION_EMAIL_MAX = 254;
 
@@ -9,14 +11,19 @@ export const INVITATION_EMAIL_MAX = 254;
  * object schema; recipient identity, membership role, and Company
  * authorization are always resolved server-side.
  */
-export const inviteRecruiterSchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .email("Enter a valid email address.")
-    .max(INVITATION_EMAIL_MAX, "Email address is too long."),
-});
+export function createInviteRecruiterSchema(validation: ValidationDictionary) {
+  return z.object({
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .email(validation.team.invalidEmail)
+      .max(INVITATION_EMAIL_MAX, validation.team.emailTooLong),
+  });
+}
+
+export const inviteRecruiterSchema =
+  createInviteRecruiterSchema(englishValidation);
 
 export type InviteRecruiterInput = z.input<typeof inviteRecruiterSchema>;
 export type ValidatedInviteRecruiter = z.output<typeof inviteRecruiterSchema>;

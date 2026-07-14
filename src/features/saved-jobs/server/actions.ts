@@ -1,7 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
+import { revalidateLocalizedPath } from "@/i18n/revalidate";
 import { requireRole } from "@/features/auth/server/session";
 import { savedJobSlugSchema } from "@/features/saved-jobs/schemas";
 import {
@@ -10,36 +9,43 @@ import {
   unsaveJob,
 } from "@/features/saved-jobs/server/mutations";
 import { getPrismaClient } from "@/lib/prisma";
+import type { PublicDictionary } from "@/i18n/dictionary";
+import { getRequestDictionary } from "@/i18n/server";
 
 export type SavedJobActionResult =
   | { success: true; saved: boolean; message: string }
   | { success: false; message: string };
 
 function revalidateSavedJobViews(slug: string) {
-  revalidatePath("/jobs");
-  revalidatePath(`/jobs/${slug}`);
-  revalidatePath("/candidate/saved-jobs");
-  revalidatePath("/candidate/dashboard");
+  revalidateLocalizedPath("/jobs");
+  revalidateLocalizedPath(`/jobs/${slug}`);
+  revalidateLocalizedPath("/candidate/saved-jobs");
+  revalidateLocalizedPath("/candidate/dashboard");
 }
 
-function genericFailure(error: unknown): SavedJobActionResult {
+function genericFailure(
+  error: unknown,
+  messages: PublicDictionary["saveButton"],
+): SavedJobActionResult {
   if (error instanceof SavedJobMutationError && error.code === "NOT_ELIGIBLE") {
     return {
       success: false,
-      message: "This job is no longer available to save.",
+      message: messages.unavailable,
     };
   }
   return {
     success: false,
-    message: "We could not update your saved jobs. Please try again.",
+    message: messages.failed,
   };
 }
 
 export async function saveJobAction(
   slugInput: unknown,
 ): Promise<SavedJobActionResult> {
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.public.saveButton;
   const parsed = savedJobSlugSchema.safeParse(slugInput);
-  if (!parsed.success) return genericFailure(null);
+  if (!parsed.success) return genericFailure(null, messages);
 
   const session = await requireRole("CANDIDATE", `/jobs/${parsed.data}`);
   try {
@@ -49,17 +55,19 @@ export async function saveJobAction(
       parsed.data,
     );
     revalidateSavedJobViews(parsed.data);
-    return { success: true, saved: true, message: "Job saved." };
+    return { success: true, saved: true, message: messages.savedMessage };
   } catch (error) {
-    return genericFailure(error);
+    return genericFailure(error, messages);
   }
 }
 
 export async function unsaveJobAction(
   slugInput: unknown,
 ): Promise<SavedJobActionResult> {
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.public.saveButton;
   const parsed = savedJobSlugSchema.safeParse(slugInput);
-  if (!parsed.success) return genericFailure(null);
+  if (!parsed.success) return genericFailure(null, messages);
 
   const session = await requireRole("CANDIDATE", "/candidate/saved-jobs");
   try {
@@ -69,8 +77,8 @@ export async function unsaveJobAction(
       parsed.data,
     );
     revalidateSavedJobViews(parsed.data);
-    return { success: true, saved: false, message: "Job removed." };
+    return { success: true, saved: false, message: messages.removedMessage };
   } catch (error) {
-    return genericFailure(error);
+    return genericFailure(error, messages);
   }
 }

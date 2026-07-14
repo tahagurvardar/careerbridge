@@ -26,15 +26,18 @@ import {
   type JobActionResult,
   transitionJobAction,
 } from "@/features/jobs/server/actions";
+import type { AppDictionary } from "@/i18n/dictionary";
 
 export function JobLifecycleControls({
   jobId,
   status,
   canPublish,
+  labels,
 }: {
   jobId: string;
   status: JobStatusValue;
   canPublish: boolean;
+  labels: AppDictionary["recruiter"]["jobs"]["lifecycle"];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -53,7 +56,7 @@ export function JobLifecycleControls({
   if (actions.length === 0) {
     return (
       <p className="text-muted-foreground text-sm leading-6">
-        This job is archived. Archived jobs are read-only in this phase.
+        {labels.archived}
       </p>
     );
   }
@@ -72,11 +75,11 @@ export function JobLifecycleControls({
             ) : (
               <Send aria-hidden="true" />
             )}
-            Publish job
+            {labels.publish}
           </Button>
           {!canPublish ? (
             <p className="text-muted-foreground text-xs leading-5">
-              Complete every publication requirement below to enable publishing.
+              {labels.publishHint}
             </p>
           ) : null}
         </div>
@@ -85,7 +88,7 @@ export function JobLifecycleControls({
       {status === "PUBLISHED" ? (
         <p className="text-primary flex items-center gap-2 text-sm font-medium">
           <CircleCheck aria-hidden="true" className="size-4" />
-          Live in public job discovery.
+          {labels.live}
         </p>
       ) : null}
 
@@ -94,12 +97,13 @@ export function JobLifecycleControls({
           trigger={
             <Button type="button" variant="outline" disabled={pending}>
               <Lock aria-hidden="true" />
-              Close job
+              {labels.close}
             </Button>
           }
-          title="Close this job?"
-          description="Closing immediately removes the job from public discovery. Candidates will no longer find or open it. You can archive it afterwards."
-          confirmLabel="Close job"
+          title={labels.closeTitle}
+          description={labels.closeDescription}
+          confirmLabel={labels.close}
+          cancelLabel={labels.keep}
           pending={pending}
           onConfirm={() => run("close")}
         />
@@ -110,12 +114,13 @@ export function JobLifecycleControls({
           trigger={
             <Button type="button" variant="ghost" disabled={pending}>
               <Archive aria-hidden="true" />
-              Archive job
+              {labels.archive}
             </Button>
           }
-          title="Archive this job?"
-          description="Archiving removes the job from public discovery and locks it as read-only for this phase. This cannot be undone here."
-          confirmLabel="Archive job"
+          title={labels.archiveTitle}
+          description={labels.archiveDescription}
+          confirmLabel={labels.archive}
+          cancelLabel={labels.keep}
           pending={pending}
           onConfirm={() => run("archive")}
         />
@@ -133,6 +138,7 @@ function ConfirmTransition({
   title,
   description,
   confirmLabel,
+  cancelLabel,
   pending,
   onConfirm,
 }: {
@@ -140,6 +146,7 @@ function ConfirmTransition({
   title: string;
   description: string;
   confirmLabel: string;
+  cancelLabel: string;
   pending: boolean;
   onConfirm: () => void;
 }) {
@@ -154,7 +161,9 @@ function ConfirmTransition({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Keep as is</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>
+            {cancelLabel}
+          </AlertDialogCancel>
           <AlertDialogAction
             disabled={pending}
             onClick={(event) => {

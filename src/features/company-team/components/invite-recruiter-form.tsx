@@ -14,8 +14,15 @@ import {
   inviteRecruiterAction,
   type CompanyTeamActionResult,
 } from "@/features/company-team/server/actions";
+import type { RecruiterDictionary } from "@/i18n/dictionary";
 
-export function InviteRecruiterForm({ companyId }: { companyId: string }) {
+export function InviteRecruiterForm({
+  companyId,
+  labels,
+}: {
+  companyId: string;
+  labels: RecruiterDictionary["team"];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
@@ -41,8 +48,8 @@ export function InviteRecruiterForm({ companyId }: { companyId: string }) {
     <form onSubmit={submit} className="grid gap-4">
       <FormField
         id="invite-email"
-        label="Recruiter email"
-        hint="The email must belong to an existing CareerBridge Recruiter account."
+        label={labels.email}
+        hint={labels.emailHint}
         error={emailError}
       >
         <Input
@@ -59,7 +66,7 @@ export function InviteRecruiterForm({ companyId }: { companyId: string }) {
             emailError ? "invite-email-error" : "invite-email-hint"
           }
           disabled={pending}
-          placeholder="recruiter@example.com"
+          placeholder={labels.emailPlaceholder}
         />
       </FormField>
       <Button type="submit" disabled={pending || !email.trim()}>
@@ -68,7 +75,7 @@ export function InviteRecruiterForm({ companyId }: { companyId: string }) {
         ) : (
           <Send aria-hidden="true" />
         )}
-        {pending ? "Sending…" : "Send invitation"}
+        {pending ? labels.sending : labels.send}
       </Button>
       {result ? (
         <FormStatus message={result.message} success={result.success} />

@@ -260,23 +260,25 @@ describe("interview display formatting", () => {
   const endAt = new Date("2026-07-20T15:00:00Z");
 
   it("renders the stored instant in the stored IANA timezone", () => {
-    expect(formatInterviewDate(startAt, "UTC")).toBe("Mon, Jul 20, 2026");
-    expect(normalize(formatInterviewTime(startAt, "UTC"))).toBe("2:00 PM");
+    expect(formatInterviewDate("en", startAt, "UTC")).toBe("Mon, Jul 20, 2026");
+    expect(normalize(formatInterviewTime("en", startAt, "UTC"))).toBe(
+      "2:00 PM",
+    );
     // The same instant reads differently — but consistently — per zone.
-    expect(normalize(formatInterviewTime(startAt, "America/New_York"))).toBe(
-      "10:00 AM",
-    );
-    expect(normalize(formatInterviewTime(startAt, "Europe/Istanbul"))).toBe(
-      "5:00 PM",
-    );
+    expect(
+      normalize(formatInterviewTime("en", startAt, "America/New_York")),
+    ).toBe("10:00 AM");
+    expect(
+      normalize(formatInterviewTime("en", startAt, "Europe/Istanbul")),
+    ).toBe("5:00 PM");
   });
 
   it("renders a full range with a DST-aware zone abbreviation", () => {
-    expect(normalize(formatInterviewRange(startAt, endAt, "UTC"))).toBe(
+    expect(normalize(formatInterviewRange("en", startAt, endAt, "UTC"))).toBe(
       "Mon, Jul 20, 2026 · 2:00 PM – 3:00 PM UTC",
     );
     expect(
-      normalize(formatInterviewRange(startAt, endAt, "America/New_York")),
+      normalize(formatInterviewRange("en", startAt, endAt, "America/New_York")),
     ).toBe("Mon, Jul 20, 2026 · 10:00 AM – 11:00 AM EDT");
     // Winter instant resolves to the standard-time abbreviation.
     expect(
@@ -291,7 +293,9 @@ describe("interview display formatting", () => {
   it("repeats the end date when a range crosses midnight in its zone", () => {
     const lateStart = new Date("2026-07-20T23:30:00Z");
     const lateEnd = new Date("2026-07-21T00:30:00Z");
-    const rendered = normalize(formatInterviewRange(lateStart, lateEnd, "UTC"));
+    const rendered = normalize(
+      formatInterviewRange("en", lateStart, lateEnd, "UTC"),
+    );
     expect(rendered).toContain("Mon, Jul 20, 2026");
     expect(rendered).toContain("Tue, Jul 21, 2026");
   });
@@ -300,10 +304,10 @@ describe("interview display formatting", () => {
     const base = new Date("2026-07-20T14:00:00Z");
     const plus = (minutes: number) =>
       new Date(base.getTime() + minutes * 60_000);
-    expect(formatInterviewDuration(base, plus(45))).toBe("45 min");
-    expect(formatInterviewDuration(base, plus(60))).toBe("1 hr");
-    expect(formatInterviewDuration(base, plus(90))).toBe("1 hr 30 min");
-    expect(formatInterviewDuration(base, plus(480))).toBe("8 hr");
+    expect(formatInterviewDuration("en", base, plus(45))).toBe("45 min");
+    expect(formatInterviewDuration("en", base, plus(60))).toBe("1 hr");
+    expect(formatInterviewDuration("en", base, plus(90))).toBe("1 hr 30 min");
+    expect(formatInterviewDuration("en", base, plus(480))).toBe("8 hr");
   });
 
   it("labels every format, status, event type, and response", () => {

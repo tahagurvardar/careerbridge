@@ -268,13 +268,33 @@ Deferred from Phase 6B: page views, unique visitors, click/email tracking, third
 
 Exit criteria: each role can read truthful, bounded metrics only for its authorized aggregate scope, with cohort and current-state semantics kept visibly separate and no weakening of existing privacy or moderation boundaries.
 
-## Phase 6C — Localization
+## Phase 6C — Internationalization and localization
 
-- Localize role navigation, analytics labels, status copy, and empty states
-- Localize date, number, percentage, and timezone display without changing stored UTC instants or analytics bucket semantics
-- Preserve authorization, privacy, accessible fallbacks, and canonical URL behavior across locales
+Status: implemented on `feat/internationalization-localization` after completion of Phase 6B analytics.
 
-## Phase 7 — Responsible AI assistance
+- English, Turkish, Azerbaijani, and Russian locale configuration, typed dictionaries, native scripts, and Intl mappings
+- Locale-prefixed Next.js App Router pages with safe legacy-page redirects, API/static/private-download exclusions, and query/dynamic-segment preservation
+- Guest locale cookie plus dedicated authenticated `User.preferredLocale` persistence protected from generic Better Auth updates
+- Localized public, auth, Candidate, Recruiter, Admin, analytics, notification, email-preference, validation, metadata, empty, success, and error presentation
+- Locale-aware dates, relative time, plurals, numbers, percentages, and timezone display without changing UTC storage or Phase 6B numeric semantics
+- Event-time `Notification.locale` and `EmailOutbox.locale` snapshots with independently rendered mixed-locale recipients, neutral canonical destinations, immutable history/retries, and existing dedupe/atomicity
+- Localized public canonical metadata and `en`/`tr`/`az`/`ru` alternates without translating user-authored names/titles or exposing moderated content
+- Recursive dictionary/placeholder parity, formatter/routing/validation/delivery unit coverage, isolated database coverage, and cross-locale access/privacy verification
+
+Deferred from Phase 6C: automatic translation, external translation APIs, a content-management translation UI, additional locales, translation of user-authored content, locale-specific slugs, right-to-left layout, and final native-speaker editorial certification. These can be additive without changing the locale/security boundaries.
+
+Exit criteria: all application-owned product surfaces and existing delivery events are available in four locales while authorization, privacy, stored content, delivery guarantees, public visibility, and analytics values remain unchanged.
+
+## Phase 7 — Deployment and operational hardening
+
+- Managed PostgreSQL environment and migration promotion policy
+- Preview/production environment separation and secret management
+- CI quality gates, preview deployments, and rollback procedures
+- Observability, alerting, backups, and recovery exercises
+- Production email-provider configuration and controlled dispatcher scheduling
+- Performance, accessibility, security, rate-limit, and abuse testing
+
+## Phase 8 — Responsible AI assistance
 
 - Evaluation datasets and safety criteria
 - Explainable job-match assistance
@@ -285,12 +305,7 @@ Exit criteria: each role can read truthful, bounded metrics only for its authori
 
 AI does not autonomously accept, reject, rank, or make hiring decisions.
 
-## Phase 8 — Launch hardening and expansion
+## Phase 9 — Post-launch expansion
 
-- CI/CD and preview environment policy
-- Observability, alerting, backups, and recovery exercises
-- Performance and accessibility audits
-- Security review, rate limiting, and abuse testing
 - Data export, deletion, and retention workflows
-- Multilingual architecture and localization
 - Advanced analytics informed by real product usage

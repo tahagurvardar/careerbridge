@@ -307,7 +307,30 @@ Active Admins see aggregate platform User, Company, Job, Application, Interview,
 
 Analytics routes are `/admin/analytics`, `/recruiter/analytics`, and `/candidate/analytics`; each is linked from role navigation and its dashboard without duplicating the full analytics page. Every chart has visible values and a table fallback. CSV/PDF export, scheduled analytics email, public metrics, materialized views, background aggregation, warehouse/ETL work, revenue/billing analytics, predictive analytics, and custom chart building remain deferred. Phase 6C is localization.
 
-## Intentionally deferred after Phase 6B
+## Internationalization and localization (Phase 6C)
+
+Phase 6C follows the completed Phase 6B analytics work and makes the existing product usable in English, Turkish, Azerbaijani, and Russian. Every page route is exposed beneath `/en`, `/tr`, `/az`, or `/ru`; legacy unprefixed page links resolve through a safe cookie/default redirect. API, authentication API, email-dispatch, framework/static, and private-download endpoints keep their canonical unprefixed paths.
+
+| Product behavior   | Requirement                                                                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guest preference   | A validated locale cookie persists switching and refreshes; invalid values fall back safely                                                     |
+| Account preference | `User.preferredLocale` persists through a dedicated operation and is restored at sign-in                                                        |
+| Route switching    | Keep the current safe page, query, filter, pagination, and dynamic identifier with one locale prefix                                            |
+| Application UI     | Localize navigation, auth, Candidate, Recruiter, Admin, analytics, notification, email-preference, validation, empty, success, and error states |
+| User content       | Never translate biographies, education/experience, Company/Job content, CVs, cover letters, notes, Interview details, or moderation notes       |
+| Formatting         | Use locale-specific dates, relative time, numbers, percentages, plurals, and timezone display without altering stored UTC values                |
+| Public SEO         | Localized metadata, canonical localized URLs, and four language alternates; preserve user-authored names/titles                                 |
+| Access and privacy | Identical role, ownership, suspension, moderation, hidden-content, and sensitive-field behavior in all locales                                  |
+
+Notifications and every existing transactional-email event are rendered at event time from the recipient's server-side account preference. Each record stores its locale and localized immutable content, while its destination stays canonical and locale-neutral. A later preference change affects only future events. Mixed-language recipients receive independently rendered copies, and email retries never retranslate queued content. No template contains Candidate email, CV metadata, Recruiter notes, meeting URL, Interview location/instructions, or moderation notes. No real email is required or sent during Phase 6C verification.
+
+Analytics keeps the Phase 6B numeric contract. For the same actor, scope, range, Company, and Job selection, every locale receives equal counts, buckets, funnel stages, exits, and conversion values. Only application-owned labels, accessible descriptions, date/number/percentage presentation, and empty states change. User-authored Company and Job selector labels remain exactly stored.
+
+Acceptance requires dictionary/key/placeholder parity, native script preservation, equivalent validation rejection, safe legacy redirects, no double prefixes or open redirects, canonical API exclusions, localized event snapshots, immutable history, public metadata alternates, authorization/privacy equality, responsive light/dark UI, and no hydration, console, overflow, or Phase 6C server errors. Automated translation services and arbitrary runtime dictionary imports are outside scope; native-speaker editorial review may refine wording later without changing keys or behavior.
+
+Deployment and operational hardening are the next product phase.
+
+## Intentionally deferred after Phase 6C
 
 - Google, Outlook, and Apple calendar synchronization and OAuth calendar connections
 - Google Meet, Zoom, and Microsoft Teams link generation and calendar provider webhooks

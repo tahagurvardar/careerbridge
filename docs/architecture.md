@@ -354,6 +354,65 @@ The additive `20260714021140_analytics_query_indexes` migration adds only indexe
 
 Moderation does not erase history: Admin may count hidden records, an authorized OWNER may see a safe Hidden label, and a Candidate's historical Application remains included, while no surface exposes the reason note. Charts are supplemental, non-animated, theme-token based, responsive, visibly titled/described, safe at zero, and paired with numeric summaries and tables. No third-party tracking or chart dependency was added. Page views, unique visitors, clicks, email opens/clicks, exports, scheduled reports, data warehouse/ETL work, materialized views, predictions, rankings, and forecasts remain deferred. Phase 6C localizes labels and display formatting without changing these semantics.
 
+## Internationalization architecture (Phase 6C)
+
+Phase 6C is a presentation and delivery-localization layer over the already completed Phase 6B analytics and product workflows. `src/i18n/config.ts` owns the four route locales (`en`, `tr`, `az`, `ru`), their Prisma `AppLocale` mappings, Intl locale identifiers, the English default, and the locale cookie contract. `src/i18n/routing.ts` owns canonical internal-path parsing and localization; `src/i18n/dictionaries` contains statically known per-locale dictionary modules behind a server loader; `src/i18n/format.ts` owns locale-aware dates, relative time, counts, and percentages. Domain schemas use localized schema factories or stable codes so validation rules are not copied four times.
+
+### Locale resolution matrix
+
+| Context                        | Source of locale                             | Persistence/write behavior                                    | Invalid value behavior                            |
+| ------------------------------ | -------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------- |
+| Locale-prefixed page render    | Valid first URL segment                      | No implicit account mutation                                  | Locale catch-all/not found                        |
+| Legacy unprefixed page request | Valid locale cookie, otherwise `en`          | Redirects to one prefixed page URL                            | Ignores invalid cookie                            |
+| Authenticated language change  | Server-validated requested locale            | Updates dedicated `User.preferredLocale` operation and cookie | Fixed localized error; no write                   |
+| Registration                   | Server-validated route locale                | Initializes account preference and cookie                     | Route cannot supply an unsupported locale         |
+| Sign-in                        | Stored `User.preferredLocale`                | Mirrors preference to cookie and localizes safe destination   | Stored enum/default is authoritative              |
+| Notification/email event       | Recipient preference read inside server flow | Snapshots locale with rendered immutable content              | Database enum/default prevents unsupported values |
+
+The language-switch operation accepts only a supported locale and a safe same-origin internal path. It strips an existing locale prefix before adding exactly one new prefix, preserves query strings and dynamic segments, and rejects protocols, protocol-relative URLs, traversal, encoded bypasses, and external callback destinations. Better Auth generic User updates cannot mutate `preferredLocale`; only the dedicated validated operation can do so. Locale never enters a role, ownership, moderation, or record-visibility predicate.
+
+### Routing boundary matrix
+
+| Request class                                    | Locale behavior                      | Security/compatibility rule                       |
+| ------------------------------------------------ | ------------------------------------ | ------------------------------------------------- |
+| `/en`, `/tr`, `/az`, `/ru` and descendants       | Render localized App Router tree     | Exactly one supported prefix                      |
+| Legacy page URL                                  | Temporary locale-resolution redirect | Query, filters, pagination, and IDs retained      |
+| `/api` including Better Auth/internal dispatcher | Never prefixed or redirected         | Existing API authentication remains authoritative |
+| `/_next`, static files, metadata files           | Never prefixed or redirected         | Framework and asset delivery unchanged            |
+| Private document download                        | Remains canonical and unprefixed     | Existing session/ownership check unchanged        |
+| Unknown localized page                           | Localized safe not-found surface     | No route discovery or authorization detail        |
+
+The root layout remains the only document layout and supplies the validated language to `<html lang>`. Locale layouts/pages await Next.js 16 route parameters. Public Landing, Job list/detail, and Company list/detail metadata use localized titles/descriptions, canonical localized URLs, and `hreflang` alternates for all four locales. User-authored names/titles are not translated; hidden or unpublished content remains unavailable through the same public predicates.
+
+### Translation ownership matrix
+
+| Data                                             | Application-owned presentation                         | User-authored payload                                          |
+| ------------------------------------------------ | ------------------------------------------------------ | -------------------------------------------------------------- |
+| Candidate profile, education, experience, skills | Headings, fields, actions, completion and validation   | Biography and entered professional/education/experience values |
+| Company and Job                                  | Workspace, lifecycle/moderation, filters, statuses     | Company name/description; Job title/description/requirements   |
+| Applications and documents                       | State/actions/timeline/CV controls                     | Cover letter and CV content/metadata values                    |
+| Notes and Interviews                             | Controls, status, agenda/history labels                | Note text, instructions, location, meeting URL                 |
+| Admin                                            | Directories, moderation controls, audit/pagination     | Moderation note text                                           |
+| Analytics                                        | Labels, descriptions, accessible summaries, formatters | No user-authored payload is selected for charts                |
+
+Dictionaries are plain typed data: no external translation API, runtime code execution, HTML execution, or Markdown execution exists. English is the source shape. Tests recursively enforce namespace, key, placeholder, plural-family, and nonempty-value parity, plus native Turkish/Azerbaijani characters and Russian Cyrillic. Locale-aware schema factories reuse identical constraints across translations, and Server Actions return localized safe feedback without exposing Zod internals, Prisma errors, stacks, or hidden authorization state.
+
+### Event-time delivery matrix
+
+| Property                             | Notification                                                               | EmailOutbox                                                           |
+| ------------------------------------ | -------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Locale source                        | Recipient `preferredLocale`                                                | Recipient `preferredLocale`                                           |
+| Snapshot                             | `locale`, localized title/message                                          | `locale`, localized subject/text/escaped HTML                         |
+| Destination at rest                  | Canonical locale-neutral internal path                                     | Canonical locale-neutral internal path                                |
+| Destination at presentation/delivery | Safe locale prefix from snapshot                                           | Safe locale prefix from snapshot, then server base URL                |
+| Immutability                         | Later preference changes do not rewrite history                            | Retry reuses queued subject/body/locale/destination                   |
+| Dedupe/atomicity                     | Existing deterministic key and business transaction                        | Existing deterministic key, preference status, and outbox transaction |
+| Sensitive exclusions                 | Email, CV metadata, notes, meeting/location/instructions, moderation notes | Same exclusions                                                       |
+
+Mixed-locale recipients are rendered independently in the authoritative business transaction. Provider I/O remains outside it. `PENDING`, `SUPPRESSED`, `PROCESSING`, `RETRY_SCHEDULED`, `SENT`, and `DEAD_LETTER`, skip-locked claiming, lock-token ownership, append-only attempts, and preference behavior are unchanged. The development/test provider performs no real delivery.
+
+Dates and relative time use stored UTC instants with locale-specific presentation. Analytics retains the exact Phase 6B server-created half-open UTC ranges, bucket membership, status/funnel counts, null denominators, and one-decimal numeric semantics; only labels and Intl formatting change. Authorization and privacy DTO tests remain locale-independent by design, while localization tests prove dictionary/formatter/template parity.
+
 ## Validation and forms
 
 - Zod will validate data at every untrusted boundary.

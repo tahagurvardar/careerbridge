@@ -21,7 +21,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   MODERATION_REASON_CODES,
-  moderationReasonLabels,
   type ModerationReasonCodeValue,
 } from "@/features/admin/moderation";
 import {
@@ -33,32 +32,37 @@ import {
   suspendUserAction,
   type ModerationActionResult,
 } from "@/features/admin/server/actions";
+import { useLocale } from "@/i18n/client";
+import type { AdminDictionary, AppDictionary } from "@/i18n/dictionary";
+import { formatInteger } from "@/i18n/formatter";
+import { formatMessage } from "@/i18n/translate";
 
 type ModerationActionFormProps = {
   targetId: string;
   expectedVersion: number;
   targetType: "USER" | "COMPANY" | "JOB";
   currentStatus: "ACTIVE" | "SUSPENDED" | "VISIBLE" | "HIDDEN";
+  labels: AdminDictionary["moderationForm"];
+  reasonLabels: AppDictionary["labels"]["moderationReason"];
 };
 
 const initialResult: ModerationActionResult | null = null;
 
 function actionCopy(props: ModerationActionFormProps) {
+  const labels = props.labels;
   if (props.targetType === "USER") {
     return props.currentStatus === "ACTIVE"
       ? {
-          verb: "Suspend user",
-          title: "Suspend this user account?",
-          description:
-            "The account will lose authenticated access and every active session will be revoked. Historical records will remain.",
+          verb: labels.suspendUser,
+          title: labels.suspendUserTitle,
+          description: labels.suspendUserDescription,
           destructive: true,
           action: suspendUserAction,
         }
       : {
-          verb: "Restore user",
-          title: "Restore this user account?",
-          description:
-            "The account may sign in normally again, but no session will be created automatically.",
+          verb: labels.restoreUser,
+          title: labels.restoreUserTitle,
+          description: labels.restoreUserDescription,
           destructive: false,
           action: restoreUserAction,
         };
@@ -66,36 +70,32 @@ function actionCopy(props: ModerationActionFormProps) {
   if (props.targetType === "COMPANY") {
     return props.currentStatus === "VISIBLE"
       ? {
-          verb: "Hide company",
-          title: "Hide this company?",
-          description:
-            "The company and all of its jobs will disappear from public discovery. Private authorized workspaces and history remain.",
+          verb: labels.hideCompany,
+          title: labels.hideCompanyTitle,
+          description: labels.hideCompanyDescription,
           destructive: true,
           action: hideCompanyAction,
         }
       : {
-          verb: "Restore company",
-          title: "Restore this company's visibility?",
-          description:
-            "Only moderation visibility changes. The existing publication setting remains authoritative.",
+          verb: labels.restoreCompany,
+          title: labels.restoreCompanyTitle,
+          description: labels.restoreCompanyDescription,
           destructive: false,
           action: restoreCompanyAction,
         };
   }
   return props.currentStatus === "VISIBLE"
     ? {
-        verb: "Hide job",
-        title: "Hide this job?",
-        description:
-          "The job will disappear from public discovery and new applications will be blocked. Existing history remains.",
+        verb: labels.hideJob,
+        title: labels.hideJobTitle,
+        description: labels.hideJobDescription,
         destructive: true,
         action: hideJobAction,
       }
     : {
-        verb: "Restore job",
-        title: "Restore this job's visibility?",
-        description:
-          "Only moderation visibility changes. Draft, closed, or archived jobs will remain non-public.",
+        verb: labels.restoreJob,
+        title: labels.restoreJobTitle,
+        description: labels.restoreJobDescription,
         destructive: false,
         action: restoreJobAction,
       };
@@ -103,6 +103,7 @@ function actionCopy(props: ModerationActionFormProps) {
 
 export function ModerationActionForm(props: ModerationActionFormProps) {
   const router = useRouter();
+  const locale = useLocale();
   const copy = actionCopy(props);
   const [reasonCode, setReasonCode] = useState<ModerationReasonCodeValue | "">(
     "",
@@ -140,7 +141,9 @@ export function ModerationActionForm(props: ModerationActionFormProps) {
       }}
     >
       <div className="grid gap-2">
-        <Label htmlFor={`reason-${props.targetId}`}>Moderation reason</Label>
+        <Label htmlFor={`reason-${props.targetId}`}>
+          {props.labels.reason}
+        </Label>
         <select
           id={`reason-${props.targetId}`}
           value={reasonCode}
@@ -152,10 +155,10 @@ export function ModerationActionForm(props: ModerationActionFormProps) {
           disabled={pending}
           className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-10 w-full rounded-lg border px-3 text-sm outline-none focus-visible:ring-3 disabled:opacity-50"
         >
-          <option value="">Choose a reason</option>
+          <option value="">{props.labels.chooseReason}</option>
           {MODERATION_REASON_CODES.map((code) => (
             <option key={code} value={code}>
-              {moderationReasonLabels[code]}
+              {props.reasonLabels[code]}
             </option>
           ))}
         </select>
@@ -167,9 +170,10 @@ export function ModerationActionForm(props: ModerationActionFormProps) {
       </div>
       <div className="grid gap-2">
         <div className="flex items-center justify-between gap-3">
-          <Label htmlFor={`note-${props.targetId}`}>Internal note</Label>
+          <Label htmlFor={`note-${props.targetId}`}>{props.labels.note}</Label>
           <span className="text-muted-foreground text-xs">
-            {reasonNote.length}/500
+            {formatInteger(locale, reasonNote.length)}/
+            {formatInteger(locale, 500)}
           </span>
         </div>
         <Textarea
@@ -182,7 +186,7 @@ export function ModerationActionForm(props: ModerationActionFormProps) {
           maxLength={500}
           rows={4}
           disabled={pending}
-          placeholder="Optional plain-text context for Admin audit history"
+          placeholder={props.labels.notePlaceholder}
         />
         {result && !result.success && result.fieldErrors?.reasonNote ? (
           <p className="text-destructive text-sm">
@@ -211,7 +215,7 @@ export function ModerationActionForm(props: ModerationActionFormProps) {
             variant={copy.destructive ? "destructive" : "default"}
             disabled={!reasonCode || pending}
           >
-            {pending ? "Working..." : copy.verb}
+            {pending ? props.labels.working : copy.verb}
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
@@ -223,7 +227,9 @@ export function ModerationActionForm(props: ModerationActionFormProps) {
             <AlertDialogDescription>{copy.description}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={pending}>
+              {props.labels.cancel}
+            </AlertDialogCancel>
             <AlertDialogAction
               variant={copy.destructive ? "destructive" : "default"}
               disabled={pending}
@@ -232,7 +238,9 @@ export function ModerationActionForm(props: ModerationActionFormProps) {
                 submit();
               }}
             >
-              {pending ? "Working..." : `Confirm ${copy.verb.toLowerCase()}`}
+              {pending
+                ? props.labels.working
+                : formatMessage(props.labels.confirm, { action: copy.verb })}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

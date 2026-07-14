@@ -5,28 +5,34 @@ import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { Button } from "@/components/ui/button";
+import { formatMessage } from "@/i18n/translate";
 
 type ThemePreference = "system" | "light" | "dark";
 
+export interface ThemeToggleLabels {
+  system: string;
+  light: string;
+  dark: string;
+  /** Template with {current} and {next} placeholders. */
+  switchLabel: string;
+  loading: string;
+}
+
 interface ThemeOption {
-  label: string;
   next: ThemePreference;
   icon: LucideIcon;
 }
 
 const themeOptions: Record<ThemePreference, ThemeOption> = {
   system: {
-    label: "System",
     next: "light",
     icon: Monitor,
   },
   light: {
-    label: "Light",
     next: "dark",
     icon: Sun,
   },
   dark: {
-    label: "Dark",
     next: "system",
     icon: Moon,
   },
@@ -48,20 +54,18 @@ function isThemePreference(
   return value === "system" || value === "light" || value === "dark";
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ labels }: { labels: ThemeToggleLabels }) {
   const hasMounted = useHasMounted();
   const { theme, setTheme } = useTheme();
   const activeTheme = hasMounted && isThemePreference(theme) ? theme : "system";
   const option = themeOptions[activeTheme];
-  const nextOption = themeOptions[option.next];
   const ThemeIcon = option.icon;
   const label = hasMounted
-    ? "Current theme: " +
-      option.label +
-      ". Switch to " +
-      nextOption.label.toLowerCase() +
-      " theme."
-    : "Theme preference is loading.";
+    ? formatMessage(labels.switchLabel, {
+        current: labels[activeTheme],
+        next: labels[option.next],
+      })
+    : labels.loading;
 
   return (
     <Button

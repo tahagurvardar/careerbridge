@@ -69,13 +69,18 @@ function recipient(userId: string, role: "CANDIDATE" | "RECRUITER") {
   return { userId, role } as const;
 }
 
-function createUser(label: string, role: PlatformRole) {
+function createUser(
+  label: string,
+  role: PlatformRole,
+  preferredLocale: "EN" | "TR" | "AZ" | "RU" = "EN",
+) {
   return prisma.user.create({
     data: {
       id: `${testPrefix}-${label}`,
       name: `Notifications Test ${label}`,
       email: `${testPrefix}-${label}@example.test`,
       role,
+      preferredLocale,
     },
     select: { id: true },
   });
@@ -162,12 +167,12 @@ databaseDescribe(
       companyData = companyDataModule;
 
       const users = await Promise.all([
-        createUser("owner", "RECRUITER"),
-        createUser("co-owner", "RECRUITER"),
+        createUser("owner", "RECRUITER", "TR"),
+        createUser("co-owner", "RECRUITER", "RU"),
         createUser("member", "RECRUITER"),
         createUser("admin", "ADMIN"),
         createUser("other-owner", "RECRUITER"),
-        createUser("candidate", "CANDIDATE"),
+        createUser("candidate", "CANDIDATE", "AZ"),
         createUser("other-candidate", "CANDIDATE"),
       ]);
       [
@@ -295,8 +300,44 @@ databaseDescribe(
 
       const sample = rows.find((row) => row.recipientUserId === ownerId);
       expect(sample?.type).toBe("APPLICATION_SUBMITTED");
+      expect(sample?.locale).toBe("TR");
       expect(sample?.href).toBe(`/recruiter/applications/${application.id}`);
       expect(sample?.actorUserId).toBe(candidateId);
+
+      const russian = rows.find((row) => row.recipientUserId === coOwnerId);
+      expect(russian?.locale).toBe("RU");
+      expect(russian?.title).not.toBe(sample?.title);
+      expect(russian?.message).not.toContain(
+        `${testPrefix}-candidate@example.test`,
+      );
+
+      const originalSnapshot = {
+        title: sample?.title,
+        message: sample?.message,
+        locale: sample?.locale,
+      };
+      await prisma.user.update({
+        where: { id: ownerId },
+        data: { preferredLocale: "AZ" },
+      });
+      await expect(
+        prisma.notification.findUniqueOrThrow({ where: { id: sample!.id } }),
+      ).resolves.toMatchObject(originalSnapshot);
+
+      const futureJob = await createPublishedJob(companyAId);
+      const futureApplication = await submit(candidateId, futureJob.slug);
+      await expect(
+        prisma.notification.findFirstOrThrow({
+          where: {
+            applicationId: futureApplication.id,
+            recipientUserId: ownerId,
+          },
+        }),
+      ).resolves.toMatchObject({ locale: "AZ" });
+      await prisma.user.update({
+        where: { id: ownerId },
+        data: { preferredLocale: "TR" },
+      });
     });
 
     it("keeps application, initial history, and notifications atomically consistent", async () => {
@@ -369,9 +410,8 @@ databaseDescribe(
       expect(statusNotifs).toHaveLength(1);
       const notif = statusNotifs[0];
       expect(notif.recipientUserId).toBe(candidateId);
-      expect(notif.message).toBe(
-        `Your application for ${job.title} is now Under review.`,
-      );
+      expect(notif.locale).toBe("AZ");
+      expect(notif.message).toContain(job.title);
       // Safe copy: no email, no raw enum, no cover letter.
       expect(notif.message).not.toContain("@example.test");
       expect(notif.message).not.toContain("UNDER_REVIEW");
@@ -484,9 +524,12 @@ databaseDescribe(
           [memberId, candidateId, adminId].includes(r.recipientUserId),
         ),
       ).toBe(false);
-      const sample = rows[0];
-      expect(sample.message).toContain("withdrew their application for");
-      expect(sample.message).not.toContain("@example.test");
+      expect(rows.map((row) => row.locale).sort()).toEqual(["RU", "TR"]);
+      expect(rows.every((row) => row.message.includes(job.title))).toBe(true);
+      expect(rows.every((row) => !row.message.includes("@example.test"))).toBe(
+        true,
+      );
+      expect(new Set(rows.map((row) => row.message)).size).toBe(2);
     });
 
     it("creates no duplicate notification on a repeated withdrawal", async () => {

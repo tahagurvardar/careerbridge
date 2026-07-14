@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { PrismaClient } from "@/generated/prisma/client";
+import type { RouteLocale } from "@/i18n/config";
 import {
   PUBLIC_COMPANY_VISIBILITY_WHERE,
   PUBLIC_JOB_VISIBILITY_WHERE,
@@ -111,6 +112,7 @@ export async function getAdminAnalytics(
   prisma: PrismaClient,
   actor: AnalyticsActor,
   range: AnalyticsDateRange,
+  locale: RouteLocale = "en",
 ): Promise<AdminAnalyticsResult> {
   await assertActiveAdmin(prisma, actor);
 
@@ -118,7 +120,7 @@ export async function getAdminAnalytics(
     range.preset === "ALL"
       ? await queryPlatformTrendEarliest(prisma)
       : range.startAt;
-  const buckets = createTrendBuckets(range, earliestAt);
+  const buckets = createTrendBuckets(range, earliestAt, locale);
   const createdRange = createdAtWhere(range);
 
   const [

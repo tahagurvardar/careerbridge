@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  skillSchema,
+  createCandidateProfileSchemas,
   type SkillInput,
 } from "@/features/candidate-profile/schemas";
 import {
@@ -19,10 +19,24 @@ import {
   removeSkillAction,
   type ProfileActionResult,
 } from "@/features/candidate-profile/server/actions";
+import type {
+  CandidateDictionary,
+  ValidationDictionary,
+} from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
 
 type SkillItem = { id: string; name: string };
 
-export function SkillManager({ skills }: { skills: SkillItem[] }) {
+export function SkillManager({
+  skills,
+  candidate,
+  validation,
+}: {
+  skills: SkillItem[];
+  candidate: CandidateDictionary;
+  validation: ValidationDictionary;
+}) {
+  const t = candidate.profile.skills;
   const router = useRouter();
   const [result, setResult] = useState<ProfileActionResult | null>(null);
   const [removing, startRemoving] = useTransition();
@@ -33,7 +47,9 @@ export function SkillManager({ skills }: { skills: SkillItem[] }) {
     setError,
     formState: { errors, isSubmitting },
   } = useForm<SkillInput>({
-    resolver: zodResolver(skillSchema),
+    resolver: zodResolver(
+      createCandidateProfileSchemas(validation, candidate).skillSchema,
+    ),
     defaultValues: { name: "" },
   });
 
@@ -65,7 +81,7 @@ export function SkillManager({ skills }: { skills: SkillItem[] }) {
   return (
     <div className="grid gap-5">
       {skills.length ? (
-        <ul className="flex flex-wrap gap-2" aria-label="Your skills">
+        <ul className="flex flex-wrap gap-2" aria-label={t.listAria}>
           {skills.map((skill) => (
             <li key={skill.id}>
               <Badge variant="secondary" className="gap-1 py-1 pl-3">
@@ -75,7 +91,9 @@ export function SkillManager({ skills }: { skills: SkillItem[] }) {
                   variant="ghost"
                   size="icon-xs"
                   className="-mr-1 rounded-full"
-                  aria-label={`Remove ${skill.name}`}
+                  aria-label={formatMessage(t.removeAria, {
+                    skill: skill.name,
+                  })}
                   disabled={removing}
                   onClick={() => remove(skill.id)}
                 >
@@ -86,18 +104,15 @@ export function SkillManager({ skills }: { skills: SkillItem[] }) {
           ))}
         </ul>
       ) : (
-        <p className="text-muted-foreground text-sm leading-6">
-          No skills yet. Add technologies, methods, or professional strengths
-          that help recruiters understand your fit.
-        </p>
+        <p className="text-muted-foreground text-sm leading-6">{t.empty}</p>
       )}
 
       <form className="grid gap-2 sm:max-w-md" onSubmit={submit} noValidate>
-        <Label htmlFor="skill-name">Add a skill</Label>
+        <Label htmlFor="skill-name">{t.addLabel}</Label>
         <div className="flex gap-2">
           <Input
             id="skill-name"
-            placeholder="TypeScript"
+            placeholder={t.placeholder}
             maxLength={80}
             disabled={isSubmitting || removing}
             aria-invalid={Boolean(errors.name)}
@@ -110,7 +125,7 @@ export function SkillManager({ skills }: { skills: SkillItem[] }) {
             ) : (
               <Plus aria-hidden="true" />
             )}
-            <span className="sr-only sm:not-sr-only">Add</span>
+            <span className="sr-only sm:not-sr-only">{t.add}</span>
           </Button>
         </div>
         {errors.name ? (

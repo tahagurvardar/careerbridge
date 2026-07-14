@@ -1,14 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
+import { revalidateLocalizedPath } from "@/i18n/revalidate";
+import type { InterviewsDictionary } from "@/i18n/dictionary";
+import { getRequestDictionary } from "@/i18n/server";
 import { requireRole } from "@/features/auth/server/session";
-import {
-  CANDIDATE_INTERVIEW_CONFLICT_MESSAGE,
-  ORGANIZER_INTERVIEW_CONFLICT_MESSAGE,
-  STALE_INTERVIEW_MESSAGE,
-  type InterviewResponseValue,
-} from "@/features/interviews/interviews";
+import type { InterviewResponseValue } from "@/features/interviews/interviews";
 import {
   buildInterviewScheduleSchema,
   expectedVersionSchema,
@@ -55,43 +51,48 @@ async function recruiterActor(callbackPath: string) {
   return { userId: session.user.id, role: session.user.role } as const;
 }
 
-function interviewFailure(error: unknown): InterviewActionResult {
+type InterviewMessages = InterviewsDictionary["actions"];
+
+function interviewFailure(
+  error: unknown,
+  messages: InterviewMessages,
+): InterviewActionResult {
   if (error instanceof InterviewMutationError) {
     switch (error.code) {
       case "CANDIDATE_CONFLICT":
         return {
           success: false,
-          message: CANDIDATE_INTERVIEW_CONFLICT_MESSAGE,
+          message: messages.candidateConflict,
         };
       case "ORGANIZER_CONFLICT":
         return {
           success: false,
-          message: ORGANIZER_INTERVIEW_CONFLICT_MESSAGE,
+          message: messages.organizerConflict,
         };
       case "STALE_VERSION":
       case "CONFLICT":
-        return { success: false, message: STALE_INTERVIEW_MESSAGE };
+        return { success: false, message: messages.stale };
       case "NOT_ELIGIBLE":
         return {
           success: false,
-          message: "Interviews are only available for active applications.",
+          message: messages.notEligible,
         };
       case "INVALID_TRANSITION":
         return {
           success: false,
-          message: "That action is not available for this interview right now.",
+          message: messages.invalidTransition,
         };
       case "NOT_FOUND":
       case "FORBIDDEN":
         return {
           success: false,
-          message: "That interview was not found or is not available.",
+          message: messages.unavailable,
         };
     }
   }
   return {
     success: false,
-    message: "We could not complete that action. Please try again.",
+    message: messages.failed,
   };
 }
 
@@ -99,11 +100,12 @@ function revalidateCandidateInterviewViews(
   interviewId?: string,
   applicationId?: string,
 ) {
-  revalidatePath("/candidate/interviews");
-  revalidatePath("/candidate/dashboard");
-  if (interviewId) revalidatePath(`/candidate/interviews/${interviewId}`);
+  revalidateLocalizedPath("/candidate/interviews");
+  revalidateLocalizedPath("/candidate/dashboard");
+  if (interviewId)
+    revalidateLocalizedPath(`/candidate/interviews/${interviewId}`);
   if (applicationId) {
-    revalidatePath(`/candidate/applications/${applicationId}`);
+    revalidateLocalizedPath(`/candidate/applications/${applicationId}`);
   }
 }
 
@@ -111,11 +113,12 @@ function revalidateRecruiterInterviewViews(
   interviewId?: string,
   applicationId?: string,
 ) {
-  revalidatePath("/recruiter/interviews");
-  revalidatePath("/recruiter/dashboard");
-  if (interviewId) revalidatePath(`/recruiter/interviews/${interviewId}`);
+  revalidateLocalizedPath("/recruiter/interviews");
+  revalidateLocalizedPath("/recruiter/dashboard");
+  if (interviewId)
+    revalidateLocalizedPath(`/recruiter/interviews/${interviewId}`);
   if (applicationId) {
-    revalidatePath(`/recruiter/applications/${applicationId}`);
+    revalidateLocalizedPath(`/recruiter/applications/${applicationId}`);
   }
 }
 
@@ -126,11 +129,16 @@ export async function scheduleInterviewAction(
   const actor = await recruiterActor(
     `/recruiter/applications/${applicationId}`,
   );
-  const parsed = buildInterviewScheduleSchema(new Date()).safeParse(input);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.interviews.actions;
+  const parsed = buildInterviewScheduleSchema(
+    new Date(),
+    dictionary.interviews.scheduleForm.validation,
+  ).safeParse(input);
   if (!parsed.success) {
     return {
       success: false,
-      message: "Check the highlighted fields and try again.",
+      message: messages.checkFields,
       fieldErrors: firstFieldErrors(parsed.error),
     };
   }
@@ -146,11 +154,11 @@ export async function scheduleInterviewAction(
     revalidateCandidateInterviewViews(interview.id, interview.applicationId);
     return {
       success: true,
-      message: "Interview scheduled.",
+      message: messages.scheduled,
       interviewId: interview.id,
     };
   } catch (error) {
-    return interviewFailure(error);
+    return interviewFailure(error, messages);
   }
 }
 
@@ -160,9 +168,11 @@ async function respondToInterviewAction(
   response: InterviewResponseValue,
 ): Promise<InterviewActionResult> {
   const actor = await candidateActor(`/candidate/interviews/${interviewId}`);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.interviews.actions;
   const parsedVersion = expectedVersionSchema.safeParse(expectedVersion);
   if (!parsedVersion.success) {
-    return { success: false, message: STALE_INTERVIEW_MESSAGE };
+    return { success: false, message: messages.stale };
   }
 
   try {
@@ -177,11 +187,10 @@ async function respondToInterviewAction(
     revalidateRecruiterInterviewViews(interview.id, interview.applicationId);
     return {
       success: true,
-      message:
-        response === "ACCEPTED" ? "Interview accepted." : "Interview declined.",
+      message: response === "ACCEPTED" ? messages.accepted : messages.declined,
     };
   } catch (error) {
-    return interviewFailure(error);
+    return interviewFailure(error, messages);
   }
 }
 
@@ -207,15 +216,20 @@ export async function rescheduleInterviewAction(
   input: unknown,
 ): Promise<InterviewActionResult> {
   const actor = await recruiterActor(`/recruiter/interviews/${interviewId}`);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.interviews.actions;
   const parsedVersion = expectedVersionSchema.safeParse(expectedVersion);
   if (!parsedVersion.success) {
-    return { success: false, message: STALE_INTERVIEW_MESSAGE };
+    return { success: false, message: messages.stale };
   }
-  const parsed = buildInterviewScheduleSchema(new Date()).safeParse(input);
+  const parsed = buildInterviewScheduleSchema(
+    new Date(),
+    dictionary.interviews.scheduleForm.validation,
+  ).safeParse(input);
   if (!parsed.success) {
     return {
       success: false,
-      message: "Check the highlighted fields and try again.",
+      message: messages.checkFields,
       fieldErrors: firstFieldErrors(parsed.error),
     };
   }
@@ -230,9 +244,9 @@ export async function rescheduleInterviewAction(
     );
     revalidateRecruiterInterviewViews(interview.id, interview.applicationId);
     revalidateCandidateInterviewViews(interview.id, interview.applicationId);
-    return { success: true, message: "Interview rescheduled." };
+    return { success: true, message: messages.rescheduled };
   } catch (error) {
-    return interviewFailure(error);
+    return interviewFailure(error, messages);
   }
 }
 
@@ -241,9 +255,11 @@ export async function cancelInterviewAction(
   expectedVersion: unknown,
 ): Promise<InterviewActionResult> {
   const actor = await recruiterActor(`/recruiter/interviews/${interviewId}`);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.interviews.actions;
   const parsedVersion = expectedVersionSchema.safeParse(expectedVersion);
   if (!parsedVersion.success) {
-    return { success: false, message: STALE_INTERVIEW_MESSAGE };
+    return { success: false, message: messages.stale };
   }
 
   try {
@@ -255,9 +271,9 @@ export async function cancelInterviewAction(
     );
     revalidateRecruiterInterviewViews(interview.id, interview.applicationId);
     revalidateCandidateInterviewViews(interview.id, interview.applicationId);
-    return { success: true, message: "Interview canceled." };
+    return { success: true, message: messages.canceled };
   } catch (error) {
-    return interviewFailure(error);
+    return interviewFailure(error, messages);
   }
 }
 
@@ -266,9 +282,11 @@ export async function completeInterviewAction(
   expectedVersion: unknown,
 ): Promise<InterviewActionResult> {
   const actor = await recruiterActor(`/recruiter/interviews/${interviewId}`);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.interviews.actions;
   const parsedVersion = expectedVersionSchema.safeParse(expectedVersion);
   if (!parsedVersion.success) {
-    return { success: false, message: STALE_INTERVIEW_MESSAGE };
+    return { success: false, message: messages.stale };
   }
 
   try {
@@ -279,8 +297,8 @@ export async function completeInterviewAction(
       parsedVersion.data,
     );
     revalidateRecruiterInterviewViews(interview.id, interview.applicationId);
-    return { success: true, message: "Interview marked completed." };
+    return { success: true, message: messages.completed };
   } catch (error) {
-    return interviewFailure(error);
+    return interviewFailure(error, messages);
   }
 }

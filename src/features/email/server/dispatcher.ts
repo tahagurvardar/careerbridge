@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
+import type { AppLocale } from "@/generated/prisma/enums";
 import {
   buildAbsoluteEmailDestination,
   getEmailBatchSize,
@@ -13,6 +14,8 @@ import {
   sanitizeProviderFailure,
   type EmailDeliveryProvider,
 } from "@/features/email/server/provider";
+import { dbLocaleToRoute } from "@/i18n/config";
+import { localizeInternalPath } from "@/i18n/paths";
 
 const STALE_LOCK_MS = 10 * 60 * 1_000;
 const RETRY_DELAYS_MS = [
@@ -30,6 +33,7 @@ type ClaimRow = {
   textBody: string;
   htmlBody: string;
   destinationPath: string;
+  locale: AppLocale;
   dedupeKey: string;
   attemptCount: number;
   maxAttempts: number;
@@ -76,7 +80,7 @@ export async function claimDueEmails(
     const rows = await tx.$queryRaw<ClaimRow[]>(Prisma.sql`
       SELECT
         "id", "recipientEmail", "subject", "textBody", "htmlBody",
-        "destinationPath", "dedupeKey", "attemptCount", "maxAttempts"
+        "destinationPath", "locale", "dedupeKey", "attemptCount", "maxAttempts"
       FROM "email_outbox"
       WHERE "status" IN (
         CAST('PENDING' AS "EmailOutboxStatus"),
@@ -204,7 +208,12 @@ export async function dispatchEmailBatch(
   for (const email of claimed) {
     const startedAt = new Date();
     try {
-      const destination = buildAbsoluteEmailDestination(email.destinationPath);
+      const destination = buildAbsoluteEmailDestination(
+        localizeInternalPath(
+          email.destinationPath,
+          dbLocaleToRoute(email.locale),
+        ),
+      );
       const delivery = await provider.send({
         to: email.recipientEmail,
         subject: email.subject,

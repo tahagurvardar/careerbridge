@@ -9,6 +9,8 @@ import {
   applicationStatusLabels,
   type ApplicationStatusValue,
 } from "@/features/applications/schemas";
+import { getIntlLocale, type RouteLocale } from "@/i18n/config";
+import { formatPercentFromRatio } from "@/i18n/formatter";
 
 export const ANALYTICS_RANGE_PRESETS = [
   "30D",
@@ -210,6 +212,7 @@ export function formatTrendBucketLabel(
   startAt: Date,
   granularity: TrendGranularity,
   step = 1,
+  locale: RouteLocale = "en",
 ): string {
   const options: Intl.DateTimeFormatOptions =
     granularity === "DAY"
@@ -221,12 +224,18 @@ export function formatTrendBucketLabel(
             year: "numeric",
             timeZone: "UTC",
           };
-  const startLabel = new Intl.DateTimeFormat("en", options).format(startAt);
+  const startLabel = new Intl.DateTimeFormat(
+    getIntlLocale(locale),
+    options,
+  ).format(startAt);
   if (granularity !== "MONTH" || step === 1) return startLabel;
 
   const end = new Date(startAt);
   end.setUTCMonth(end.getUTCMonth() + step - 1);
-  const endLabel = new Intl.DateTimeFormat("en", options).format(end);
+  const endLabel = new Intl.DateTimeFormat(
+    getIntlLocale(locale),
+    options,
+  ).format(end);
   return `${startLabel}–${endLabel}`;
 }
 
@@ -237,6 +246,7 @@ export function formatTrendBucketLabel(
 export function createTrendBuckets(
   range: AnalyticsDateRange,
   earliestAt?: Date | null,
+  locale: RouteLocale = "en",
 ): TrendBucket[] {
   const effectiveStart = range.startAt ?? earliestAt ?? null;
   if (!effectiveStart || effectiveStart >= range.endAt) return [];
@@ -253,7 +263,7 @@ export function createTrendBuckets(
     const key = startAt.toISOString();
     buckets.push({
       key,
-      label: formatTrendBucketLabel(cursor, range.granularity, step),
+      label: formatTrendBucketLabel(cursor, range.granularity, step, locale),
       startAt,
       endAt,
     });
@@ -285,10 +295,13 @@ export function calculateConversion(
   return Math.round((numerator / denominator) * 1_000) / 10;
 }
 
-export function formatAnalyticsPercentage(value: number | null): string {
+export function formatAnalyticsPercentage(
+  value: number | null,
+  locale: RouteLocale = "en",
+): string {
   return value === null || !Number.isFinite(value)
     ? "—"
-    : `${value.toFixed(1)}%`;
+    : formatPercentFromRatio(locale, value / 100);
 }
 
 export function buildFunnelResult(

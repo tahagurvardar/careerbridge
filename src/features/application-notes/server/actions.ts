@@ -1,13 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
+import { revalidateLocalizedPath } from "@/i18n/revalidate";
 import { requireRole } from "@/features/auth/server/session";
 import {
   applicationIdSchema,
-  createNoteSchema,
-  deleteNoteSchema,
-  editNoteSchema,
+  createApplicationNoteSchemas,
 } from "@/features/application-notes/schemas";
 import {
   ApplicationNoteMutationError,
@@ -16,6 +13,8 @@ import {
   editApplicationNote,
 } from "@/features/application-notes/server/mutations";
 import { getPrismaClient } from "@/lib/prisma";
+import type { RecruiterDictionary } from "@/i18n/dictionary";
+import { getRequestDictionary } from "@/i18n/server";
 
 type FieldErrors = Record<string, string | undefined>;
 
@@ -39,26 +38,30 @@ function firstFieldErrors(error: {
   );
 }
 
-function failure(error: unknown): ApplicationNoteActionResult {
+type ActionMessages = RecruiterDictionary["notes"]["actions"];
+
+function failure(
+  error: unknown,
+  messages: ActionMessages,
+): ApplicationNoteActionResult {
   if (error instanceof ApplicationNoteMutationError) {
     if (error.code === "CONFLICT") {
       return {
         success: false,
         conflict: true,
-        message:
-          "This note changed since you opened it. Refresh and review the latest version before trying again.",
+        message: messages.conflict,
       };
     }
     if (error.code === "NOT_FOUND" || error.code === "FORBIDDEN") {
       return {
         success: false,
-        message: "That note was not found or is not available to you.",
+        message: messages.unavailable,
       };
     }
   }
   return {
     success: false,
-    message: "We could not update the note. Please try again.",
+    message: messages.failed,
   };
 }
 
@@ -73,16 +76,19 @@ async function recruiterActor(applicationId?: string) {
 }
 
 function revalidateNoteViews(applicationId: string, jobId: string) {
-  revalidatePath(`/recruiter/applications/${applicationId}`);
-  revalidatePath("/recruiter/applications");
-  revalidatePath(`/recruiter/jobs/${jobId}/applications`);
-  revalidatePath(`/recruiter/jobs/${jobId}`);
+  revalidateLocalizedPath(`/recruiter/applications/${applicationId}`);
+  revalidateLocalizedPath("/recruiter/applications");
+  revalidateLocalizedPath(`/recruiter/jobs/${jobId}/applications`);
+  revalidateLocalizedPath(`/recruiter/jobs/${jobId}`);
 }
 
 export async function createApplicationNoteAction(
   applicationIdInput: unknown,
   input: unknown,
 ): Promise<ApplicationNoteActionResult> {
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.recruiter.notes.actions;
+  const { createNoteSchema } = createApplicationNoteSchemas(messages);
   const applicationId = applicationIdSchema.safeParse(applicationIdInput);
   const parsed = createNoteSchema.safeParse(input);
   const actor = await recruiterActor(
@@ -91,7 +97,7 @@ export async function createApplicationNoteAction(
   if (!applicationId.success || !parsed.success) {
     return {
       success: false,
-      message: "Check the note and try again.",
+      message: messages.invalid,
       fieldErrors: parsed.success ? undefined : firstFieldErrors(parsed.error),
     };
   }
@@ -104,9 +110,9 @@ export async function createApplicationNoteAction(
       parsed.data.body,
     );
     revalidateNoteViews(note.applicationId, note.jobId);
-    return { success: true, message: "Note added." };
+    return { success: true, message: messages.added };
   } catch (error) {
-    return failure(error);
+    return failure(error, messages);
   }
 }
 
@@ -114,6 +120,9 @@ export async function editApplicationNoteAction(
   applicationIdInput: unknown,
   input: unknown,
 ): Promise<ApplicationNoteActionResult> {
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.recruiter.notes.actions;
+  const { editNoteSchema } = createApplicationNoteSchemas(messages);
   const applicationId = applicationIdSchema.safeParse(applicationIdInput);
   const parsed = editNoteSchema.safeParse(input);
   const actor = await recruiterActor(
@@ -122,7 +131,7 @@ export async function editApplicationNoteAction(
   if (!applicationId.success || !parsed.success) {
     return {
       success: false,
-      message: "Check the note and try again.",
+      message: messages.invalid,
       fieldErrors: parsed.success ? undefined : firstFieldErrors(parsed.error),
     };
   }
@@ -137,9 +146,9 @@ export async function editApplicationNoteAction(
       parsed.data.body,
     );
     revalidateNoteViews(note.applicationId, note.jobId);
-    return { success: true, message: "Note updated." };
+    return { success: true, message: messages.updated };
   } catch (error) {
-    return failure(error);
+    return failure(error, messages);
   }
 }
 
@@ -147,13 +156,16 @@ export async function deleteApplicationNoteAction(
   applicationIdInput: unknown,
   input: unknown,
 ): Promise<ApplicationNoteActionResult> {
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.recruiter.notes.actions;
+  const { deleteNoteSchema } = createApplicationNoteSchemas(messages);
   const applicationId = applicationIdSchema.safeParse(applicationIdInput);
   const parsed = deleteNoteSchema.safeParse(input);
   const actor = await recruiterActor(
     applicationId.success ? applicationId.data : undefined,
   );
   if (!applicationId.success || !parsed.success) {
-    return { success: false, message: "That note could not be deleted." };
+    return { success: false, message: messages.deleteFailed };
   }
 
   try {
@@ -165,8 +177,8 @@ export async function deleteApplicationNoteAction(
       parsed.data.expectedRevision,
     );
     revalidateNoteViews(note.applicationId, note.jobId);
-    return { success: true, message: "Note deleted." };
+    return { success: true, message: messages.deleted };
   } catch (error) {
-    return failure(error);
+    return failure(error, messages);
   }
 }

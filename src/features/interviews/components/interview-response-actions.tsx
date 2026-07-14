@@ -11,6 +11,7 @@ import {
   declineInterviewAction,
   type InterviewActionResult,
 } from "@/features/interviews/server/actions";
+import type { InterviewsDictionary } from "@/i18n/dictionary";
 
 /**
  * Explicit Candidate accept/decline controls. Each button calls its own
@@ -21,9 +22,11 @@ import {
 export function InterviewResponseActions({
   interviewId,
   expectedVersion,
+  t,
 }: {
   interviewId: string;
   expectedVersion: number;
+  t: InterviewsDictionary["responseActions"];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -50,7 +53,7 @@ export function InterviewResponseActions({
           ) : (
             <CircleCheckBig aria-hidden="true" />
           )}
-          Accept interview
+          {t.accept}
         </Button>
         <Button
           type="button"
@@ -59,7 +62,7 @@ export function InterviewResponseActions({
           disabled={pending}
         >
           <CircleX aria-hidden="true" />
-          Decline
+          {t.decline}
         </Button>
       </div>
       {result ? (

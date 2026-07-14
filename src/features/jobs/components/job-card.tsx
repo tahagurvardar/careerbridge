@@ -11,29 +11,37 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { formatJobDate, formatSalaryRange } from "@/features/jobs/format";
-import {
-  employmentTypeLabels,
-  workplaceTypeLabels,
-} from "@/features/jobs/schemas";
 import type { PublicJobCard as PublicJobCardData } from "@/features/jobs/server/data";
 import { JobSaveButton } from "@/features/saved-jobs/components/job-save-button";
+import type { AppDictionary } from "@/i18n/dictionary";
+import type { RouteLocale } from "@/i18n/config";
+import { localizeInternalPath } from "@/i18n/paths";
+import { formatMessage } from "@/i18n/translate";
 
 export function JobCard({
   job,
+  locale,
+  dictionary,
   saveState = null,
 }: {
   job: PublicJobCardData;
+  locale: RouteLocale;
+  dictionary: AppDictionary;
   saveState?: boolean | "SIGNED_OUT" | null;
 }) {
+  const t = dictionary.public.jobCard;
+  const { labels } = dictionary;
   const initials = job.company.name.slice(0, 2).toLocaleUpperCase();
   const salary = formatSalaryRange(
+    locale,
+    t,
     job.salaryMin,
     job.salaryMax,
     job.salaryCurrency,
   );
   const locationLabel = [
     job.location,
-    job.workplaceType ? workplaceTypeLabels[job.workplaceType] : null,
+    job.workplaceType ? labels.workplaceType[job.workplaceType] : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -60,13 +68,13 @@ export function JobCard({
           {job.employmentType ? (
             <p className="flex items-center gap-2">
               <BriefcaseBusiness aria-hidden="true" className="size-4" />
-              {employmentTypeLabels[job.employmentType]}
+              {labels.employmentType[job.employmentType]}
             </p>
           ) : null}
           {job.publishedAt ? (
             <p className="flex items-center gap-2">
               <Clock3 aria-hidden="true" className="size-4" />
-              {formatJobDate(job.publishedAt)}
+              {formatJobDate(locale, job.publishedAt)}
             </p>
           ) : null}
         </div>
@@ -82,26 +90,37 @@ export function JobCard({
       </CardContent>
       <CardFooter className="flex-wrap justify-between gap-3">
         <p className="text-sm font-semibold">
-          {salary ?? "Salary not disclosed"}
+          {salary ?? t.salaryNotDisclosed}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {saveState === "SIGNED_OUT" ? (
             <Button variant="outline" size="sm" asChild>
               <Link
-                href={`/login?callbackPath=${encodeURIComponent(`/jobs/${job.slug}`)}`}
+                href={localizeInternalPath(
+                  `/login?callbackPath=${encodeURIComponent(`/jobs/${job.slug}`)}`,
+                  locale,
+                )}
               >
-                Sign in to save
+                {t.signInToSave}
               </Link>
             </Button>
           ) : typeof saveState === "boolean" ? (
-            <JobSaveButton slug={job.slug} initialSaved={saveState} compact />
+            <JobSaveButton
+              slug={job.slug}
+              initialSaved={saveState}
+              labels={dictionary.public.saveButton}
+              compact
+            />
           ) : null}
           <Button size="sm" asChild>
             <Link
-              href={`/jobs/${job.slug}`}
-              aria-label={`View ${job.title} at ${job.company.name}`}
+              href={localizeInternalPath(`/jobs/${job.slug}`, locale)}
+              aria-label={formatMessage(t.viewJobAria, {
+                jobTitle: job.title,
+                companyName: job.company.name,
+              })}
             >
-              View details <ArrowUpRight aria-hidden="true" />
+              {t.viewDetails} <ArrowUpRight aria-hidden="true" />
             </Link>
           </Button>
         </div>

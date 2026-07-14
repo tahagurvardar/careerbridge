@@ -2,23 +2,24 @@ import Link from "next/link";
 
 import type { NotificationListItem } from "@/features/notifications/server/data";
 import { NotificationTypeIcon } from "@/features/notifications/components/notification-type-icon";
+import type { RouteLocale } from "@/i18n/config";
+import { formatShortDate } from "@/i18n/formatter";
+import { localizeInternalPath } from "@/i18n/paths";
 import { cn } from "@/lib/utils";
-
-function formatShort(value: Date) {
-  return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(
-    new Date(value),
-  );
-}
 
 /**
  * Compact recent-notification list for the Candidate and Recruiter dashboards.
- * Each row links to the notification's safe destination; unread rows carry a
- * small indicator. Escaped text only.
+ * Titles/messages are immutable stored snapshots in the recipient's event-time
+ * locale; the destination localizes at render. Escaped text only.
  */
 export function NotificationSummaryList({
   notifications,
+  locale,
+  unreadSrLabel,
 }: {
   notifications: NotificationListItem[];
+  locale: RouteLocale;
+  unreadSrLabel: string;
 }) {
   return (
     <ul className="divide-y">
@@ -27,7 +28,7 @@ export function NotificationSummaryList({
         return (
           <li key={notification.id}>
             <Link
-              href={notification.href}
+              href={localizeInternalPath(notification.href, locale)}
               className="hover:bg-muted/50 focus-visible:ring-ring -mx-2 flex items-start gap-3 rounded-lg px-2 py-3 focus-visible:ring-2 focus-visible:outline-none"
             >
               <span
@@ -54,14 +55,16 @@ export function NotificationSummaryList({
                   <span className="truncate font-medium">
                     {notification.title}
                   </span>
-                  {isUnread ? <span className="sr-only">Unread</span> : null}
+                  {isUnread ? (
+                    <span className="sr-only">{unreadSrLabel}</span>
+                  ) : null}
                 </span>
                 <span className="text-muted-foreground block truncate text-xs">
                   {notification.message}
                 </span>
               </span>
               <span className="text-muted-foreground shrink-0 text-xs">
-                {formatShort(notification.createdAt)}
+                {formatShortDate(locale, new Date(notification.createdAt))}
               </span>
             </Link>
           </li>

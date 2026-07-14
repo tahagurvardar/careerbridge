@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import {
-  moderationMutationSchema,
+  createModerationMutationSchema,
   type ModerationMutationInput,
 } from "@/features/admin/schemas";
+import { revalidateLocalizedPath } from "@/i18n/revalidate";
+import type { AdminDictionary } from "@/i18n/dictionary";
+import { getRequestDictionary } from "@/i18n/server";
 import { requireActiveAdmin } from "@/features/admin/server/guard";
 import {
   moderateCompany,
@@ -32,29 +33,38 @@ function validationErrors(error: {
   );
 }
 
-function safeMutationError(error: unknown): ModerationActionResult {
+type ActionMessages = AdminDictionary["moderationForm"]["action"];
+type SuccessKey = Exclude<
+  keyof ActionMessages,
+  "conflict" | "invalidTransition" | "unavailable" | "failed" | "invalid"
+>;
+
+function safeMutationError(
+  error: unknown,
+  messages: ActionMessages,
+): ModerationActionResult {
   if (error instanceof ModerationMutationError) {
     if (error.code === "CONFLICT") {
       return {
         success: false,
-        message: "This record changed. Refresh and try again.",
+        message: messages.conflict,
       };
     }
     if (error.code === "INVALID_TRANSITION") {
       return {
         success: false,
-        message: "This moderation action is no longer available.",
+        message: messages.invalidTransition,
       };
     }
     return {
       success: false,
-      message: "This moderation target is unavailable.",
+      message: messages.unavailable,
     };
   }
 
   return {
     success: false,
-    message: "We could not complete this moderation action. Try again.",
+    message: messages.failed,
   };
 }
 
@@ -68,15 +78,22 @@ async function validatedMutation(
     },
     parsed: ModerationMutationInput,
   ) => Promise<unknown>,
-  successMessage: string,
+  successKey: SuccessKey,
   paths: (targetId: string) => string[],
 ): Promise<ModerationActionResult> {
-  const session = await requireActiveAdmin();
-  const parsed = moderationMutationSchema.safeParse(input);
+  const [{ dictionary }, session] = await Promise.all([
+    getRequestDictionary(),
+    requireActiveAdmin(),
+  ]);
+  const messages = dictionary.admin.moderationForm.action;
+  const parsed = createModerationMutationSchema(
+    dictionary.validation,
+    dictionary.admin.moderationForm,
+  ).safeParse(input);
   if (!parsed.success) {
     return {
       success: false,
-      message: "Check the highlighted fields and try again.",
+      message: messages.invalid,
       fieldErrors: validationErrors(parsed.error),
     };
   }
@@ -90,10 +107,11 @@ async function validatedMutation(
       },
       parsed.data,
     );
-    for (const path of paths(parsed.data.targetId)) revalidatePath(path);
-    return { success: true, message: successMessage };
+    for (const path of paths(parsed.data.targetId))
+      revalidateLocalizedPath(path);
+    return { success: true, message: messages[successKey] };
   } catch (error) {
-    return safeMutationError(error);
+    return safeMutationError(error, messages);
   }
 }
 
@@ -102,7 +120,7 @@ export async function suspendUserAction(input: unknown) {
     input,
     (actor, parsed) =>
       moderateUserAccount(getPrismaClient(), actor, "SUSPEND", parsed),
-    "The user account was suspended and active sessions were revoked.",
+    "userSuspended",
     (id) => ["/admin", "/admin/users", `/admin/users/${id}`, "/admin/audit"],
   );
 }
@@ -112,7 +130,7 @@ export async function restoreUserAction(input: unknown) {
     input,
     (actor, parsed) =>
       moderateUserAccount(getPrismaClient(), actor, "RESTORE", parsed),
-    "The user account was restored. They must sign in again.",
+    "userRestored",
     (id) => ["/admin", "/admin/users", `/admin/users/${id}`, "/admin/audit"],
   );
 }
@@ -122,7 +140,7 @@ export async function hideCompanyAction(input: unknown) {
     input,
     (actor, parsed) =>
       moderateCompany(getPrismaClient(), actor, "HIDE", parsed),
-    "The company was hidden from public discovery.",
+    "companyHidden",
     (id) => [
       "/admin",
       "/admin/companies",
@@ -140,7 +158,7 @@ export async function restoreCompanyAction(input: unknown) {
     input,
     (actor, parsed) =>
       moderateCompany(getPrismaClient(), actor, "RESTORE", parsed),
-    "The company moderation visibility was restored.",
+    "companyRestored",
     (id) => [
       "/admin",
       "/admin/companies",
@@ -157,7 +175,7 @@ export async function hideJobAction(input: unknown) {
   return validatedMutation(
     input,
     (actor, parsed) => moderateJob(getPrismaClient(), actor, "HIDE", parsed),
-    "The job was hidden from public discovery.",
+    "jobHidden",
     (id) => [
       "/admin",
       "/admin/jobs",
@@ -172,7 +190,7 @@ export async function restoreJobAction(input: unknown) {
   return validatedMutation(
     input,
     (actor, parsed) => moderateJob(getPrismaClient(), actor, "RESTORE", parsed),
-    "The job moderation visibility was restored.",
+    "jobRestored",
     (id) => [
       "/admin",
       "/admin/jobs",

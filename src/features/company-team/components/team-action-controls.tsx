@@ -37,6 +37,9 @@ import {
   transferCompanyOwnershipAction,
 } from "@/features/company-team/server/actions";
 import type { CompanyMembershipRole } from "@/generated/prisma/enums";
+import type { RecruiterDictionary } from "@/i18n/dictionary";
+import { useLocale } from "@/i18n/client";
+import { localizeInternalPath } from "@/i18n/paths";
 
 type DialogAction = {
   label: string;
@@ -48,8 +51,15 @@ type DialogAction = {
   run: () => Promise<CompanyTeamActionResult>;
 };
 
-function ConfirmAction({ action }: { action: DialogAction }) {
+function ConfirmAction({
+  action,
+  cancelLabel,
+}: {
+  action: DialogAction;
+  cancelLabel: string;
+}) {
   const router = useRouter();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<CompanyTeamActionResult | null>(null);
@@ -62,8 +72,9 @@ function ConfirmAction({ action }: { action: DialogAction }) {
       setResult(nextResult);
       if (nextResult.success) {
         setOpen(false);
-        if (nextResult.redirectTo) router.push(nextResult.redirectTo);
-        else router.refresh();
+        if (nextResult.redirectTo) {
+          router.push(localizeInternalPath(nextResult.redirectTo, locale));
+        } else router.refresh();
       }
     });
   }
@@ -95,7 +106,9 @@ function ConfirmAction({ action }: { action: DialogAction }) {
             <FormStatus message={result.message} />
           ) : null}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={pending}>
+              {cancelLabel}
+            </AlertDialogCancel>
             <AlertDialogAction
               variant={action.variant}
               disabled={pending}
@@ -121,29 +134,34 @@ function ConfirmAction({ action }: { action: DialogAction }) {
 
 export function InvitationResponseControls({
   invitationId,
+  labels,
 }: {
   invitationId: string;
+  labels: {
+    invitation: RecruiterDictionary["invitations"];
+    cancel: string;
+  };
 }) {
   return (
     <div className="flex flex-wrap gap-2">
       <ConfirmAction
+        cancelLabel={labels.cancel}
         action={{
-          label: "Accept",
-          pendingLabel: "Accepting…",
-          title: "Accept this invitation?",
-          description:
-            "You will join this company as a member. Company owners can then manage your membership.",
+          label: labels.invitation.accept,
+          pendingLabel: labels.invitation.accepting,
+          title: labels.invitation.acceptTitle,
+          description: labels.invitation.acceptDescription,
           icon: Crown,
           run: () => acceptCompanyInvitationAction(invitationId),
         }}
       />
       <ConfirmAction
+        cancelLabel={labels.cancel}
         action={{
-          label: "Decline",
-          pendingLabel: "Declining…",
-          title: "Decline this invitation?",
-          description:
-            "The invitation will close and cannot be accepted afterwards.",
+          label: labels.invitation.decline,
+          pendingLabel: labels.invitation.declining,
+          title: labels.invitation.declineTitle,
+          description: labels.invitation.declineDescription,
           variant: "destructive",
           icon: CircleX,
           run: () => declineCompanyInvitationAction(invitationId),
@@ -156,17 +174,20 @@ export function InvitationResponseControls({
 export function RevokeInvitationControl({
   companyId,
   invitationId,
+  labels,
 }: {
   companyId: string;
   invitationId: string;
+  labels: RecruiterDictionary["team"];
 }) {
   return (
     <ConfirmAction
+      cancelLabel={labels.cancel}
       action={{
-        label: "Revoke",
-        pendingLabel: "Revoking…",
-        title: "Revoke this invitation?",
-        description: "The recruiter will no longer be able to accept it.",
+        label: labels.revoke,
+        pendingLabel: labels.revoking,
+        title: labels.revokeTitle,
+        description: labels.revokeDescription,
         variant: "destructive",
         icon: CircleX,
         run: () => revokeCompanyInvitationAction(companyId, invitationId),
@@ -181,22 +202,24 @@ export function MemberAdministrationControls({
   role,
   isCurrentUser,
   ownerCount,
+  labels,
 }: {
   companyId: string;
   membershipId: string;
   role: CompanyMembershipRole;
   isCurrentUser: boolean;
   ownerCount: number;
+  labels: RecruiterDictionary["team"];
 }) {
   if (isCurrentUser) {
     return role === "OWNER" && ownerCount > 1 ? (
       <ConfirmAction
+        cancelLabel={labels.cancel}
         action={{
-          label: "Demote self",
-          pendingLabel: "Demoting…",
-          title: "Demote yourself to member?",
-          description:
-            "You will immediately lose team administration access. Another owner will remain.",
+          label: labels.demoteSelf,
+          pendingLabel: labels.demoting,
+          title: labels.demoteSelfTitle,
+          description: labels.demoteSelfDescription,
           variant: "destructive",
           icon: ShieldMinus,
           run: async () => {
@@ -214,7 +237,9 @@ export function MemberAdministrationControls({
         }}
       />
     ) : (
-      <span className="text-muted-foreground text-xs">Current user</span>
+      <span className="text-muted-foreground text-xs">
+        {labels.currentUser}
+      </span>
     );
   }
 
@@ -223,23 +248,23 @@ export function MemberAdministrationControls({
       {role === "MEMBER" ? (
         <>
           <ConfirmAction
+            cancelLabel={labels.cancel}
             action={{
-              label: "Promote",
-              pendingLabel: "Promoting…",
-              title: "Promote this member to owner?",
-              description:
-                "Owners can manage the company profile, jobs, applications, and team membership.",
+              label: labels.promote,
+              pendingLabel: labels.promoting,
+              title: labels.promoteTitle,
+              description: labels.promoteDescription,
               icon: Crown,
               run: () => promoteCompanyMemberAction(companyId, membershipId),
             }}
           />
           <ConfirmAction
+            cancelLabel={labels.cancel}
             action={{
-              label: "Transfer ownership",
-              pendingLabel: "Transferring…",
-              title: "Transfer ownership to this member?",
-              description:
-                "They will become an owner and you will become a member, immediately losing team administration access.",
+              label: labels.transfer,
+              pendingLabel: labels.transferring,
+              title: labels.transferTitle,
+              description: labels.transferDescription,
               variant: "destructive",
               icon: ArrowRightLeft,
               run: async () => {
@@ -259,12 +284,12 @@ export function MemberAdministrationControls({
         </>
       ) : (
         <ConfirmAction
+          cancelLabel={labels.cancel}
           action={{
-            label: "Demote",
-            pendingLabel: "Demoting…",
-            title: "Demote this owner to member?",
-            description:
-              "They will lose company and team administration access. At least one owner must remain.",
+            label: labels.demote,
+            pendingLabel: labels.demoting,
+            title: labels.demoteTitle,
+            description: labels.demoteDescription,
             variant: "destructive",
             icon: ShieldMinus,
             run: () => demoteCompanyOwnerAction(companyId, membershipId),
@@ -272,12 +297,12 @@ export function MemberAdministrationControls({
         />
       )}
       <ConfirmAction
+        cancelLabel={labels.cancel}
         action={{
-          label: "Remove",
-          pendingLabel: "Removing…",
-          title: "Remove this person from the company?",
-          description:
-            "They will immediately lose access to the private company workspace. Their audit history is retained.",
+          label: labels.remove,
+          pendingLabel: labels.removing,
+          title: labels.removeTitle,
+          description: labels.removeDescription,
           variant: "destructive",
           icon: Trash2,
           run: () => removeCompanyMemberAction(companyId, membershipId),
@@ -290,20 +315,21 @@ export function MemberAdministrationControls({
 export function LeaveCompanyControl({
   companyId,
   isFinalOwner,
+  labels,
 }: {
   companyId: string;
   isFinalOwner: boolean;
+  labels: RecruiterDictionary["team"];
 }) {
   if (isFinalOwner) {
     return (
       <div className="grid gap-2">
         <Button type="button" variant="destructive" disabled>
           <LogOut aria-hidden="true" />
-          Leave company
+          {labels.leave}
         </Button>
         <p className="text-muted-foreground text-xs leading-5">
-          A company must keep at least one owner. Promote or transfer ownership
-          first.
+          {labels.finalOwner}
         </p>
       </div>
     );
@@ -311,12 +337,12 @@ export function LeaveCompanyControl({
 
   return (
     <ConfirmAction
+      cancelLabel={labels.cancel}
       action={{
-        label: "Leave company",
-        pendingLabel: "Leaving…",
-        title: "Leave this company?",
-        description:
-          "You will immediately lose access to this private workspace. A company owner must invite you again to restore membership.",
+        label: labels.leave,
+        pendingLabel: labels.leaving,
+        title: labels.leaveTitle,
+        description: labels.leaveDescription,
         variant: "destructive",
         icon: LogOut,
         run: () => leaveCompanyAction(companyId),

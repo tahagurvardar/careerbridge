@@ -1,13 +1,10 @@
 import { getSafeInternalPath, type PlatformRole } from "@/features/auth/roles";
-import {
-  applicationStatusLabels,
-  type ApplicationStatusValue,
-} from "@/features/applications/schemas";
-import {
-  interviewResponseWords,
-  type InterviewResponseValue,
-} from "@/features/interviews/interviews";
+import type { ApplicationStatusValue } from "@/features/applications/schemas";
+import type { InterviewResponseValue } from "@/features/interviews/interviews";
 import type { EmailEventType } from "@/generated/prisma/enums";
+import type { AppDictionary } from "@/i18n/dictionary";
+import { dictionary as englishDictionary } from "@/i18n/dictionaries/en";
+import { formatMessage } from "@/i18n/translate";
 
 export const EMAIL_EVENT_TYPES = [
   "COMPANY_INVITATION_RECEIVED",
@@ -119,8 +116,9 @@ export function escapeEmailHtml(value: string): string {
 
 export function resolveCandidateDisplayName(
   name: string | null | undefined,
+  fallback = CANDIDATE_DISPLAY_FALLBACK,
 ): string {
-  return name?.trim() || CANDIDATE_DISPLAY_FALLBACK;
+  return name?.trim() || fallback;
 }
 
 export function safeEmailDestination(path: string): string {
@@ -151,54 +149,85 @@ function template(input: {
   };
 }
 
-export function buildCompanyInvitationEmail(input: {
-  companyName: string;
-}): EmailTemplate {
+export function buildCompanyInvitationEmail(
+  input: {
+    companyName: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): EmailTemplate {
+  const copy = dictionary.email.events.companyInvitation;
   return template({
-    subject: `You have been invited to join ${input.companyName}`,
-    message: `You were invited to join ${input.companyName} on CareerBridge.`,
-    cta: "View invitation",
+    subject: formatMessage(copy.subject, { companyName: input.companyName }),
+    message: formatMessage(copy.message, { companyName: input.companyName }),
+    cta: copy.cta,
     destinationPath: "/recruiter/invitations",
   });
 }
 
-export function buildApplicationSubmittedEmail(input: {
-  applicationId: string;
-  candidateName: string | null | undefined;
-  jobTitle: string;
-}): EmailTemplate {
-  const candidate = resolveCandidateDisplayName(input.candidateName);
+export function buildApplicationSubmittedEmail(
+  input: {
+    applicationId: string;
+    candidateName: string | null | undefined;
+    jobTitle: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): EmailTemplate {
+  const copy = dictionary.email.events.applicationSubmitted;
+  const candidate = resolveCandidateDisplayName(
+    input.candidateName,
+    dictionary.labels.fallbacks.candidate,
+  );
   return template({
-    subject: `New application for ${input.jobTitle}`,
-    message: `${candidate} applied for ${input.jobTitle}.`,
-    cta: "Review application",
+    subject: formatMessage(copy.subject, { jobTitle: input.jobTitle }),
+    message: formatMessage(copy.message, {
+      candidate,
+      jobTitle: input.jobTitle,
+    }),
+    cta: copy.cta,
     destinationPath: `/recruiter/applications/${input.applicationId}`,
   });
 }
 
-export function buildApplicationStatusChangedEmail(input: {
-  applicationId: string;
-  jobTitle: string;
-  status: ApplicationStatusValue;
-}): EmailTemplate {
+export function buildApplicationStatusChangedEmail(
+  input: {
+    applicationId: string;
+    jobTitle: string;
+    status: ApplicationStatusValue;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): EmailTemplate {
+  const copy = dictionary.email.events.applicationStatusChanged;
   return template({
-    subject: "Your application status was updated",
-    message: `Your application for ${input.jobTitle} is now ${applicationStatusLabels[input.status]}.`,
-    cta: "View application",
+    subject: copy.subject,
+    message: formatMessage(copy.message, {
+      jobTitle: input.jobTitle,
+      status: dictionary.labels.applicationStatus[input.status],
+    }),
+    cta: copy.cta,
     destinationPath: `/candidate/applications/${input.applicationId}`,
   });
 }
 
-export function buildApplicationWithdrawnEmail(input: {
-  applicationId: string;
-  candidateName: string | null | undefined;
-  jobTitle: string;
-}): EmailTemplate {
-  const candidate = resolveCandidateDisplayName(input.candidateName);
+export function buildApplicationWithdrawnEmail(
+  input: {
+    applicationId: string;
+    candidateName: string | null | undefined;
+    jobTitle: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): EmailTemplate {
+  const copy = dictionary.email.events.applicationWithdrawn;
+  const candidate = resolveCandidateDisplayName(
+    input.candidateName,
+    dictionary.labels.fallbacks.candidate,
+  );
   return template({
-    subject: `Application withdrawn for ${input.jobTitle}`,
-    message: `${candidate} withdrew their application for ${input.jobTitle}.`,
-    cta: "View application",
+    subject: formatMessage(copy.subject, { jobTitle: input.jobTitle }),
+    message: formatMessage(copy.message, {
+      candidate,
+      jobTitle: input.jobTitle,
+    }),
+    cta: copy.cta,
     destinationPath: `/recruiter/applications/${input.applicationId}`,
   });
 }
@@ -209,54 +238,74 @@ export function buildApplicationWithdrawnEmail(input: {
 // destination route, which re-authorizes on open — possessing the email never
 // grants interview access.
 
-export function buildInterviewScheduledEmail(input: {
-  interviewId: string;
-  jobTitle: string;
-}): EmailTemplate {
+export function buildInterviewScheduledEmail(
+  input: {
+    interviewId: string;
+    jobTitle: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): EmailTemplate {
+  const copy = dictionary.email.events.interviewScheduled;
   return template({
-    subject: `Interview scheduled for ${input.jobTitle}`,
-    message: `An interview was scheduled for your application to ${input.jobTitle}. Sign in to review the schedule and respond.`,
-    cta: "View interview",
+    subject: formatMessage(copy.subject, { jobTitle: input.jobTitle }),
+    message: formatMessage(copy.message, { jobTitle: input.jobTitle }),
+    cta: copy.cta,
     destinationPath: `/candidate/interviews/${input.interviewId}`,
   });
 }
 
-export function buildInterviewRescheduledEmail(input: {
-  interviewId: string;
-  jobTitle: string;
-}): EmailTemplate {
+export function buildInterviewRescheduledEmail(
+  input: {
+    interviewId: string;
+    jobTitle: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): EmailTemplate {
+  const copy = dictionary.email.events.interviewRescheduled;
   return template({
-    subject: `Interview rescheduled for ${input.jobTitle}`,
-    message: `Your interview for ${input.jobTitle} was rescheduled. Sign in to review the new time and respond.`,
-    cta: "View interview",
+    subject: formatMessage(copy.subject, { jobTitle: input.jobTitle }),
+    message: formatMessage(copy.message, { jobTitle: input.jobTitle }),
+    cta: copy.cta,
     destinationPath: `/candidate/interviews/${input.interviewId}`,
   });
 }
 
-export function buildInterviewCanceledEmail(input: {
-  interviewId: string;
-  jobTitle: string;
-}): EmailTemplate {
+export function buildInterviewCanceledEmail(
+  input: {
+    interviewId: string;
+    jobTitle: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): EmailTemplate {
+  const copy = dictionary.email.events.interviewCanceled;
   return template({
-    subject: `Interview canceled for ${input.jobTitle}`,
-    message: `Your interview for ${input.jobTitle} was canceled.`,
-    cta: "View interview",
+    subject: formatMessage(copy.subject, { jobTitle: input.jobTitle }),
+    message: formatMessage(copy.message, { jobTitle: input.jobTitle }),
+    cta: copy.cta,
     destinationPath: `/candidate/interviews/${input.interviewId}`,
   });
 }
 
-export function buildInterviewResponseReceivedEmail(input: {
-  interviewId: string;
-  jobTitle: string;
-  candidateName: string | null | undefined;
-  response: InterviewResponseValue;
-}): EmailTemplate {
-  const candidate = resolveCandidateDisplayName(input.candidateName);
-  const word = interviewResponseWords[input.response];
+export function buildInterviewResponseReceivedEmail(
+  input: {
+    interviewId: string;
+    jobTitle: string;
+    candidateName: string | null | undefined;
+    response: InterviewResponseValue;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): EmailTemplate {
+  const copy = dictionary.email.events.interviewResponseReceived;
+  const candidate = resolveCandidateDisplayName(
+    input.candidateName,
+    dictionary.labels.fallbacks.candidate,
+  );
+  const message =
+    input.response === "ACCEPTED" ? copy.messageAccepted : copy.messageDeclined;
   return template({
-    subject: `Interview response received for ${input.jobTitle}`,
-    message: `${candidate} ${word} the interview for ${input.jobTitle}.`,
-    cta: "View interview",
+    subject: formatMessage(copy.subject, { jobTitle: input.jobTitle }),
+    message: formatMessage(message, { candidate, jobTitle: input.jobTitle }),
+    cta: copy.cta,
     destinationPath: `/recruiter/interviews/${input.interviewId}`,
   });
 }
