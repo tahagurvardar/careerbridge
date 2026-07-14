@@ -50,10 +50,12 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  closeLabel,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left";
   showCloseButton?: boolean;
+  closeLabel: string;
 }) {
   return (
     <SheetPortal>
@@ -74,7 +76,7 @@ function SheetContent({
               variant="ghost"
               className="absolute top-3 right-3"
               size="icon-sm"
-              aria-label="Close navigation menu"
+              aria-label={closeLabel}
             >
               <XIcon aria-hidden="true" />
             </Button>

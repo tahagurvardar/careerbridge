@@ -17,8 +17,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { removeResumeAction } from "@/features/candidate-documents/server/actions";
+import type { CandidateDictionary } from "@/i18n/dictionary";
 
-export function RemoveResumeButton() {
+export function RemoveResumeButton({
+  t,
+}: {
+  t: CandidateDictionary["documents"]["remove"];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -40,24 +45,19 @@ export function RemoveResumeButton() {
       <AlertDialogTrigger asChild>
         <Button variant="outline">
           <Trash2 aria-hidden="true" />
-          Remove current CV
+          {t.trigger}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Remove your current CV?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This clears the CV from your active profile so it is no longer
-            attached to new applications. CVs already attached to existing
-            applications stay intact for those hiring teams. You can upload a
-            new CV at any time.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{t.title}</AlertDialogTitle>
+          <AlertDialogDescription>{t.description}</AlertDialogDescription>
         </AlertDialogHeader>
         <p aria-live="polite" className="text-destructive text-sm">
           {message}
         </p>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Keep CV</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{t.keep}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             disabled={pending}
@@ -71,7 +71,7 @@ export function RemoveResumeButton() {
             ) : (
               <Trash2 aria-hidden="true" />
             )}
-            {pending ? "Removing…" : "Remove CV"}
+            {pending ? t.removing : t.confirm}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -1,14 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
+import { revalidateLocalizedPath } from "@/i18n/revalidate";
+import type { CandidateDictionary } from "@/i18n/dictionary";
+import { getRequestDictionary } from "@/i18n/server";
 import { requireRole } from "@/features/auth/server/session";
-import {
-  basicProfileSchema,
-  educationSchema,
-  experienceSchema,
-  skillSchema,
-} from "@/features/candidate-profile/schemas";
+import { createCandidateProfileSchemas } from "@/features/candidate-profile/schemas";
 import {
   addCandidateSkill,
   CandidateProfileMutationError,
@@ -30,12 +26,20 @@ export type ProfileActionResult =
       success: true;
       message: string;
       redirectTo?: "/candidate/profile";
+      feedbackCode?: ProfileFeedbackCode;
     }
   | {
       success: false;
       message: string;
       fieldErrors?: FieldErrors;
     };
+
+export type ProfileFeedbackCode =
+  | "basic-saved"
+  | "education-added"
+  | "education-updated"
+  | "experience-added"
+  | "experience-updated";
 
 function firstFieldErrors(error: {
   flatten(): { fieldErrors: Record<string, string[] | undefined> };
@@ -48,15 +52,20 @@ function firstFieldErrors(error: {
   );
 }
 
-function mutationFailure(error: unknown): ProfileActionResult {
+type ProfileMessages = CandidateDictionary["profile"]["actions"];
+
+function mutationFailure(
+  error: unknown,
+  messages: ProfileMessages,
+): ProfileActionResult {
   if (
     error instanceof CandidateProfileMutationError &&
     error.code === "DUPLICATE_SKILL"
   ) {
     return {
       success: false,
-      message: "That skill is already on your profile.",
-      fieldErrors: { name: "Choose a skill that is not already listed." },
+      message: messages.duplicateSkill,
+      fieldErrors: { name: messages.duplicateSkillField },
     };
   }
 
@@ -66,13 +75,13 @@ function mutationFailure(error: unknown): ProfileActionResult {
   ) {
     return {
       success: false,
-      message: "That profile record was not found or is no longer available.",
+      message: messages.recordUnavailable,
     };
   }
 
   return {
     success: false,
-    message: "We could not save that change. Please try again.",
+    message: messages.saveFailed,
   };
 }
 
@@ -82,20 +91,25 @@ async function candidateActor(callbackPath: string) {
 }
 
 function revalidateCandidateProfile() {
-  revalidatePath("/candidate/profile");
-  revalidatePath("/candidate/dashboard");
+  revalidateLocalizedPath("/candidate/profile");
+  revalidateLocalizedPath("/candidate/dashboard");
 }
 
 export async function saveBasicProfileAction(
   input: unknown,
 ): Promise<ProfileActionResult> {
   const actor = await candidateActor("/candidate/profile/edit");
-  const parsed = basicProfileSchema.safeParse(input);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.profile.actions;
+  const parsed = createCandidateProfileSchemas(
+    dictionary.validation,
+    dictionary.candidate,
+  ).basicProfileSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
       success: false,
-      message: "Check the highlighted fields and try again.",
+      message: messages.checkFields,
       fieldErrors: firstFieldErrors(parsed.error),
     };
   }
@@ -105,11 +119,12 @@ export async function saveBasicProfileAction(
     revalidateCandidateProfile();
     return {
       success: true,
-      message: "Professional information saved.",
+      message: messages.basicSaved,
       redirectTo: "/candidate/profile",
+      feedbackCode: "basic-saved",
     };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
@@ -117,12 +132,17 @@ export async function createEducationAction(
   input: unknown,
 ): Promise<ProfileActionResult> {
   const actor = await candidateActor("/candidate/profile/education/new");
-  const parsed = educationSchema.safeParse(input);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.profile.actions;
+  const parsed = createCandidateProfileSchemas(
+    dictionary.validation,
+    dictionary.candidate,
+  ).educationSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
       success: false,
-      message: "Check the highlighted fields and try again.",
+      message: messages.checkFields,
       fieldErrors: firstFieldErrors(parsed.error),
     };
   }
@@ -132,11 +152,12 @@ export async function createEducationAction(
     revalidateCandidateProfile();
     return {
       success: true,
-      message: "Education added.",
+      message: messages.educationAdded,
       redirectTo: "/candidate/profile",
+      feedbackCode: "education-added",
     };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
@@ -147,12 +168,17 @@ export async function updateEducationAction(
   const actor = await candidateActor(
     `/candidate/profile/education/${educationId}/edit`,
   );
-  const parsed = educationSchema.safeParse(input);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.profile.actions;
+  const parsed = createCandidateProfileSchemas(
+    dictionary.validation,
+    dictionary.candidate,
+  ).educationSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
       success: false,
-      message: "Check the highlighted fields and try again.",
+      message: messages.checkFields,
       fieldErrors: firstFieldErrors(parsed.error),
     };
   }
@@ -167,23 +193,26 @@ export async function updateEducationAction(
     revalidateCandidateProfile();
     return {
       success: true,
-      message: "Education updated.",
+      message: messages.educationUpdated,
       redirectTo: "/candidate/profile",
+      feedbackCode: "education-updated",
     };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
 export async function deleteEducationAction(educationId: string) {
   const actor = await candidateActor("/candidate/profile");
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.profile.actions;
 
   try {
     await deleteCandidateEducation(getPrismaClient(), actor, educationId);
     revalidateCandidateProfile();
-    return { success: true, message: "Education removed." } as const;
+    return { success: true, message: messages.educationRemoved } as const;
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
@@ -191,12 +220,17 @@ export async function createExperienceAction(
   input: unknown,
 ): Promise<ProfileActionResult> {
   const actor = await candidateActor("/candidate/profile/experience/new");
-  const parsed = experienceSchema.safeParse(input);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.profile.actions;
+  const parsed = createCandidateProfileSchemas(
+    dictionary.validation,
+    dictionary.candidate,
+  ).experienceSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
       success: false,
-      message: "Check the highlighted fields and try again.",
+      message: messages.checkFields,
       fieldErrors: firstFieldErrors(parsed.error),
     };
   }
@@ -206,11 +240,12 @@ export async function createExperienceAction(
     revalidateCandidateProfile();
     return {
       success: true,
-      message: "Experience added.",
+      message: messages.experienceAdded,
       redirectTo: "/candidate/profile",
+      feedbackCode: "experience-added",
     };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
@@ -221,12 +256,17 @@ export async function updateExperienceAction(
   const actor = await candidateActor(
     `/candidate/profile/experience/${experienceId}/edit`,
   );
-  const parsed = experienceSchema.safeParse(input);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.profile.actions;
+  const parsed = createCandidateProfileSchemas(
+    dictionary.validation,
+    dictionary.candidate,
+  ).experienceSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
       success: false,
-      message: "Check the highlighted fields and try again.",
+      message: messages.checkFields,
       fieldErrors: firstFieldErrors(parsed.error),
     };
   }
@@ -241,23 +281,26 @@ export async function updateExperienceAction(
     revalidateCandidateProfile();
     return {
       success: true,
-      message: "Experience updated.",
+      message: messages.experienceUpdated,
       redirectTo: "/candidate/profile",
+      feedbackCode: "experience-updated",
     };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
 export async function deleteExperienceAction(experienceId: string) {
   const actor = await candidateActor("/candidate/profile");
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.profile.actions;
 
   try {
     await deleteCandidateExperience(getPrismaClient(), actor, experienceId);
     revalidateCandidateProfile();
-    return { success: true, message: "Experience removed." } as const;
+    return { success: true, message: messages.experienceRemoved } as const;
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
@@ -265,12 +308,17 @@ export async function addSkillAction(
   input: unknown,
 ): Promise<ProfileActionResult> {
   const actor = await candidateActor("/candidate/profile");
-  const parsed = skillSchema.safeParse(input);
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.profile.actions;
+  const parsed = createCandidateProfileSchemas(
+    dictionary.validation,
+    dictionary.candidate,
+  ).skillSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
       success: false,
-      message: "Enter a valid skill.",
+      message: messages.invalidSkill,
       fieldErrors: firstFieldErrors(parsed.error),
     };
   }
@@ -278,20 +326,22 @@ export async function addSkillAction(
   try {
     await addCandidateSkill(getPrismaClient(), actor, parsed.data.name);
     revalidateCandidateProfile();
-    return { success: true, message: "Skill added." };
+    return { success: true, message: messages.skillAdded };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
 export async function removeSkillAction(skillId: string) {
   const actor = await candidateActor("/candidate/profile");
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.profile.actions;
 
   try {
     await removeCandidateSkill(getPrismaClient(), actor, skillId);
     revalidateCandidateProfile();
-    return { success: true, message: "Skill removed." } as const;
+    return { success: true, message: messages.skillRemoved } as const;
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }

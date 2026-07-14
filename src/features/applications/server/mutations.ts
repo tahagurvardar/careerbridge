@@ -116,7 +116,7 @@ export async function createJobApplication(
       if (!readiness.isReady) {
         throw new ApplicationMutationError(
           "PROFILE_INCOMPLETE",
-          readiness.missingFields.map(({ label }) => label),
+          readiness.missingFields.map(({ field }) => field),
         );
       }
 

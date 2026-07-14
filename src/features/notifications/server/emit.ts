@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { Prisma } from "@/generated/prisma/client";
+import type { AppLocale } from "@/generated/prisma/enums";
 import type { ApplicationStatusValue } from "@/features/applications/schemas";
 import type { InterviewResponseValue } from "@/features/interviews/interviews";
 import {
@@ -23,6 +24,9 @@ import {
   interviewScheduledDedupeKey,
   type NotificationContent,
 } from "@/features/notifications/notifications";
+import { dbLocaleToRoute } from "@/i18n/config";
+import type { AppDictionary } from "@/i18n/dictionary";
+import { getDictionary } from "@/i18n/server";
 
 // Emit helpers run INSIDE the caller's domain transaction, so notification
 // rows are atomic with the JobApplication + ApplicationStatusHistory writes. A
@@ -30,6 +34,7 @@ import {
 // `skipDuplicates` relies on the `dedupeKey` unique constraint to make retries
 // and concurrent duplicate events idempotent.
 type Tx = Prisma.TransactionClient;
+type RecipientSnapshot = { id: string; preferredLocale: AppLocale };
 
 /**
  * Resolves the current OWNER recipients of a Company from fresh transaction
@@ -42,19 +47,44 @@ async function resolveCompanyOwnerRecipients(
   tx: Tx,
   companyId: string,
   actorUserId: string,
-): Promise<string[]> {
+): Promise<RecipientSnapshot[]> {
   const owners = await tx.companyMembership.findMany({
     where: {
       companyId,
       role: "OWNER",
       user: { role: "RECRUITER" },
     },
-    select: { userId: true },
+    select: {
+      user: { select: { id: true, preferredLocale: true } },
+    },
   });
-  return dedupeRecipientIds(
-    owners.map((owner) => owner.userId),
-    actorUserId,
+  const recipientIds = new Set(
+    dedupeRecipientIds(
+      owners.map((owner) => owner.user.id),
+      actorUserId,
+    ),
   );
+  return owners
+    .map((owner) => owner.user)
+    .filter((owner) => recipientIds.has(owner.id));
+}
+
+async function resolveRecipient(
+  tx: Tx,
+  recipientUserId: string,
+  actorUserId: string,
+  role: "CANDIDATE" | "RECRUITER",
+): Promise<RecipientSnapshot[]> {
+  if (recipientUserId === actorUserId) return [];
+  const recipient = await tx.user.findFirst({
+    where: { id: recipientUserId, role },
+    select: { id: true, preferredLocale: true },
+  });
+  return recipient ? [recipient] : [];
+}
+
+async function dictionaryFor(recipient: RecipientSnapshot) {
+  return getDictionary(dbLocaleToRoute(recipient.preferredLocale));
 }
 
 /**
@@ -79,28 +109,35 @@ export async function emitApplicationSubmittedNotifications(
   );
   if (recipients.length === 0) return 0;
 
-  const content = buildApplicationSubmittedContent({
-    applicationId: input.applicationId,
-    candidateName: input.candidateName,
-    jobTitle: input.jobTitle,
-  });
-
   const result = await tx.notification.createMany({
-    data: recipients.map((recipientUserId) => ({
-      recipientUserId,
-      actorUserId: input.candidateUserId,
-      type: "APPLICATION_SUBMITTED" as const,
-      title: content.title,
-      message: content.message,
-      href: content.href,
-      applicationId: input.applicationId,
-      jobId: input.jobId,
-      companyId: input.companyId,
-      dedupeKey: applicationSubmittedDedupeKey(
-        input.applicationId,
-        recipientUserId,
-      ),
-    })),
+    data: await Promise.all(
+      recipients.map(async (recipient) => {
+        const content = buildApplicationSubmittedContent(
+          {
+            applicationId: input.applicationId,
+            candidateName: input.candidateName,
+            jobTitle: input.jobTitle,
+          },
+          await dictionaryFor(recipient),
+        );
+        return {
+          recipientUserId: recipient.id,
+          actorUserId: input.candidateUserId,
+          type: "APPLICATION_SUBMITTED" as const,
+          title: content.title,
+          message: content.message,
+          href: content.href,
+          locale: recipient.preferredLocale,
+          applicationId: input.applicationId,
+          jobId: input.jobId,
+          companyId: input.companyId,
+          dedupeKey: applicationSubmittedDedupeKey(
+            input.applicationId,
+            recipient.id,
+          ),
+        };
+      }),
+    ),
     skipDuplicates: true,
   });
   return result.count;
@@ -124,34 +161,43 @@ export async function emitApplicationStatusChangedNotification(
     statusHistoryId: string;
   },
 ): Promise<number> {
-  const recipients = dedupeRecipientIds(
-    [input.candidateUserId],
+  const recipients = await resolveRecipient(
+    tx,
+    input.candidateUserId,
     input.actorUserId,
+    "CANDIDATE",
   );
   if (recipients.length === 0) return 0;
 
-  const content = buildApplicationStatusChangedContent({
-    applicationId: input.applicationId,
-    jobTitle: input.jobTitle,
-    status: input.status,
-  });
-
   const result = await tx.notification.createMany({
-    data: recipients.map((recipientUserId) => ({
-      recipientUserId,
-      actorUserId: input.actorUserId,
-      type: "APPLICATION_STATUS_CHANGED" as const,
-      title: content.title,
-      message: content.message,
-      href: content.href,
-      applicationId: input.applicationId,
-      jobId: input.jobId,
-      companyId: input.companyId,
-      dedupeKey: applicationStatusChangedDedupeKey(
-        input.statusHistoryId,
-        recipientUserId,
-      ),
-    })),
+    data: await Promise.all(
+      recipients.map(async (recipient) => {
+        const content = buildApplicationStatusChangedContent(
+          {
+            applicationId: input.applicationId,
+            jobTitle: input.jobTitle,
+            status: input.status,
+          },
+          await dictionaryFor(recipient),
+        );
+        return {
+          recipientUserId: recipient.id,
+          actorUserId: input.actorUserId,
+          type: "APPLICATION_STATUS_CHANGED" as const,
+          title: content.title,
+          message: content.message,
+          href: content.href,
+          locale: recipient.preferredLocale,
+          applicationId: input.applicationId,
+          jobId: input.jobId,
+          companyId: input.companyId,
+          dedupeKey: applicationStatusChangedDedupeKey(
+            input.statusHistoryId,
+            recipient.id,
+          ),
+        };
+      }),
+    ),
     skipDuplicates: true,
   });
   return result.count;
@@ -176,30 +222,37 @@ export async function emitCompanyInvitationReceivedNotification(
     invitedByUserId: string;
   },
 ): Promise<number> {
-  const recipients = dedupeRecipientIds(
-    [input.inviteeUserId],
+  const recipients = await resolveRecipient(
+    tx,
+    input.inviteeUserId,
     input.invitedByUserId,
+    "RECRUITER",
   );
   if (recipients.length === 0) return 0;
 
-  const content = buildCompanyInvitationReceivedContent({
-    companyName: input.companyName,
-  });
-
   const result = await tx.notification.createMany({
-    data: recipients.map((recipientUserId) => ({
-      recipientUserId,
-      actorUserId: input.invitedByUserId,
-      type: "COMPANY_INVITATION_RECEIVED" as const,
-      title: content.title,
-      message: content.message,
-      href: content.href,
-      companyId: input.companyId,
-      dedupeKey: companyInvitationReceivedDedupeKey(
-        input.invitationId,
-        recipientUserId,
-      ),
-    })),
+    data: await Promise.all(
+      recipients.map(async (recipient) => {
+        const content = buildCompanyInvitationReceivedContent(
+          { companyName: input.companyName },
+          await dictionaryFor(recipient),
+        );
+        return {
+          recipientUserId: recipient.id,
+          actorUserId: input.invitedByUserId,
+          type: "COMPANY_INVITATION_RECEIVED" as const,
+          title: content.title,
+          message: content.message,
+          href: content.href,
+          locale: recipient.preferredLocale,
+          companyId: input.companyId,
+          dedupeKey: companyInvitationReceivedDedupeKey(
+            input.invitationId,
+            recipient.id,
+          ),
+        };
+      }),
+    ),
     skipDuplicates: true,
   });
   return result.count;
@@ -217,7 +270,7 @@ async function emitCandidateInterviewNotification(
   input: {
     type:
       "INTERVIEW_SCHEDULED" | "INTERVIEW_RESCHEDULED" | "INTERVIEW_CANCELED";
-    content: NotificationContent;
+    content: (dictionary: AppDictionary) => NotificationContent;
     dedupeKey: (recipientUserId: string) => string;
     applicationId: string;
     jobId: string;
@@ -226,25 +279,33 @@ async function emitCandidateInterviewNotification(
     actorUserId: string;
   },
 ): Promise<number> {
-  const recipients = dedupeRecipientIds(
-    [input.candidateUserId],
+  const recipients = await resolveRecipient(
+    tx,
+    input.candidateUserId,
     input.actorUserId,
+    "CANDIDATE",
   );
   if (recipients.length === 0) return 0;
 
   const result = await tx.notification.createMany({
-    data: recipients.map((recipientUserId) => ({
-      recipientUserId,
-      actorUserId: input.actorUserId,
-      type: input.type,
-      title: input.content.title,
-      message: input.content.message,
-      href: input.content.href,
-      applicationId: input.applicationId,
-      jobId: input.jobId,
-      companyId: input.companyId,
-      dedupeKey: input.dedupeKey(recipientUserId),
-    })),
+    data: await Promise.all(
+      recipients.map(async (recipient) => {
+        const content = input.content(await dictionaryFor(recipient));
+        return {
+          recipientUserId: recipient.id,
+          actorUserId: input.actorUserId,
+          type: input.type,
+          title: content.title,
+          message: content.message,
+          href: content.href,
+          locale: recipient.preferredLocale,
+          applicationId: input.applicationId,
+          jobId: input.jobId,
+          companyId: input.companyId,
+          dedupeKey: input.dedupeKey(recipient.id),
+        };
+      }),
+    ),
     skipDuplicates: true,
   });
   return result.count;
@@ -268,7 +329,7 @@ export async function emitInterviewScheduledNotification(
 ): Promise<number> {
   return emitCandidateInterviewNotification(tx, {
     type: "INTERVIEW_SCHEDULED",
-    content: buildInterviewScheduledContent(input),
+    content: (dictionary) => buildInterviewScheduledContent(input, dictionary),
     dedupeKey: (recipientUserId) =>
       interviewScheduledDedupeKey(input.interviewId, recipientUserId),
     ...input,
@@ -294,7 +355,8 @@ export async function emitInterviewRescheduledNotification(
 ): Promise<number> {
   return emitCandidateInterviewNotification(tx, {
     type: "INTERVIEW_RESCHEDULED",
-    content: buildInterviewRescheduledContent(input),
+    content: (dictionary) =>
+      buildInterviewRescheduledContent(input, dictionary),
     dedupeKey: (recipientUserId) =>
       interviewRescheduledDedupeKey(input.rescheduleEventId, recipientUserId),
     ...input,
@@ -320,7 +382,7 @@ export async function emitInterviewCanceledNotification(
 ): Promise<number> {
   return emitCandidateInterviewNotification(tx, {
     type: "INTERVIEW_CANCELED",
-    content: buildInterviewCanceledContent(input),
+    content: (dictionary) => buildInterviewCanceledContent(input, dictionary),
     dedupeKey: (recipientUserId) =>
       interviewCanceledDedupeKey(input.interviewId, recipientUserId),
     ...input,
@@ -354,24 +416,31 @@ export async function emitInterviewResponseReceivedNotifications(
   );
   if (recipients.length === 0) return 0;
 
-  const content = buildInterviewResponseReceivedContent(input);
-
   const result = await tx.notification.createMany({
-    data: recipients.map((recipientUserId) => ({
-      recipientUserId,
-      actorUserId: input.candidateUserId,
-      type: "INTERVIEW_RESPONSE_RECEIVED" as const,
-      title: content.title,
-      message: content.message,
-      href: content.href,
-      applicationId: input.applicationId,
-      jobId: input.jobId,
-      companyId: input.companyId,
-      dedupeKey: interviewResponseReceivedDedupeKey(
-        input.responseEventId,
-        recipientUserId,
-      ),
-    })),
+    data: await Promise.all(
+      recipients.map(async (recipient) => {
+        const content = buildInterviewResponseReceivedContent(
+          input,
+          await dictionaryFor(recipient),
+        );
+        return {
+          recipientUserId: recipient.id,
+          actorUserId: input.candidateUserId,
+          type: "INTERVIEW_RESPONSE_RECEIVED" as const,
+          title: content.title,
+          message: content.message,
+          href: content.href,
+          locale: recipient.preferredLocale,
+          applicationId: input.applicationId,
+          jobId: input.jobId,
+          companyId: input.companyId,
+          dedupeKey: interviewResponseReceivedDedupeKey(
+            input.responseEventId,
+            recipient.id,
+          ),
+        };
+      }),
+    ),
     skipDuplicates: true,
   });
   return result.count;
@@ -401,28 +470,35 @@ export async function emitApplicationWithdrawnNotifications(
   );
   if (recipients.length === 0) return 0;
 
-  const content = buildApplicationWithdrawnContent({
-    applicationId: input.applicationId,
-    candidateName: input.candidateName,
-    jobTitle: input.jobTitle,
-  });
-
   const result = await tx.notification.createMany({
-    data: recipients.map((recipientUserId) => ({
-      recipientUserId,
-      actorUserId: input.candidateUserId,
-      type: "APPLICATION_WITHDRAWN" as const,
-      title: content.title,
-      message: content.message,
-      href: content.href,
-      applicationId: input.applicationId,
-      jobId: input.jobId,
-      companyId: input.companyId,
-      dedupeKey: applicationWithdrawnDedupeKey(
-        input.statusHistoryId,
-        recipientUserId,
-      ),
-    })),
+    data: await Promise.all(
+      recipients.map(async (recipient) => {
+        const content = buildApplicationWithdrawnContent(
+          {
+            applicationId: input.applicationId,
+            candidateName: input.candidateName,
+            jobTitle: input.jobTitle,
+          },
+          await dictionaryFor(recipient),
+        );
+        return {
+          recipientUserId: recipient.id,
+          actorUserId: input.candidateUserId,
+          type: "APPLICATION_WITHDRAWN" as const,
+          title: content.title,
+          message: content.message,
+          href: content.href,
+          locale: recipient.preferredLocale,
+          applicationId: input.applicationId,
+          jobId: input.jobId,
+          companyId: input.companyId,
+          dedupeKey: applicationWithdrawnDedupeKey(
+            input.statusHistoryId,
+            recipient.id,
+          ),
+        };
+      }),
+    ),
     skipDuplicates: true,
   });
   return result.count;

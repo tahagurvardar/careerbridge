@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { RecruiterDictionary } from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
 
 export const NOTE_BODY_MAX = 5000;
 
@@ -11,20 +13,40 @@ export function normalizeNoteBody(value: string): string {
   return value.replace(/\r\n?/g, "\n");
 }
 
-const noteBodyTooLong = `Notes must be ${NOTE_BODY_MAX.toLocaleString()} characters or fewer.`;
+export function createApplicationNoteSchemas(
+  messages: Pick<RecruiterDictionary["notes"]["actions"], "empty" | "tooLong">,
+) {
+  const noteBodyTooLong = formatMessage(messages.tooLong, {
+    max: NOTE_BODY_MAX,
+  });
+  const noteBody = z
+    .string()
+    // Bound the raw payload generously before normalizing/trimming so a huge
+    // input is rejected without processing it.
+    .max(NOTE_BODY_MAX * 4, noteBodyTooLong)
+    .transform((value) => normalizeNoteBody(value).trim())
+    .pipe(
+      z.string().min(1, messages.empty).max(NOTE_BODY_MAX, noteBodyTooLong),
+    );
 
-export const noteBodySchema = z
-  .string()
-  // Bound the raw payload generously before normalizing/trimming so a huge
-  // input is rejected without processing it.
-  .max(NOTE_BODY_MAX * 4, noteBodyTooLong)
-  .transform((value) => normalizeNoteBody(value).trim())
-  .pipe(
-    z
-      .string()
-      .min(1, "A note cannot be empty.")
-      .max(NOTE_BODY_MAX, noteBodyTooLong),
-  );
+  return {
+    noteBodySchema: noteBody,
+    createNoteSchema: z.object({ body: noteBody }).strip(),
+    editNoteSchema: z
+      .object({
+        noteId: noteIdSchema,
+        expectedRevision: expectedRevisionSchema,
+        body: noteBody,
+      })
+      .strip(),
+    deleteNoteSchema: z
+      .object({
+        noteId: noteIdSchema,
+        expectedRevision: expectedRevisionSchema,
+      })
+      .strip(),
+  };
+}
 
 // Identifier shapes filter obvious garbage before any database access; they
 // never authorize — ownership is always re-checked server-side.
@@ -38,22 +60,15 @@ export const expectedRevisionSchema = z
   .positive()
   .max(1_000_000);
 
-export const createNoteSchema = z.object({ body: noteBodySchema }).strip();
+const defaultSchemas = createApplicationNoteSchemas({
+  empty: "A note cannot be empty.",
+  tooLong: "Notes must be {max} characters or fewer.",
+});
 
-export const editNoteSchema = z
-  .object({
-    noteId: noteIdSchema,
-    expectedRevision: expectedRevisionSchema,
-    body: noteBodySchema,
-  })
-  .strip();
-
-export const deleteNoteSchema = z
-  .object({
-    noteId: noteIdSchema,
-    expectedRevision: expectedRevisionSchema,
-  })
-  .strip();
+export const noteBodySchema = defaultSchemas.noteBodySchema;
+export const createNoteSchema = defaultSchemas.createNoteSchema;
+export const editNoteSchema = defaultSchemas.editNoteSchema;
+export const deleteNoteSchema = defaultSchemas.deleteNoteSchema;
 
 export type CreateNoteInput = z.input<typeof createNoteSchema>;
 export type EditNoteInput = z.input<typeof editNoteSchema>;

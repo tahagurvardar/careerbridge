@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Prisma } from "@/generated/prisma/client";
-import type { EmailEventType } from "@/generated/prisma/enums";
+import type { AppLocale, EmailEventType } from "@/generated/prisma/enums";
 import type { ApplicationStatusValue } from "@/features/applications/schemas";
 import type { InterviewResponseValue } from "@/features/interviews/interviews";
 import { getEmailMaxAttempts } from "@/features/email/config";
@@ -25,12 +25,16 @@ import {
   resolveEmailPreference,
   type EmailTemplate,
 } from "@/features/email/email";
+import { dbLocaleToRoute } from "@/i18n/config";
+import type { AppDictionary } from "@/i18n/dictionary";
+import { getDictionary } from "@/i18n/server";
 
 type Tx = Prisma.TransactionClient;
 
 type Recipient = {
   id: string;
   email: string;
+  preferredLocale: AppLocale;
   emailPreferences: { eventType: EmailEventType; enabled: boolean }[];
 };
 
@@ -49,6 +53,7 @@ async function resolveCompanyOwners(
     select: {
       id: true,
       email: true,
+      preferredLocale: true,
       emailPreferences: {
         where: { eventType },
         select: { eventType: true, enabled: true },
@@ -71,6 +76,7 @@ async function resolveRecipient(
     select: {
       id: true,
       email: true,
+      preferredLocale: true,
       emailPreferences: {
         where: { eventType },
         select: { eventType: true, enabled: true },
@@ -85,7 +91,7 @@ async function createOutboxRows(
   input: {
     recipients: Recipient[];
     eventType: EmailEventType;
-    content: EmailTemplate;
+    content: (dictionary: AppDictionary) => EmailTemplate;
     dedupeKey: (recipientUserId: string) => string;
     applicationId?: string;
     companyId?: string;
@@ -95,28 +101,34 @@ async function createOutboxRows(
   if (input.recipients.length === 0) return 0;
   const maxAttempts = getEmailMaxAttempts();
   const result = await tx.emailOutbox.createMany({
-    data: input.recipients.map((recipient) => {
-      const enabled = resolveEmailPreference(
-        recipient.emailPreferences,
-        input.eventType,
-      );
-      return {
-        recipientUserId: recipient.id,
-        recipientEmail: recipient.email,
-        eventType: input.eventType,
-        subject: input.content.subject,
-        textBody: input.content.textBody,
-        htmlBody: input.content.htmlBody,
-        destinationPath: input.content.destinationPath,
-        dedupeKey: input.dedupeKey(recipient.id),
-        status: enabled ? ("PENDING" as const) : ("SUPPRESSED" as const),
-        maxAttempts,
-        lastErrorCode: enabled ? null : "USER_PREFERENCE",
-        applicationId: input.applicationId,
-        companyId: input.companyId,
-        invitationId: input.invitationId,
-      };
-    }),
+    data: await Promise.all(
+      input.recipients.map(async (recipient) => {
+        const enabled = resolveEmailPreference(
+          recipient.emailPreferences,
+          input.eventType,
+        );
+        const content = input.content(
+          await getDictionary(dbLocaleToRoute(recipient.preferredLocale)),
+        );
+        return {
+          recipientUserId: recipient.id,
+          recipientEmail: recipient.email,
+          eventType: input.eventType,
+          subject: content.subject,
+          textBody: content.textBody,
+          htmlBody: content.htmlBody,
+          destinationPath: content.destinationPath,
+          locale: recipient.preferredLocale,
+          dedupeKey: input.dedupeKey(recipient.id),
+          status: enabled ? ("PENDING" as const) : ("SUPPRESSED" as const),
+          maxAttempts,
+          lastErrorCode: enabled ? null : "USER_PREFERENCE",
+          applicationId: input.applicationId,
+          companyId: input.companyId,
+          invitationId: input.invitationId,
+        };
+      }),
+    ),
     skipDuplicates: true,
   });
   return result.count;
@@ -140,7 +152,7 @@ export async function emitApplicationSubmittedEmails(
       "APPLICATION_SUBMITTED",
     ),
     eventType: "APPLICATION_SUBMITTED",
-    content: buildApplicationSubmittedEmail(input),
+    content: (dictionary) => buildApplicationSubmittedEmail(input, dictionary),
     dedupeKey: (recipientUserId) =>
       applicationSubmittedEmailDedupeKey(input.applicationId, recipientUserId),
     applicationId: input.applicationId,
@@ -169,7 +181,8 @@ export async function emitApplicationStatusChangedEmail(
       "APPLICATION_STATUS_CHANGED",
     ),
     eventType: "APPLICATION_STATUS_CHANGED",
-    content: buildApplicationStatusChangedEmail(input),
+    content: (dictionary) =>
+      buildApplicationStatusChangedEmail(input, dictionary),
     dedupeKey: (recipientUserId) =>
       applicationStatusEmailDedupeKey(input.statusHistoryId, recipientUserId),
     applicationId: input.applicationId,
@@ -196,7 +209,7 @@ export async function emitApplicationWithdrawnEmails(
       "APPLICATION_WITHDRAWN",
     ),
     eventType: "APPLICATION_WITHDRAWN",
-    content: buildApplicationWithdrawnEmail(input),
+    content: (dictionary) => buildApplicationWithdrawnEmail(input, dictionary),
     dedupeKey: (recipientUserId) =>
       applicationWithdrawnEmailDedupeKey(
         input.statusHistoryId,
@@ -218,7 +231,7 @@ async function emitCandidateInterviewEmail(
   input: {
     eventType:
       "INTERVIEW_SCHEDULED" | "INTERVIEW_RESCHEDULED" | "INTERVIEW_CANCELED";
-    content: EmailTemplate;
+    content: (dictionary: AppDictionary) => EmailTemplate;
     dedupeKey: (recipientUserId: string) => string;
     applicationId: string;
     companyId: string;
@@ -255,7 +268,7 @@ export async function emitInterviewScheduledEmail(
 ) {
   return emitCandidateInterviewEmail(tx, {
     eventType: "INTERVIEW_SCHEDULED",
-    content: buildInterviewScheduledEmail(input),
+    content: (dictionary) => buildInterviewScheduledEmail(input, dictionary),
     dedupeKey: (recipientUserId) =>
       interviewScheduledEmailDedupeKey(input.interviewId, recipientUserId),
     ...input,
@@ -276,7 +289,7 @@ export async function emitInterviewRescheduledEmail(
 ) {
   return emitCandidateInterviewEmail(tx, {
     eventType: "INTERVIEW_RESCHEDULED",
-    content: buildInterviewRescheduledEmail(input),
+    content: (dictionary) => buildInterviewRescheduledEmail(input, dictionary),
     dedupeKey: (recipientUserId) =>
       interviewRescheduledEmailDedupeKey(
         input.rescheduleEventId,
@@ -299,7 +312,7 @@ export async function emitInterviewCanceledEmail(
 ) {
   return emitCandidateInterviewEmail(tx, {
     eventType: "INTERVIEW_CANCELED",
-    content: buildInterviewCanceledEmail(input),
+    content: (dictionary) => buildInterviewCanceledEmail(input, dictionary),
     dedupeKey: (recipientUserId) =>
       interviewCanceledEmailDedupeKey(input.interviewId, recipientUserId),
     ...input,
@@ -334,7 +347,8 @@ export async function emitInterviewResponseReceivedEmails(
       "INTERVIEW_RESPONSE_RECEIVED",
     ),
     eventType: "INTERVIEW_RESPONSE_RECEIVED",
-    content: buildInterviewResponseReceivedEmail(input),
+    content: (dictionary) =>
+      buildInterviewResponseReceivedEmail(input, dictionary),
     dedupeKey: (recipientUserId) =>
       interviewResponseReceivedEmailDedupeKey(
         input.responseEventId,
@@ -364,7 +378,7 @@ export async function emitCompanyInvitationReceivedEmail(
       "COMPANY_INVITATION_RECEIVED",
     ),
     eventType: "COMPANY_INVITATION_RECEIVED",
-    content: buildCompanyInvitationEmail(input),
+    content: (dictionary) => buildCompanyInvitationEmail(input, dictionary),
     dedupeKey: (recipientUserId) =>
       companyInvitationEmailDedupeKey(input.invitationId, recipientUserId),
     companyId: input.companyId,

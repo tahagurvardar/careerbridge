@@ -10,6 +10,9 @@ export const CANDIDATE_APPLY_REQUIREMENTS = [
   ["skills", "At least one skill"],
 ] as const;
 
+export type CandidateApplyRequirement =
+  (typeof CANDIDATE_APPLY_REQUIREMENTS)[number][0];
+
 export interface CandidateProfileEligibilityInput {
   headline: string | null;
   location: string | null;
@@ -18,7 +21,7 @@ export interface CandidateProfileEligibilityInput {
 
 export interface CandidateProfileReadiness {
   isReady: boolean;
-  missingFields: { field: string; label: string }[];
+  missingFields: { field: CandidateApplyRequirement; label: string }[];
 }
 
 export function getCandidateProfileReadiness({
@@ -26,7 +29,7 @@ export function getCandidateProfileReadiness({
   location,
   skillCount,
 }: CandidateProfileEligibilityInput): CandidateProfileReadiness {
-  const missingFields: { field: string; label: string }[] = [];
+  const missingFields: CandidateProfileReadiness["missingFields"] = [];
 
   if (!headline || !headline.trim()) {
     missingFields.push({ field: "headline", label: "Professional headline" });

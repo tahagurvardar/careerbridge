@@ -8,29 +8,48 @@ import {
 } from "@/features/admin/moderation";
 import { PLATFORM_ROLES } from "@/features/auth/roles";
 import { JOB_STATUSES } from "@/features/jobs/schemas";
+import type { AdminDictionary, ValidationDictionary } from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
 
 export const ADMIN_PAGE_SIZE = 20;
 
-const plainTextNoteSchema = z
-  .string()
-  .trim()
-  .max(500, "Internal note must be 500 characters or fewer.")
-  .refine((value) => !/<\/?[a-z][^>]*>/i.test(value), {
-    message: "Internal note must be plain text.",
-  })
-  .transform((value) => value || undefined)
-  .optional();
+export function createModerationMutationSchema(
+  validation: Pick<ValidationDictionary, "generic">,
+  labels: Pick<AdminDictionary["moderationForm"], "chooseReason">,
+) {
+  const plainTextNoteSchema = z
+    .string()
+    .trim()
+    .max(500, formatMessage(validation.generic.tooLong, { max: 500 }))
+    .refine((value) => !/<\/?[a-z][^>]*>/i.test(value), {
+      message: validation.generic.invalidValue,
+    })
+    .transform((value) => value || undefined)
+    .optional();
 
-export const moderationReasonCodeSchema = z.enum(MODERATION_REASON_CODES, {
-  error: "Choose a moderation reason.",
-});
+  return z.object({
+    targetId: z.string().trim().min(1).max(128),
+    expectedVersion: z.coerce.number().int().positive(),
+    reasonCode: z.enum(MODERATION_REASON_CODES, {
+      error: labels.chooseReason,
+    }),
+    reasonNote: plainTextNoteSchema,
+  });
+}
 
-export const moderationMutationSchema = z.object({
-  targetId: z.string().trim().min(1).max(128),
-  expectedVersion: z.coerce.number().int().positive(),
-  reasonCode: moderationReasonCodeSchema,
-  reasonNote: plainTextNoteSchema,
-});
+const defaultValidation: Pick<ValidationDictionary, "generic"> = {
+  generic: {
+    required: "This field is required.",
+    tooLong: "Must be {max} characters or fewer.",
+    fieldTooLong: "{field} must be {max} characters or fewer.",
+    invalidValue: "Choose a valid value.",
+  },
+};
+
+export const moderationMutationSchema = createModerationMutationSchema(
+  defaultValidation,
+  { chooseReason: "Choose a moderation reason." },
+);
 
 export type ModerationMutationInput = z.infer<typeof moderationMutationSchema>;
 

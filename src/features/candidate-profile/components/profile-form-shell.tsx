@@ -4,25 +4,32 @@ import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { CandidateDictionary } from "@/i18n/dictionary";
+import type { RouteLocale } from "@/i18n/config";
+import { localizeInternalPath } from "@/i18n/paths";
 
 export function ProfileFormShell({
   eyebrow,
   title,
   description,
   children,
+  locale,
+  t,
 }: {
   eyebrow: string;
   title: string;
   description: string;
   children: ReactNode;
+  locale: RouteLocale;
+  t: CandidateDictionary["profile"]["formShell"];
 }) {
   return (
     <section className="py-10 sm:py-14">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
         <Button variant="ghost" asChild className="mb-5 -ml-2">
-          <Link href="/candidate/profile">
+          <Link href={localizeInternalPath("/candidate/profile", locale)}>
             <ArrowLeft aria-hidden="true" />
-            Back to profile
+            {t.back}
           </Link>
         </Button>
         <div className="mb-8">
@@ -38,7 +45,7 @@ export function ProfileFormShell({
         </div>
         <Card>
           <CardHeader className="border-b">
-            <CardTitle>Profile details</CardTitle>
+            <CardTitle>{t.detailsTitle}</CardTitle>
           </CardHeader>
           <CardContent>{children}</CardContent>
         </Card>

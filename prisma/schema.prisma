@@ -15,6 +15,18 @@ enum Role {
   ADMIN
 }
 
+/// Supported application display locales. Values are language-neutral domain
+/// codes: presentation (route prefix, Intl locale, native name) is resolved
+/// through the central mapping in `src/i18n/config.ts`, never inferred from
+/// arbitrary strings. Locale is presentation state only — it never carries
+/// authorization meaning.
+enum AppLocale {
+  EN
+  TR
+  AZ
+  RU
+}
+
 enum UserAccountStatus {
   ACTIVE
   SUSPENDED
@@ -207,6 +219,11 @@ model User {
   updatedAt                DateTime                     @updatedAt
   role                     Role                         @default(CANDIDATE)
   accountStatus            UserAccountStatus            @default(ACTIVE)
+  // Preferred display locale for locale-neutral entry, notifications, and
+  // transactional email. Mutable only through the dedicated validated locale
+  // action — never through generic auth/profile updates — and independent from
+  // role and moderation state.
+  preferredLocale          AppLocale                    @default(EN)
   moderationVersion        Int                          @default(1)
   suspendedAt              DateTime?
   restoredAt               DateTime?
@@ -763,6 +780,10 @@ model Notification {
   companyId       String?
   // Deterministic idempotency key; never supplied by the browser.
   dedupeKey       String           @unique @db.VarChar(200)
+  // Recipient locale snapshot resolved server-side when the event was created.
+  // Title/message were rendered in this locale at event time; later preference
+  // changes never rewrite this immutable historical copy.
+  locale          AppLocale        @default(EN)
   readAt          DateTime?
   createdAt       DateTime         @default(now())
 
@@ -810,6 +831,11 @@ model EmailOutbox {
   htmlBody          String            @db.Text
   destinationPath   String            @db.VarChar(512)
   dedupeKey         String            @unique @db.VarChar(200)
+  // Recipient locale snapshot resolved server-side at enqueue time. Subject and
+  // bodies were rendered in this locale; retries send this immutable content
+  // and the dispatcher localizes the destination link from this value. Later
+  // preference changes never mutate queued or historical rows.
+  locale            AppLocale         @default(EN)
   status            EmailOutboxStatus @default(PENDING)
   attemptCount      Int               @default(0)
   maxAttempts       Int               @default(5)

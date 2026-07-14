@@ -17,11 +17,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { withdrawApplicationAction } from "@/features/applications/server/actions";
+import type { ApplicationsDictionary } from "@/i18n/dictionary";
 
 export function WithdrawApplicationButton({
   applicationId,
+  t,
 }: {
   applicationId: string;
+  t: ApplicationsDictionary["withdraw"];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -44,25 +47,19 @@ export function WithdrawApplicationButton({
       <AlertDialogTrigger asChild>
         <Button variant="outline">
           <CircleX aria-hidden="true" />
-          Withdraw application
+          {t.trigger}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Withdraw this application?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This removes you from consideration for this job. Your application
-            record is kept for your history, but this cannot be undone and you
-            will not be able to apply to this job again.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{t.title}</AlertDialogTitle>
+          <AlertDialogDescription>{t.description}</AlertDialogDescription>
         </AlertDialogHeader>
         <p aria-live="polite" className="text-destructive text-sm">
           {message}
         </p>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>
-            Keep application
-          </AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{t.keep}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             disabled={pending}
@@ -76,7 +73,7 @@ export function WithdrawApplicationButton({
             ) : (
               <CircleX aria-hidden="true" />
             )}
-            {pending ? "Withdrawing…" : "Withdraw"}
+            {pending ? t.withdrawing : t.confirm}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

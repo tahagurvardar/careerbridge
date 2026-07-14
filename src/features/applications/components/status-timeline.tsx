@@ -1,8 +1,11 @@
-import {
-  type ApplicationStatusValue,
-  applicationStatusLabels,
-} from "@/features/applications/schemas";
+import type { ApplicationStatusValue } from "@/features/applications/schemas";
 import { formatJobDate } from "@/features/jobs/format";
+import type {
+  ApplicationsDictionary,
+  LabelsDictionary,
+} from "@/i18n/dictionary";
+import type { RouteLocale } from "@/i18n/config";
+import { formatMessage } from "@/i18n/translate";
 
 export interface StatusTimelineEntry {
   fromStatus: ApplicationStatusValue | null;
@@ -13,13 +16,17 @@ export interface StatusTimelineEntry {
 
 export function StatusTimeline({
   entries,
+  locale,
+  labels,
+  t,
 }: {
   entries: StatusTimelineEntry[];
+  locale: RouteLocale;
+  labels: LabelsDictionary;
+  t: ApplicationsDictionary["timeline"];
 }) {
   if (!entries.length) {
-    return (
-      <p className="text-muted-foreground text-sm">No history recorded yet.</p>
-    );
+    return <p className="text-muted-foreground text-sm">{t.noHistory}</p>;
   }
 
   return (
@@ -35,12 +42,16 @@ export function StatusTimeline({
           />
           <p className="text-sm font-medium">
             {entry.fromStatus === null
-              ? "Application submitted"
-              : `Moved to ${applicationStatusLabels[entry.toStatus]}`}
+              ? t.submitted
+              : formatMessage(t.movedTo, {
+                  status: labels.applicationStatus[entry.toStatus],
+                })}
           </p>
           <p className="text-muted-foreground text-xs">
-            {formatJobDate(entry.createdAt)}
-            {entry.by ? ` · by ${entry.by}` : ""}
+            {formatJobDate(locale, entry.createdAt)}
+            {entry.by
+              ? ` · ${formatMessage(t.byActor, { name: entry.by })}`
+              : ""}
           </p>
         </li>
       ))}

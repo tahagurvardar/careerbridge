@@ -11,11 +11,15 @@ import {
   MAX_RESUME_MB,
   RESUME_MIME_TYPE,
 } from "@/features/candidate-documents/validation";
+import type { CandidateDictionary } from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
 
 export function ResumeUploadForm({
   hasCurrentResume,
+  t,
 }: {
   hasCurrentResume: boolean;
+  t: CandidateDictionary["documents"]["upload"];
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -43,17 +47,17 @@ export function ResumeUploadForm({
       file.type === RESUME_MIME_TYPE ||
       file.name.toLowerCase().endsWith(".pdf");
     if (!looksPdf) {
-      setError("Only PDF files are accepted.");
+      setError(t.onlyPdf);
       resetInput();
       return;
     }
     if (file.size === 0) {
-      setError("The selected file is empty.");
+      setError(t.emptyFile);
       resetInput();
       return;
     }
     if (file.size > MAX_RESUME_BYTES) {
-      setError(`PDF files must be ${MAX_RESUME_MB} MB or smaller.`);
+      setError(formatMessage(t.tooLarge, { max: MAX_RESUME_MB }));
       resetInput();
       return;
     }
@@ -65,7 +69,7 @@ export function ResumeUploadForm({
     if (pending) return;
     const file = inputRef.current?.files?.[0];
     if (!file) {
-      setError("Choose a PDF file to upload.");
+      setError(t.chooseFile);
       return;
     }
     setError(null);
@@ -89,7 +93,7 @@ export function ResumeUploadForm({
     <form onSubmit={handleSubmit} className="grid gap-3" noValidate>
       <div className="grid gap-2">
         <label htmlFor="resume-file" className="text-sm font-medium">
-          {hasCurrentResume ? "Replacement PDF" : "CV PDF"}
+          {hasCurrentResume ? t.replacementLabel : t.cvLabel}
         </label>
         <input
           ref={inputRef}
@@ -103,8 +107,7 @@ export function ResumeUploadForm({
           className="border-input file:bg-muted file:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 block w-full cursor-pointer rounded-md border bg-transparent text-sm file:mr-3 file:cursor-pointer file:rounded file:border-0 file:px-3 file:py-2 file:text-sm file:font-medium focus-visible:ring-[3px] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
         />
         <p id="resume-file-hint" className="text-muted-foreground text-xs">
-          PDF only · maximum {MAX_RESUME_MB} MB. Your CV is stored privately and
-          is never shown publicly.
+          {formatMessage(t.hint, { max: MAX_RESUME_MB })}
         </p>
       </div>
 
@@ -128,11 +131,7 @@ export function ResumeUploadForm({
           ) : (
             <FileUp aria-hidden="true" />
           )}
-          {pending
-            ? "Uploading…"
-            : hasCurrentResume
-              ? "Replace CV"
-              : "Upload CV"}
+          {pending ? t.uploading : hasCurrentResume ? t.replace : t.upload}
         </Button>
       </div>
     </form>

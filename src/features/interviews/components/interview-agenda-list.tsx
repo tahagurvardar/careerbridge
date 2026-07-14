@@ -5,10 +5,12 @@ import { Button } from "@/components/ui/button";
 import { InterviewStatusBadge } from "@/features/interviews/components/interview-status-badge";
 import {
   formatInterviewRange,
-  interviewFormatLabels,
   type InterviewStatusValue,
 } from "@/features/interviews/interviews";
 import type { InterviewFormat } from "@/generated/prisma/enums";
+import type { LabelsDictionary } from "@/i18n/dictionary";
+import type { RouteLocale } from "@/i18n/config";
+import { localizeInternalPath } from "@/i18n/paths";
 
 export interface InterviewAgendaItem {
   id: string;
@@ -33,10 +35,16 @@ export function InterviewAgendaList({
   items,
   detailBasePath,
   emptyMessage,
+  viewLabel,
+  locale,
+  labels,
 }: {
   items: InterviewAgendaItem[];
   detailBasePath: "/candidate/interviews" | "/recruiter/interviews";
   emptyMessage: string;
+  viewLabel: string;
+  locale: RouteLocale;
+  labels: LabelsDictionary;
 }) {
   if (!items.length) {
     return <p className="text-muted-foreground text-sm">{emptyMessage}</p>;
@@ -52,7 +60,10 @@ export function InterviewAgendaList({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-medium">{item.title}</p>
-              <InterviewStatusBadge status={item.status} />
+              <InterviewStatusBadge
+                status={item.status}
+                label={labels.interviewStatus[item.status]}
+              />
             </div>
             <p className="text-muted-foreground mt-1 text-sm">
               {item.candidateName ? `${item.candidateName} · ` : ""}
@@ -61,9 +72,14 @@ export function InterviewAgendaList({
             <p className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               <span className="flex items-center gap-1.5">
                 <CalendarClock aria-hidden="true" className="size-3.5" />
-                {formatInterviewRange(item.startAt, item.endAt, item.timeZone)}
+                {formatInterviewRange(
+                  locale,
+                  item.startAt,
+                  item.endAt,
+                  item.timeZone,
+                )}
               </span>
-              <span>{interviewFormatLabels[item.format]}</span>
+              <span>{labels.interviewFormat[item.format]}</span>
             </p>
           </div>
           <Button
@@ -72,7 +88,14 @@ export function InterviewAgendaList({
             asChild
             className="shrink-0 self-start sm:self-center"
           >
-            <Link href={`${detailBasePath}/${item.id}`}>View</Link>
+            <Link
+              href={localizeInternalPath(
+                `${detailBasePath}/${item.id}`,
+                locale,
+              )}
+            >
+              {viewLabel}
+            </Link>
           </Button>
         </li>
       ))}

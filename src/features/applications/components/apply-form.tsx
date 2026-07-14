@@ -13,21 +13,36 @@ import {
   FormField,
   FormStatus,
 } from "@/features/candidate-profile/components/form-field";
-import { applySchema, type ApplyInput } from "@/features/applications/schemas";
+import {
+  createApplySchema,
+  type ApplyInput,
+} from "@/features/applications/schemas";
 import {
   type ApplicationActionResult,
   applyToJobAction,
 } from "@/features/applications/server/actions";
+import { useLocale } from "@/i18n/client";
+import type { PublicDictionary, ValidationDictionary } from "@/i18n/dictionary";
+import { localizeInternalPath } from "@/i18n/paths";
 
-export function ApplyForm({ slug }: { slug: string }) {
+export function ApplyForm({
+  slug,
+  labels,
+  validation,
+}: {
+  slug: string;
+  labels: PublicDictionary["applyPage"];
+  validation: ValidationDictionary;
+}) {
   const router = useRouter();
+  const locale = useLocale();
   const [result, setResult] = useState<ApplicationActionResult | null>(null);
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<ApplyInput>({
-    resolver: zodResolver(applySchema),
+    resolver: zodResolver(createApplySchema(validation)),
     defaultValues: { coverLetter: "" },
   });
 
@@ -38,22 +53,27 @@ export function ApplyForm({ slug }: { slug: string }) {
       setResult(next);
       return;
     }
-    router.push(next.redirectTo ?? "/candidate/applications");
+    router.push(
+      localizeInternalPath(
+        next.redirectTo ?? "/candidate/applications",
+        locale,
+      ),
+    );
   });
 
   return (
     <form className="grid gap-6" onSubmit={submit} noValidate>
       <FormField
         id="coverLetter"
-        label="Cover letter"
-        hint="Optional plain text. Share why you're a fit — line breaks are preserved."
+        label={labels.coverLetter}
+        hint={labels.coverLetterHint}
         error={errors.coverLetter?.message}
       >
         <Textarea
           id="coverLetter"
           rows={10}
           maxLength={6000}
-          placeholder="Introduce yourself and explain why you're a great fit for this role."
+          placeholder={labels.coverLetterPlaceholder}
           aria-invalid={Boolean(errors.coverLetter)}
           aria-describedby={
             errors.coverLetter ? "coverLetter-error" : "coverLetter-hint"
@@ -72,7 +92,11 @@ export function ApplyForm({ slug }: { slug: string }) {
               className="justify-self-start"
               asChild
             >
-              <Link href="/candidate/profile/edit">Complete your profile</Link>
+              <Link
+                href={localizeInternalPath("/candidate/profile/edit", locale)}
+              >
+                {labels.completeProfile}
+              </Link>
             </Button>
           ) : null}
           {result.alreadyApplied ? (
@@ -82,7 +106,11 @@ export function ApplyForm({ slug }: { slug: string }) {
               className="justify-self-start"
               asChild
             >
-              <Link href="/candidate/applications">View your applications</Link>
+              <Link
+                href={localizeInternalPath("/candidate/applications", locale)}
+              >
+                {labels.viewApplications}
+              </Link>
             </Button>
           ) : null}
         </div>
@@ -95,7 +123,7 @@ export function ApplyForm({ slug }: { slug: string }) {
           ) : (
             <Send aria-hidden="true" />
           )}
-          {isSubmitting ? "Submitting…" : "Submit application"}
+          {isSubmitting ? labels.submitting : labels.submit}
         </Button>
         <Button
           type="button"
@@ -103,7 +131,7 @@ export function ApplyForm({ slug }: { slug: string }) {
           size="lg"
           onClick={() => router.back()}
         >
-          Cancel
+          {labels.cancel}
         </Button>
       </div>
     </form>

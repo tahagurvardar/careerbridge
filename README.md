@@ -446,6 +446,32 @@ The additive `20260714021140_analytics_query_indexes` migration adds Company and
 
 Analytics never select Candidate identity into Admin or Recruiter chart payloads, CV metadata, cover letters, internal notes, private Interview details, moderation notes, Notification keys, auth/session data, or EmailOutbox content. Authorized hidden Company/Job history remains countable privately without revealing the moderation reason. CSV/PDF export, scheduled reports, public metrics, page-view tracking, a warehouse/ETL pipeline, predictive analytics, rankings, and forecasts remain deferred; Phase 6C is localization of the completed product surface.
 
+## Internationalization and localization
+
+Phase 6C localizes the completed product surface in English (`en`), Turkish (`tr`), Azerbaijani (`az`), and Russian (`ru`). English is the source dictionary and default locale; Intl formatting uses `en-US`, `tr-TR`, `az-AZ`, and `ru-RU`. Page URLs are locale-prefixed (`/{locale}/...`). A safe routing boundary redirects legacy unprefixed page URLs while leaving `/api`, Better Auth, the internal email dispatcher, framework/static assets, and private download endpoints unprefixed. Search parameters, dynamic identifiers, pagination, filters, and validated same-origin callback paths survive locale changes.
+
+| Locale source                        | Applies to                                   | Precedence                                         |
+| ------------------------------------ | -------------------------------------------- | -------------------------------------------------- |
+| Authenticated `User.preferredLocale` | Signed-in account and transactional delivery | Authoritative account preference                   |
+| `cb_locale` cookie                   | Current browser and signed-out navigation    | Used when no authenticated preference is available |
+| Supported locale URL prefix          | Current page render and language switch      | Explicit route language                            |
+| Default `en`                         | New or invalid/absent preference             | Final fallback                                     |
+
+The language switcher preserves the canonical internal route and query string, writes the validated cookie, and updates `User.preferredLocale` through a dedicated Server Action when authenticated. The field is excluded from generic Better Auth updates. Suspended accounts receive no special locale privilege: existing active-account and session rules still decide access.
+
+| Content class                                                                                 | Localized                                          | Preserved exactly as stored                                       |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------- |
+| Navigation, labels, controls, statuses, validation, metadata, empty/error states              | Yes                                                | —                                                                 |
+| Dates, relative time, counts, percentages, and timezone names                                 | Formatted for the route locale                     | UTC instants and analytics bucket semantics                       |
+| Candidate, Recruiter, Company, Job, note, CV, cover-letter, Interview, and moderation content | Surrounding application UI only                    | User-authored values                                              |
+| Notification and transactional-email events                                                   | Rendered in each recipient's event-time preference | Canonical neutral destination, dedupe identity, and authorization |
+
+`Notification.locale` and `EmailOutbox.locale` snapshot the server-resolved recipient locale beside already-rendered immutable content. Changing a preference affects future events only; mixed-locale recipients get independent copies. Stored destinations remain locale-neutral, and rendering or dispatch safely adds the snapshot locale. Notification and email templates omit Candidate email, CV metadata, internal notes, meeting URLs, Interview locations/instructions, and moderation notes. Email remains outbox-only in development verification: no real email is sent.
+
+Public landing, Job, and Company metadata are localized with canonical locale URLs and `en`/`tr`/`az`/`ru` alternates. User-authored Job titles and Company names remain unchanged, and metadata queries retain publication and moderation predicates. Analytics labels and Intl presentation change by locale, while the authorized inputs, UTC windows, aggregate values, funnel membership, and privacy boundaries remain identical.
+
+Phase 6B analytics was completed before Phase 6C localization. Deployment and operational hardening are the next phase.
+
 ## Documentation
 
 - [Product specification](docs/product-spec.md)

@@ -1,7 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
+import { revalidateLocalizedPath } from "@/i18n/revalidate";
+import type { CandidateDictionary } from "@/i18n/dictionary";
+import { getRequestDictionary } from "@/i18n/server";
+import { formatMessage } from "@/i18n/translate";
 import { requireRole } from "@/features/auth/server/session";
 import { applicationIdSchema } from "@/features/candidate-documents/schemas";
 import { sha256Hex } from "@/features/candidate-documents/hash";
@@ -33,51 +35,59 @@ function candidateActor(
 }
 
 function revalidateDocumentViews() {
-  revalidatePath("/candidate/documents");
-  revalidatePath("/candidate/dashboard");
-  revalidatePath("/candidate/profile");
+  revalidateLocalizedPath("/candidate/documents");
+  revalidateLocalizedPath("/candidate/dashboard");
+  revalidateLocalizedPath("/candidate/profile");
 }
 
-function uploadFailure(error: unknown): DocumentActionResult {
+type DocumentMessages = CandidateDictionary["documents"]["actions"];
+
+function uploadFailure(
+  error: unknown,
+  messages: DocumentMessages,
+): DocumentActionResult {
   if (error instanceof CandidateDocumentError && error.code === "FORBIDDEN") {
-    return { success: false, message: "Only candidates can manage a CV." };
+    return { success: false, message: messages.candidateOnly };
   }
   // STORAGE, CONFLICT, and any unexpected error map to a safe, generic message
   // that never exposes storage-provider or database internals.
   return {
     success: false,
-    message: "We could not save your CV right now. Please try again.",
+    message: messages.saveFailed,
   };
 }
 
-function attachFailure(error: unknown): DocumentActionResult {
+function attachFailure(
+  error: unknown,
+  messages: DocumentMessages,
+): DocumentActionResult {
   if (error instanceof CandidateDocumentError) {
     switch (error.code) {
       case "ALREADY_ATTACHED":
         return {
           success: false,
-          message: "A CV is already attached to this application.",
+          message: messages.alreadyAttached,
         };
       case "NO_CURRENT_RESUME":
         return {
           success: false,
-          message: "Upload a current CV before attaching it to an application.",
+          message: messages.noCurrent,
         };
       case "NOT_ELIGIBLE":
         return {
           success: false,
-          message: "This application can no longer receive a CV.",
+          message: messages.noLongerEligible,
         };
       case "NOT_FOUND":
         return {
           success: false,
-          message: "That application was not found or is not available.",
+          message: messages.applicationUnavailable,
         };
     }
   }
   return {
     success: false,
-    message: "We could not attach your CV. Please try again.",
+    message: messages.attachFailed,
   };
 }
 
@@ -85,17 +95,19 @@ export async function uploadResumeAction(
   formData: FormData,
 ): Promise<DocumentActionResult> {
   const session = await requireRole("CANDIDATE", "/candidate/documents");
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.documents.actions;
   const actor = candidateActor(session.user.id, session.user.role);
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
-    return { success: false, message: "Choose a PDF file to upload." };
+    return { success: false, message: messages.chooseFile };
   }
   // Reject an oversized declared length before buffering the bytes into memory.
   if (file.size > MAX_RESUME_BYTES) {
     return {
       success: false,
-      message: `PDF files must be ${MAX_RESUME_MB} MB or smaller.`,
+      message: formatMessage(messages.tooLarge, { max: MAX_RESUME_MB }),
     };
   }
 
@@ -107,7 +119,16 @@ export async function uploadResumeAction(
     header: bytes.subarray(0, 5),
   });
   if (!validation.ok) {
-    return { success: false, message: validation.message };
+    const validationMessages = {
+      MISSING_FILE: messages.missingFile,
+      EMPTY_FILE: messages.emptyFile,
+      TOO_LARGE: formatMessage(messages.tooLarge, { max: MAX_RESUME_MB }),
+      INVALID_TYPE: messages.invalidType,
+      INVALID_EXTENSION: messages.invalidExtension,
+      INVALID_SIGNATURE: messages.invalidSignature,
+      INVALID_FILENAME: messages.invalidFilename,
+    } as const;
+    return { success: false, message: validationMessages[validation.code] };
   }
 
   try {
@@ -120,14 +141,16 @@ export async function uploadResumeAction(
       sha256: sha256Hex(bytes),
     });
     revalidateDocumentViews();
-    return { success: true, message: "Your CV was uploaded." };
+    return { success: true, message: messages.uploaded };
   } catch (error) {
-    return uploadFailure(error);
+    return uploadFailure(error, messages);
   }
 }
 
 export async function removeResumeAction(): Promise<DocumentActionResult> {
   const session = await requireRole("CANDIDATE", "/candidate/documents");
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.documents.actions;
   const actor = candidateActor(session.user.id, session.user.role);
 
   try {
@@ -135,21 +158,21 @@ export async function removeResumeAction(): Promise<DocumentActionResult> {
     revalidateDocumentViews();
     return {
       success: true,
-      message: removed
-        ? "Your current CV was removed from your profile."
-        : "You do not have a current CV to remove.",
+      message: removed ? messages.removed : messages.noneToRemove,
     };
   } catch (error) {
-    return uploadFailure(error);
+    return uploadFailure(error, messages);
   }
 }
 
 export async function attachResumeToApplicationAction(
   applicationIdInput: unknown,
 ): Promise<DocumentActionResult> {
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.candidate.documents.actions;
   const parsed = applicationIdSchema.safeParse(applicationIdInput);
   if (!parsed.success) {
-    return { success: false, message: "That application is not available." };
+    return { success: false, message: messages.invalidApplication };
   }
 
   const session = await requireRole("CANDIDATE", "/candidate/applications");
@@ -161,15 +184,15 @@ export async function attachResumeToApplicationAction(
       actor,
       parsed.data,
     );
-    revalidatePath("/candidate/applications");
-    revalidatePath(`/candidate/applications/${parsed.data}`);
-    revalidatePath("/recruiter/applications");
-    revalidatePath(`/recruiter/applications/${parsed.data}`);
+    revalidateLocalizedPath("/candidate/applications");
+    revalidateLocalizedPath(`/candidate/applications/${parsed.data}`);
+    revalidateLocalizedPath("/recruiter/applications");
+    revalidateLocalizedPath(`/recruiter/applications/${parsed.data}`);
     return {
       success: true,
-      message: "Your current CV is now attached to this application.",
+      message: messages.attached,
     };
   } catch (error) {
-    return attachFailure(error);
+    return attachFailure(error, messages);
   }
 }

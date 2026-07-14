@@ -2,9 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, LoaderCircle, LockKeyhole } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -18,19 +17,30 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signInUserAction } from "@/features/auth/server/actions";
-import { signInSchema, type SignInValues } from "@/features/auth/schemas";
+import { createSignInSchema, type SignInValues } from "@/features/auth/schemas";
+import { LocaleLink } from "@/i18n/client";
+import type { AuthDictionary, ValidationDictionary } from "@/i18n/dictionary";
 
-export function SignInForm({ callbackPath }: { callbackPath?: string }) {
+export function SignInForm({
+  callbackPath,
+  t,
+  validation,
+}: {
+  callbackPath?: string;
+  t: AuthDictionary["login"];
+  validation: ValidationDictionary;
+}) {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
+  const schema = useMemo(() => createSignInSchema(validation), [validation]);
   const {
     register,
     handleSubmit,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<SignInValues>({
-    resolver: zodResolver(signInSchema),
+    resolver: zodResolver(schema),
     defaultValues: { email: "", password: "", callbackPath },
   });
 
@@ -53,7 +63,7 @@ export function SignInForm({ callbackPath }: { callbackPath?: string }) {
       router.replace(result.redirectTo);
       router.refresh();
     } catch {
-      setServerMessage("Email or password is incorrect.");
+      setServerMessage(t.fallbackError);
     }
   });
 
@@ -63,10 +73,8 @@ export function SignInForm({ callbackPath }: { callbackPath?: string }) {
         <span className="bg-primary text-primary-foreground mb-4 flex size-11 items-center justify-center rounded-xl">
           <LockKeyhole aria-hidden="true" className="size-5" />
         </span>
-        <CardTitle className="text-2xl">Sign in</CardTitle>
-        <CardDescription>
-          Continue to the workspace assigned to your account.
-        </CardDescription>
+        <CardTitle className="text-2xl">{t.cardTitle}</CardTitle>
+        <CardDescription>{t.cardDescription}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} noValidate className="space-y-5">
@@ -82,13 +90,13 @@ export function SignInForm({ callbackPath }: { callbackPath?: string }) {
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="email">Email address</Label>
+            <Label htmlFor="email">{t.emailLabel}</Label>
             <Input
               id="email"
               type="email"
               inputMode="email"
               autoComplete="email"
-              placeholder="you@example.com"
+              placeholder={t.emailPlaceholder}
               aria-invalid={Boolean(errors.email)}
               aria-describedby={errors.email ? "login-email-error" : undefined}
               disabled={isSubmitting}
@@ -106,7 +114,7 @@ export function SignInForm({ callbackPath }: { callbackPath?: string }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t.passwordLabel}</Label>
             <div className="relative">
               <Input
                 id="password"
@@ -122,7 +130,7 @@ export function SignInForm({ callbackPath }: { callbackPath?: string }) {
               />
               <button
                 type="button"
-                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-label={showPassword ? t.hidePassword : t.showPassword}
                 aria-pressed={showPassword}
                 onClick={() => setShowPassword((visible) => !visible)}
                 disabled={isSubmitting}
@@ -159,17 +167,17 @@ export function SignInForm({ callbackPath }: { callbackPath?: string }) {
                 data-icon="inline-start"
               />
             )}
-            {isSubmitting ? "Signing in…" : "Sign in"}
+            {isSubmitting ? t.submitting : t.submit}
           </Button>
 
           <p className="text-muted-foreground text-center text-sm">
-            New to CareerBridge?{" "}
-            <Link
+            {t.newTo}{" "}
+            <LocaleLink
               href="/register"
               className="text-foreground rounded-sm font-semibold underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
             >
-              Create an account
-            </Link>
+              {t.createAccount}
+            </LocaleLink>
           </p>
         </form>
       </CardContent>

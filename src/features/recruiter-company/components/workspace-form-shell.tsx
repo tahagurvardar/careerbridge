@@ -4,6 +4,8 @@ import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { RouteLocale } from "@/i18n/config";
+import { localizeInternalPath } from "@/i18n/paths";
 
 export function WorkspaceFormShell({
   backHref,
@@ -13,6 +15,7 @@ export function WorkspaceFormShell({
   description,
   cardTitle,
   children,
+  locale,
 }: {
   backHref: string;
   backLabel: string;
@@ -21,12 +24,13 @@ export function WorkspaceFormShell({
   description: string;
   cardTitle: string;
   children: ReactNode;
+  locale: RouteLocale;
 }) {
   return (
     <section className="py-10 sm:py-14">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
         <Button variant="ghost" asChild className="mb-5 -ml-2">
-          <Link href={backHref}>
+          <Link href={localizeInternalPath(backHref, locale)}>
             <ArrowLeft aria-hidden="true" />
             {backLabel}
           </Link>

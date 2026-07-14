@@ -1,4 +1,11 @@
 import { z } from "zod";
+import type {
+  RecruiterDictionary,
+  ValidationDictionary,
+} from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
+import { recruiter as englishRecruiter } from "@/i18n/dictionaries/en/recruiter";
+import { validation as englishValidation } from "@/i18n/dictionaries/en/validation";
 
 export const COMPANY_SIZES = [
   "SOLO",
@@ -21,90 +28,99 @@ export const companySizeLabels: Record<(typeof COMPANY_SIZES)[number], string> =
     ONE_THOUSAND_PLUS: "1,001+ people",
   };
 
-function optionalText(maxLength: number, label: string) {
-  return z
-    .string()
-    .trim()
-    .max(
-      maxLength,
-      `${label} must be ${maxLength.toLocaleString()} characters or fewer.`,
-    );
-}
-
-export const safeHttpUrlSchema = z
-  .string()
-  .trim()
-  .max(2048, "URL must be 2,048 characters or fewer.")
-  .superRefine((value, context) => {
-    if (!value) return;
-
-    try {
-      const url = new URL(value);
-
-      if (!["http:", "https:"].includes(url.protocol)) {
-        context.addIssue({
-          code: "custom",
-          message: "Use an http or https URL.",
-        });
-      }
-
-      if (!url.hostname) {
-        context.addIssue({ code: "custom", message: "Enter a valid URL." });
-      }
-    } catch {
-      context.addIssue({ code: "custom", message: "Enter a valid URL." });
-    }
-  })
-  .transform((value) => (value ? new URL(value).toString() : ""));
-
-export const recruiterProfileSchema = z
-  .object({
-    jobTitle: optionalText(160, "Job title"),
-    bio: optionalText(2000, "Bio"),
-    linkedinUrl: safeHttpUrlSchema,
-  })
-  .strip();
-
-const companyNameSchema = z
-  .string()
-  .trim()
-  .min(1, "Company name is required.")
-  .max(160, "Company name must be 160 characters or fewer.");
-
-export const foundedYearSchema = z
-  .union([
+export function createRecruiterCompanySchemas(
+  validation: ValidationDictionary,
+  recruiter: RecruiterDictionary,
+) {
+  const v = validation.company;
+  const form = recruiter.companyForm;
+  const optionalText = (maxLength: number, label: string) =>
     z
       .string()
       .trim()
-      .refine(
-        (value) => value === "" || /^\d{4}$/.test(value),
-        "Enter a four-digit year.",
-      )
-      .transform((value) => (value ? Number(value) : null)),
-    z.number().int("Enter a whole year."),
-    z.null(),
-  ])
-  .refine(
-    (value) =>
-      value === null || (value >= 1600 && value <= new Date().getUTCFullYear()),
-    `Founded year must be between 1600 and ${new Date().getUTCFullYear()}.`,
-  );
+      .max(
+        maxLength,
+        formatMessage(v.fieldTooLong, { field: label, max: maxLength }),
+      );
+  const safeHttpUrlSchema = z
+    .string()
+    .trim()
+    .max(2048, formatMessage(v.urlTooLong, { max: 2048 }))
+    .superRefine((value, context) => {
+      if (!value) return;
+      try {
+        const url = new URL(value);
+        if (!["http:", "https:"].includes(url.protocol)) {
+          context.addIssue({ code: "custom", message: v.urlScheme });
+        }
+        if (!url.hostname)
+          context.addIssue({ code: "custom", message: v.invalidUrl });
+      } catch {
+        context.addIssue({ code: "custom", message: v.invalidUrl });
+      }
+    })
+    .transform((value) => (value ? new URL(value).toString() : ""));
+  const recruiterProfileSchema = z
+    .object({
+      jobTitle: optionalText(160, recruiter.profileForm.jobTitle),
+      bio: optionalText(2000, recruiter.profileForm.bio),
+      linkedinUrl: safeHttpUrlSchema,
+    })
+    .strip();
+  const companyNameSchema = z
+    .string()
+    .trim()
+    .min(1, v.nameRequired)
+    .max(160, formatMessage(v.fieldTooLong, { field: form.name, max: 160 }));
+  const currentYear = new Date().getUTCFullYear();
+  const foundedYearSchema = z
+    .union([
+      z
+        .string()
+        .trim()
+        .refine(
+          (value) => value === "" || /^\d{4}$/.test(value),
+          v.fourDigitYear,
+        )
+        .transform((value) => (value ? Number(value) : null)),
+      z.number().int(v.wholeYear),
+      z.null(),
+    ])
+    .refine(
+      (value) => value === null || (value >= 1600 && value <= currentYear),
+      formatMessage(v.foundedBetween, { min: 1600, max: currentYear }),
+    );
+  const companySchema = z
+    .object({
+      name: companyNameSchema,
+      tagline: optionalText(240, form.tagline),
+      description: optionalText(4000, form.description),
+      industry: optionalText(120, form.industry),
+      headquarters: optionalText(160, form.headquarters),
+      websiteUrl: safeHttpUrlSchema,
+      companySize: z.union([
+        z.enum(COMPANY_SIZES, { error: v.chooseSize }),
+        z.literal(""),
+      ]),
+      foundedYear: foundedYearSchema,
+    })
+    .strip();
+  return {
+    safeHttpUrlSchema,
+    recruiterProfileSchema,
+    foundedYearSchema,
+    companySchema,
+  };
+}
 
-export const companySchema = z
-  .object({
-    name: companyNameSchema,
-    tagline: optionalText(240, "Tagline"),
-    description: optionalText(4000, "Description"),
-    industry: optionalText(120, "Industry"),
-    headquarters: optionalText(160, "Headquarters"),
-    websiteUrl: safeHttpUrlSchema,
-    companySize: z.union([
-      z.enum(COMPANY_SIZES, { error: "Choose a company size." }),
-      z.literal(""),
-    ]),
-    foundedYear: foundedYearSchema,
-  })
-  .strip();
+const defaultSchemas = createRecruiterCompanySchemas(
+  englishValidation,
+  englishRecruiter,
+);
+export const safeHttpUrlSchema = defaultSchemas.safeHttpUrlSchema;
+export const recruiterProfileSchema = defaultSchemas.recruiterProfileSchema;
+export const foundedYearSchema = defaultSchemas.foundedYearSchema;
+export const companySchema = defaultSchemas.companySchema;
 
 const searchText = z
   .string()

@@ -15,8 +15,7 @@ import {
 } from "@/features/candidate-profile/components/form-field";
 import {
   COMPANY_SIZES,
-  companySchema,
-  companySizeLabels,
+  createRecruiterCompanySchemas,
   type CompanyInput,
   type ValidatedCompany,
 } from "@/features/recruiter-company/schemas";
@@ -25,15 +24,34 @@ import {
   type RecruiterCompanyActionResult,
   updateCompanyAction,
 } from "@/features/recruiter-company/server/actions";
+import { useLocale } from "@/i18n/client";
+import type {
+  CommonDictionary,
+  LabelsDictionary,
+  RecruiterDictionary,
+  ValidationDictionary,
+} from "@/i18n/dictionary";
+import { localizeInternalPath } from "@/i18n/paths";
 
 export function CompanyForm({
   companyId,
   defaultValues,
+  labels,
+  recruiter,
+  validation,
 }: {
   companyId?: string;
   defaultValues: CompanyInput;
+  labels: {
+    form: RecruiterDictionary["companyForm"];
+    common: CommonDictionary["actions"];
+    companySize: LabelsDictionary["companySize"];
+  };
+  recruiter: RecruiterDictionary;
+  validation: ValidationDictionary;
 }) {
   const router = useRouter();
+  const locale = useLocale();
   const [result, setResult] = useState<RecruiterCompanyActionResult | null>(
     null,
   );
@@ -43,7 +61,9 @@ export function CompanyForm({
     setError,
     formState: { errors, isSubmitting },
   } = useForm<CompanyInput, unknown, ValidatedCompany>({
-    resolver: zodResolver(companySchema),
+    resolver: zodResolver(
+      createRecruiterCompanySchemas(validation, recruiter).companySchema,
+    ),
     defaultValues,
   });
 
@@ -63,16 +83,25 @@ export function CompanyForm({
       return;
     }
 
-    router.push(nextResult.redirectTo ?? "/recruiter/companies");
+    router.push(
+      localizeInternalPath(
+        nextResult.redirectTo ?? "/recruiter/companies",
+        locale,
+      ),
+    );
   });
 
   return (
     <form className="grid gap-6" onSubmit={submit} noValidate>
-      <FormField id="name" label="Company name" error={errors.name?.message}>
+      <FormField
+        id="name"
+        label={labels.form.name}
+        error={errors.name?.message}
+      >
         <Input
           id="name"
           maxLength={160}
-          placeholder="Northstar Labs"
+          placeholder={labels.form.namePlaceholder}
           aria-invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? "name-error" : undefined}
           {...register("name")}
@@ -81,14 +110,14 @@ export function CompanyForm({
 
       <FormField
         id="tagline"
-        label="Tagline"
-        hint="A short statement that explains what the company does."
+        label={labels.form.tagline}
+        hint={labels.form.taglineHint}
         error={errors.tagline?.message}
       >
         <Input
           id="tagline"
           maxLength={240}
-          placeholder="Tools for thoughtful product teams"
+          placeholder={labels.form.taglinePlaceholder}
           aria-invalid={Boolean(errors.tagline)}
           aria-describedby={errors.tagline ? "tagline-error" : "tagline-hint"}
           {...register("tagline")}
@@ -97,15 +126,15 @@ export function CompanyForm({
 
       <FormField
         id="description"
-        label="Description"
-        hint="Required before publication and always rendered as plain text."
+        label={labels.form.description}
+        hint={labels.form.descriptionHint}
         error={errors.description?.message}
       >
         <Textarea
           id="description"
           rows={8}
           maxLength={4000}
-          placeholder="Describe the company, its work, and the team."
+          placeholder={labels.form.descriptionPlaceholder}
           aria-invalid={Boolean(errors.description)}
           aria-describedby={
             errors.description ? "description-error" : "description-hint"
@@ -117,13 +146,13 @@ export function CompanyForm({
       <div className="grid gap-5 sm:grid-cols-2">
         <FormField
           id="industry"
-          label="Industry"
+          label={labels.form.industry}
           error={errors.industry?.message}
         >
           <Input
             id="industry"
             maxLength={120}
-            placeholder="Product & technology"
+            placeholder={labels.form.industryPlaceholder}
             aria-invalid={Boolean(errors.industry)}
             aria-describedby={errors.industry ? "industry-error" : undefined}
             {...register("industry")}
@@ -131,13 +160,13 @@ export function CompanyForm({
         </FormField>
         <FormField
           id="headquarters"
-          label="Headquarters"
+          label={labels.form.headquarters}
           error={errors.headquarters?.message}
         >
           <Input
             id="headquarters"
             maxLength={160}
-            placeholder="Baku, Azerbaijan"
+            placeholder={labels.form.headquartersPlaceholder}
             aria-invalid={Boolean(errors.headquarters)}
             aria-describedby={
               errors.headquarters ? "headquarters-error" : undefined
@@ -149,15 +178,15 @@ export function CompanyForm({
 
       <FormField
         id="websiteUrl"
-        label="Website URL"
-        hint="Only complete http or https URLs are accepted."
+        label={labels.form.website}
+        hint={labels.form.urlHint}
         error={errors.websiteUrl?.message}
       >
         <Input
           id="websiteUrl"
           type="url"
           inputMode="url"
-          placeholder="https://company.example"
+          placeholder={labels.form.websitePlaceholder}
           aria-invalid={Boolean(errors.websiteUrl)}
           aria-describedby={
             errors.websiteUrl ? "websiteUrl-error" : "websiteUrl-hint"
@@ -169,7 +198,7 @@ export function CompanyForm({
       <div className="grid gap-5 sm:grid-cols-2">
         <FormField
           id="companySize"
-          label="Company size"
+          label={labels.form.companySize}
           error={errors.companySize?.message}
         >
           <select
@@ -181,17 +210,17 @@ export function CompanyForm({
             }
             {...register("companySize")}
           >
-            <option value="">Not specified</option>
+            <option value="">{labels.form.notSpecified}</option>
             {COMPANY_SIZES.map((size) => (
               <option key={size} value={size}>
-                {companySizeLabels[size]}
+                {labels.companySize[size]}
               </option>
             ))}
           </select>
         </FormField>
         <FormField
           id="foundedYear"
-          label="Founded year"
+          label={labels.form.foundedYear}
           error={errors.foundedYear?.message}
         >
           <Input
@@ -222,10 +251,10 @@ export function CompanyForm({
             <Building2 aria-hidden="true" />
           )}
           {isSubmitting
-            ? "Saving…"
+            ? labels.common.saving
             : companyId
-              ? "Save company"
-              : "Create company"}
+              ? labels.form.save
+              : labels.form.create}
         </Button>
         <Button
           type="button"
@@ -233,7 +262,7 @@ export function CompanyForm({
           size="lg"
           onClick={() => router.back()}
         >
-          Cancel
+          {labels.common.cancel}
         </Button>
       </div>
     </form>

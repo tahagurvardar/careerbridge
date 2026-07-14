@@ -14,20 +14,37 @@ import {
   FormStatus,
 } from "@/features/candidate-profile/components/form-field";
 import {
-  recruiterProfileSchema,
+  createRecruiterCompanySchemas,
   type RecruiterProfileInput,
 } from "@/features/recruiter-company/schemas";
 import {
   saveRecruiterProfileAction,
   type RecruiterCompanyActionResult,
 } from "@/features/recruiter-company/server/actions";
+import { useLocale } from "@/i18n/client";
+import type {
+  CommonDictionary,
+  RecruiterDictionary,
+  ValidationDictionary,
+} from "@/i18n/dictionary";
+import { localizeInternalPath } from "@/i18n/paths";
 
 export function RecruiterProfileForm({
   defaultValues,
+  labels,
+  recruiter,
+  validation,
 }: {
   defaultValues: RecruiterProfileInput;
+  labels: {
+    form: RecruiterDictionary["profileForm"];
+    common: CommonDictionary["actions"];
+  };
+  recruiter: RecruiterDictionary;
+  validation: ValidationDictionary;
 }) {
   const router = useRouter();
+  const locale = useLocale();
   const [result, setResult] = useState<RecruiterCompanyActionResult | null>(
     null,
   );
@@ -37,7 +54,10 @@ export function RecruiterProfileForm({
     setError,
     formState: { errors, isSubmitting },
   } = useForm<RecruiterProfileInput>({
-    resolver: zodResolver(recruiterProfileSchema),
+    resolver: zodResolver(
+      createRecruiterCompanySchemas(validation, recruiter)
+        .recruiterProfileSchema,
+    ),
     defaultValues,
   });
 
@@ -56,23 +76,21 @@ export function RecruiterProfileForm({
       return;
     }
 
-    router.push(
-      `/recruiter/profile?updated=${encodeURIComponent(nextResult.message)}`,
-    );
+    router.push(localizeInternalPath("/recruiter/profile?updated=1", locale));
   });
 
   return (
     <form className="grid gap-6" onSubmit={submit} noValidate>
       <FormField
         id="jobTitle"
-        label="Job title"
-        hint="Your professional role, separate from your CareerBridge account role."
+        label={labels.form.jobTitle}
+        hint={labels.form.jobTitleHint}
         error={errors.jobTitle?.message}
       >
         <Input
           id="jobTitle"
           maxLength={160}
-          placeholder="Talent acquisition lead"
+          placeholder={labels.form.jobTitlePlaceholder}
           aria-invalid={Boolean(errors.jobTitle)}
           aria-describedby={
             errors.jobTitle ? "jobTitle-error" : "jobTitle-hint"
@@ -83,15 +101,15 @@ export function RecruiterProfileForm({
 
       <FormField
         id="bio"
-        label="Professional bio"
-        hint="Share your recruiting focus and experience. This is rendered as plain text."
+        label={labels.form.bio}
+        hint={labels.form.bioHint}
         error={errors.bio?.message}
       >
         <Textarea
           id="bio"
           rows={7}
           maxLength={2000}
-          placeholder="Describe your hiring focus, industries, and professional background."
+          placeholder={labels.form.bioPlaceholder}
           aria-invalid={Boolean(errors.bio)}
           aria-describedby={errors.bio ? "bio-error" : "bio-hint"}
           {...register("bio")}
@@ -100,15 +118,15 @@ export function RecruiterProfileForm({
 
       <FormField
         id="linkedinUrl"
-        label="LinkedIn URL"
-        hint="Only complete http or https URLs are accepted."
+        label={labels.form.linkedin}
+        hint={labels.form.urlHint}
         error={errors.linkedinUrl?.message}
       >
         <Input
           id="linkedinUrl"
           type="url"
           inputMode="url"
-          placeholder="https://www.linkedin.com/in/your-name"
+          placeholder={labels.form.linkedinPlaceholder}
           aria-invalid={Boolean(errors.linkedinUrl)}
           aria-describedby={
             errors.linkedinUrl ? "linkedinUrl-error" : "linkedinUrl-hint"
@@ -128,7 +146,7 @@ export function RecruiterProfileForm({
           ) : (
             <Save aria-hidden="true" />
           )}
-          {isSubmitting ? "Saving…" : "Save profile"}
+          {isSubmitting ? labels.common.saving : labels.form.save}
         </Button>
         <Button
           type="button"
@@ -136,7 +154,7 @@ export function RecruiterProfileForm({
           size="lg"
           onClick={() => router.back()}
         >
-          Cancel
+          {labels.common.cancel}
         </Button>
       </div>
     </form>

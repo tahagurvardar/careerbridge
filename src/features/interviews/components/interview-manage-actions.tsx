@@ -22,6 +22,7 @@ import {
   completeInterviewAction,
   type InterviewActionResult,
 } from "@/features/interviews/server/actions";
+import type { AppDictionary } from "@/i18n/dictionary";
 
 /**
  * Recruiter OWNER cancel/complete controls. Cancellation is terminal, so it
@@ -33,11 +34,13 @@ export function InterviewManageActions({
   expectedVersion,
   canCancel,
   canComplete,
+  labels,
 }: {
   interviewId: string;
   expectedVersion: number;
   canCancel: boolean;
   canComplete: boolean;
+  labels: AppDictionary["interviews"]["manageActions"];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -59,7 +62,7 @@ export function InterviewManageActions({
   if (!canCancel && !canComplete) {
     return (
       <p className="text-muted-foreground text-sm leading-6">
-        This interview is in a final state. No further actions are available.
+        {labels.finalState}
       </p>
     );
   }
@@ -78,7 +81,7 @@ export function InterviewManageActions({
             ) : (
               <CalendarCheck2 aria-hidden="true" />
             )}
-            Mark completed
+            {labels.complete}
           </Button>
         ) : null}
         {canCancel ? (
@@ -86,20 +89,19 @@ export function InterviewManageActions({
             <AlertDialogTrigger asChild>
               <Button type="button" variant="outline" disabled={pending}>
                 <CalendarX2 aria-hidden="true" />
-                Cancel interview
+                {labels.cancel}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Cancel this interview?</AlertDialogTitle>
+                <AlertDialogTitle>{labels.cancelTitle}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  The candidate is notified and this interview moves to a final
-                  canceled state. It cannot be restored afterwards.
+                  {labels.cancelDescription}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel disabled={pending}>
-                  Keep interview
+                  {labels.keep}
                 </AlertDialogCancel>
                 <AlertDialogAction
                   variant="destructive"
@@ -110,7 +112,7 @@ export function InterviewManageActions({
                     run("cancel");
                   }}
                 >
-                  Cancel interview
+                  {labels.cancel}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

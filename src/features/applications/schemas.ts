@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { ValidationDictionary } from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
 
 export const APPLICATION_STATUSES = [
   "SUBMITTED",
@@ -37,19 +39,33 @@ export const recruiterStatusActionSchema = z.enum(RECRUITER_TARGET_STATUSES);
 
 const MAX_COVER_LETTER = 6000;
 
-export const coverLetterSchema = z
-  .string()
-  .trim()
-  .max(
-    MAX_COVER_LETTER,
-    `Cover letter must be ${MAX_COVER_LETTER.toLocaleString()} characters or fewer.`,
-  );
+export function createApplySchema(
+  validation: Pick<ValidationDictionary, "generic">,
+) {
+  return z
+    .object({
+      coverLetter: z
+        .string()
+        .trim()
+        .max(
+          MAX_COVER_LETTER,
+          formatMessage(validation.generic.tooLong, { max: MAX_COVER_LETTER }),
+        ),
+    })
+    .strip();
+}
 
-export const applySchema = z
-  .object({
-    coverLetter: coverLetterSchema,
-  })
-  .strip();
+const englishValidation = {
+  generic: {
+    required: "This field is required.",
+    tooLong: "Must be {max} characters or fewer.",
+    fieldTooLong: "{field} must be {max} characters or fewer.",
+    invalidValue: "Choose a valid value.",
+  },
+} satisfies Pick<ValidationDictionary, "generic">;
+
+export const applySchema = createApplySchema(englishValidation);
+export const coverLetterSchema = applySchema.shape.coverLetter;
 
 export type ApplyInput = z.input<typeof applySchema>;
 export type ValidatedApply = z.output<typeof applySchema>;

@@ -243,6 +243,7 @@ databaseDescribe(
       ["moderationVersion", 99],
       ["suspendedAt", new Date().toISOString()],
       ["restoredAt", new Date().toISOString()],
+      ["preferredLocale", "RU"],
     ])("prevents public updates to %s", async (field, value) => {
       const response = await auth.handler(
         createUpdateRequest(candidate.cookie, { [field]: value }),
@@ -257,6 +258,7 @@ databaseDescribe(
             moderationVersion: true,
             suspendedAt: true,
             restoredAt: true,
+            preferredLocale: true,
           },
         }),
       ).resolves.toEqual({
@@ -264,6 +266,7 @@ databaseDescribe(
         moderationVersion: 1,
         suspendedAt: null,
         restoredAt: null,
+        preferredLocale: "EN",
       });
     });
   },

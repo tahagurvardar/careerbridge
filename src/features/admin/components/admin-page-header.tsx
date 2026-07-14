@@ -3,13 +3,15 @@ import { Badge } from "@/components/ui/badge";
 export function AdminPageHeader({
   title,
   description,
+  badge,
 }: {
   title: string;
   description: string;
+  badge: string;
 }) {
   return (
     <div className="max-w-3xl">
-      <Badge variant="secondary">Platform administration</Badge>
+      <Badge variant="secondary">{badge}</Badge>
       <h1 className="mt-4 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
         {title}
       </h1>

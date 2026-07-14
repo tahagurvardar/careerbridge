@@ -10,15 +10,14 @@
 // contains Candidate email, CV filenames, note bodies, or document metadata.
 
 import { getSafeInternalPath, type PlatformRole } from "@/features/auth/roles";
-import {
-  applicationStatusLabels,
-  type ApplicationStatusValue,
-} from "@/features/applications/schemas";
-import {
-  interviewResponseWords,
-  type InterviewResponseValue,
-} from "@/features/interviews/interviews";
+import type { ApplicationStatusValue } from "@/features/applications/schemas";
+import type { InterviewResponseValue } from "@/features/interviews/interviews";
 import type { NotificationType } from "@/generated/prisma/enums";
+import type { AppDictionary } from "@/i18n/dictionary";
+import { dictionary as englishDictionary } from "@/i18n/dictionaries/en";
+import type { RouteLocale } from "@/i18n/config";
+import { formatInteger } from "@/i18n/formatter";
+import { formatMessage } from "@/i18n/translate";
 
 // Bounds mirror the `notification` table columns so composed copy can never
 // overflow a database write.
@@ -56,9 +55,10 @@ export function boundedText(value: string, max: number): string {
 /** Never trust a blank/whitespace-only display name in event copy. */
 export function resolveCandidateDisplayName(
   name: string | null | undefined,
+  fallback = CANDIDATE_DISPLAY_FALLBACK,
 ): string {
   const trimmed = (name ?? "").trim();
-  return trimmed.length > 0 ? trimmed : CANDIDATE_DISPLAY_FALLBACK;
+  return trimmed.length > 0 ? trimmed : fallback;
 }
 
 /**
@@ -77,16 +77,23 @@ export function safeNotificationHref(path: string): string {
 // Event copy (title, message, safe href)
 // ---------------------------------------------------------------------------
 
-export function buildApplicationSubmittedContent(input: {
-  applicationId: string;
-  candidateName: string | null | undefined;
-  jobTitle: string;
-}): NotificationContent {
-  const candidate = resolveCandidateDisplayName(input.candidateName);
+export function buildApplicationSubmittedContent(
+  input: {
+    applicationId: string;
+    candidateName: string | null | undefined;
+    jobTitle: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): NotificationContent {
+  const copy = dictionary.notifications.events.applicationSubmitted;
+  const candidate = resolveCandidateDisplayName(
+    input.candidateName,
+    dictionary.labels.fallbacks.candidate,
+  );
   return {
-    title: boundedText("New application received", NOTIFICATION_TITLE_MAX),
+    title: boundedText(copy.title, NOTIFICATION_TITLE_MAX),
     message: boundedText(
-      `${candidate} applied for ${input.jobTitle}.`,
+      formatMessage(copy.message, { candidate, jobTitle: input.jobTitle }),
       NOTIFICATION_MESSAGE_MAX,
     ),
     href: safeNotificationHref(
@@ -95,16 +102,23 @@ export function buildApplicationSubmittedContent(input: {
   };
 }
 
-export function buildApplicationStatusChangedContent(input: {
-  applicationId: string;
-  jobTitle: string;
-  status: ApplicationStatusValue;
-}): NotificationContent {
-  const statusLabel = applicationStatusLabels[input.status];
+export function buildApplicationStatusChangedContent(
+  input: {
+    applicationId: string;
+    jobTitle: string;
+    status: ApplicationStatusValue;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): NotificationContent {
+  const copy = dictionary.notifications.events.applicationStatusChanged;
+  const statusLabel = dictionary.labels.applicationStatus[input.status];
   return {
-    title: boundedText("Application status updated", NOTIFICATION_TITLE_MAX),
+    title: boundedText(copy.title, NOTIFICATION_TITLE_MAX),
     message: boundedText(
-      `Your application for ${input.jobTitle} is now ${statusLabel}.`,
+      formatMessage(copy.message, {
+        jobTitle: input.jobTitle,
+        status: statusLabel,
+      }),
       NOTIFICATION_MESSAGE_MAX,
     ),
     href: safeNotificationHref(
@@ -113,16 +127,23 @@ export function buildApplicationStatusChangedContent(input: {
   };
 }
 
-export function buildApplicationWithdrawnContent(input: {
-  applicationId: string;
-  candidateName: string | null | undefined;
-  jobTitle: string;
-}): NotificationContent {
-  const candidate = resolveCandidateDisplayName(input.candidateName);
+export function buildApplicationWithdrawnContent(
+  input: {
+    applicationId: string;
+    candidateName: string | null | undefined;
+    jobTitle: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): NotificationContent {
+  const copy = dictionary.notifications.events.applicationWithdrawn;
+  const candidate = resolveCandidateDisplayName(
+    input.candidateName,
+    dictionary.labels.fallbacks.candidate,
+  );
   return {
-    title: boundedText("Application withdrawn", NOTIFICATION_TITLE_MAX),
+    title: boundedText(copy.title, NOTIFICATION_TITLE_MAX),
     message: boundedText(
-      `${candidate} withdrew their application for ${input.jobTitle}.`,
+      formatMessage(copy.message, { candidate, jobTitle: input.jobTitle }),
       NOTIFICATION_MESSAGE_MAX,
     ),
     href: safeNotificationHref(
@@ -137,76 +158,101 @@ export function buildApplicationWithdrawnContent(input: {
 // schedule, Candidate email, or any CV/note data — those stay behind the
 // authenticated destination route, which re-authorizes independently.
 
-export function buildInterviewScheduledContent(input: {
-  interviewId: string;
-  jobTitle: string;
-}): NotificationContent {
+export function buildInterviewScheduledContent(
+  input: {
+    interviewId: string;
+    jobTitle: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): NotificationContent {
+  const copy = dictionary.notifications.events.interviewScheduled;
   return {
-    title: boundedText("Interview scheduled", NOTIFICATION_TITLE_MAX),
+    title: boundedText(copy.title, NOTIFICATION_TITLE_MAX),
     message: boundedText(
-      `An interview was scheduled for your application to ${input.jobTitle}.`,
+      formatMessage(copy.message, { jobTitle: input.jobTitle }),
       NOTIFICATION_MESSAGE_MAX,
     ),
     href: safeNotificationHref(`/candidate/interviews/${input.interviewId}`),
   };
 }
 
-export function buildInterviewRescheduledContent(input: {
-  interviewId: string;
-  jobTitle: string;
-}): NotificationContent {
+export function buildInterviewRescheduledContent(
+  input: {
+    interviewId: string;
+    jobTitle: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): NotificationContent {
+  const copy = dictionary.notifications.events.interviewRescheduled;
   return {
-    title: boundedText("Interview rescheduled", NOTIFICATION_TITLE_MAX),
+    title: boundedText(copy.title, NOTIFICATION_TITLE_MAX),
     message: boundedText(
-      `Your interview for ${input.jobTitle} was rescheduled.`,
+      formatMessage(copy.message, { jobTitle: input.jobTitle }),
       NOTIFICATION_MESSAGE_MAX,
     ),
     href: safeNotificationHref(`/candidate/interviews/${input.interviewId}`),
   };
 }
 
-export function buildInterviewCanceledContent(input: {
-  interviewId: string;
-  jobTitle: string;
-}): NotificationContent {
+export function buildInterviewCanceledContent(
+  input: {
+    interviewId: string;
+    jobTitle: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): NotificationContent {
+  const copy = dictionary.notifications.events.interviewCanceled;
   return {
-    title: boundedText("Interview canceled", NOTIFICATION_TITLE_MAX),
+    title: boundedText(copy.title, NOTIFICATION_TITLE_MAX),
     message: boundedText(
-      `Your interview for ${input.jobTitle} was canceled.`,
+      formatMessage(copy.message, { jobTitle: input.jobTitle }),
       NOTIFICATION_MESSAGE_MAX,
     ),
     href: safeNotificationHref(`/candidate/interviews/${input.interviewId}`),
   };
 }
 
-export function buildInterviewResponseReceivedContent(input: {
-  interviewId: string;
-  jobTitle: string;
-  candidateName: string | null | undefined;
-  response: InterviewResponseValue;
-}): NotificationContent {
-  const candidate = resolveCandidateDisplayName(input.candidateName);
+export function buildInterviewResponseReceivedContent(
+  input: {
+    interviewId: string;
+    jobTitle: string;
+    candidateName: string | null | undefined;
+    response: InterviewResponseValue;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): NotificationContent {
+  const copy = dictionary.notifications.events.interviewResponseReceived;
+  const candidate = resolveCandidateDisplayName(
+    input.candidateName,
+    dictionary.labels.fallbacks.candidate,
+  );
+  const message =
+    input.response === "ACCEPTED" ? copy.messageAccepted : copy.messageDeclined;
   return {
-    title: boundedText("Interview response received", NOTIFICATION_TITLE_MAX),
+    title: boundedText(copy.title, NOTIFICATION_TITLE_MAX),
     message: boundedText(
-      `${candidate} ${interviewResponseWords[input.response]} the interview for ${input.jobTitle}.`,
+      formatMessage(message, { candidate, jobTitle: input.jobTitle }),
       NOTIFICATION_MESSAGE_MAX,
     ),
     href: safeNotificationHref(`/recruiter/interviews/${input.interviewId}`),
   };
 }
 
-export function buildCompanyInvitationReceivedContent(input: {
-  companyName: string;
-}): NotificationContent {
+export function buildCompanyInvitationReceivedContent(
+  input: {
+    companyName: string;
+  },
+  dictionary: AppDictionary = englishDictionary,
+): NotificationContent {
   // Copy carries only the Company's own name — never the invitee email, the
   // invitation activeKey, or any private membership data. The destination is
   // the invitee's authenticated invitation list; membership itself is granted
   // only by explicit acceptance, never by this notification.
+  const copy = dictionary.notifications.events.companyInvitationReceived;
   return {
-    title: boundedText("Company invitation", NOTIFICATION_TITLE_MAX),
+    title: boundedText(copy.title, NOTIFICATION_TITLE_MAX),
     message: boundedText(
-      `You were invited to join ${input.companyName}.`,
+      formatMessage(copy.message, { companyName: input.companyName }),
       NOTIFICATION_MESSAGE_MAX,
     ),
     href: safeNotificationHref("/recruiter/invitations"),
@@ -358,12 +404,15 @@ export const notificationTypeIconKeys: Record<
  * Renders an unread-count badge: nothing at zero/invalid, the exact integer for
  * 1–99, and `99+` at one hundred or more. Never claims real-time delivery.
  */
-export function formatUnreadBadge(count: number): string | null {
+export function formatUnreadBadge(
+  count: number,
+  locale: RouteLocale = "en",
+): string | null {
   if (!Number.isFinite(count)) return null;
   const value = Math.floor(count);
   if (value <= 0) return null;
-  if (value >= 100) return "99+";
-  return String(value);
+  if (value >= 100) return `${formatInteger(locale, 99)}+`;
+  return formatInteger(locale, value);
 }
 
 /** Accessible label for the header bell, reflecting the unread state. */

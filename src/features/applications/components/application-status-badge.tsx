@@ -1,8 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import {
-  type ApplicationStatusValue,
-  applicationStatusLabels,
-} from "@/features/applications/schemas";
+import type { ApplicationStatusValue } from "@/features/applications/schemas";
 
 const statusVariants: Record<
   ApplicationStatusValue,
@@ -17,19 +14,18 @@ const statusVariants: Record<
   WITHDRAWN: "outline",
 };
 
+/** Locale-aware status badge; the caller supplies the localized label. */
 export function ApplicationStatusBadge({
   status,
+  label,
 }: {
   status: ApplicationStatusValue;
+  label: string;
 }) {
   if (status === "HIRED") {
     return (
-      <Badge className="bg-highlight text-highlight-foreground">Hired</Badge>
+      <Badge className="bg-highlight text-highlight-foreground">{label}</Badge>
     );
   }
-  return (
-    <Badge variant={statusVariants[status]}>
-      {applicationStatusLabels[status]}
-    </Badge>
-  );
+  return <Badge variant={statusVariants[status]}>{label}</Badge>;
 }

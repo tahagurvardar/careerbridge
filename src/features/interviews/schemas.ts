@@ -13,6 +13,9 @@ import {
   INTERVIEW_TITLE_MAX,
   isValidIanaTimeZone,
 } from "@/features/interviews/interviews";
+import type { InterviewsDictionary } from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
+import { interviews as englishInterviews } from "@/i18n/dictionaries/en/interviews";
 
 // ---------------------------------------------------------------------------
 // Meeting-link safety
@@ -50,14 +53,18 @@ export function isSafeMeetingUrl(value: string): boolean {
 // Field schemas
 // ---------------------------------------------------------------------------
 
-const titleSchema = z
-  .string()
-  .trim()
-  .min(1, "Give the interview a title.")
-  .max(
-    INTERVIEW_TITLE_MAX,
-    `Title must be ${INTERVIEW_TITLE_MAX} characters or fewer.`,
-  );
+type ScheduleValidation = InterviewsDictionary["scheduleForm"]["validation"];
+
+function titleSchema(v: ScheduleValidation) {
+  return z
+    .string()
+    .trim()
+    .min(1, v.titleRequired)
+    .max(
+      INTERVIEW_TITLE_MAX,
+      formatMessage(v.titleTooLong, { max: INTERVIEW_TITLE_MAX }),
+    );
+}
 
 // A UTC instant serialized by the browser (Date#toISOString). The trailing
 // zone designator is required so a bare wall-clock string can never be
@@ -65,7 +72,7 @@ const titleSchema = z
 const ISO_INSTANT_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 
-function isoInstantSchema(label: string) {
+function isoInstantSchema(message: string) {
   return z
     .string()
     .trim()
@@ -74,46 +81,47 @@ function isoInstantSchema(label: string) {
         ? new Date(value).getTime()
         : Number.NaN;
       if (!Number.isFinite(time)) {
-        ctx.addIssue({ code: "custom", message: `${label} is not valid.` });
+        ctx.addIssue({ code: "custom", message });
         return z.NEVER;
       }
       return new Date(time);
     });
 }
 
-const timeZoneSchema = z
-  .string()
-  .trim()
-  .min(1, "Choose a timezone.")
-  .max(INTERVIEW_TIMEZONE_MAX, "Choose a valid timezone.")
-  .refine(isValidIanaTimeZone, "Choose a valid timezone.");
-
-/** Trims, bounds, and collapses empty optional text to null. */
-function optionalBoundedText(label: string, max: number) {
+function timeZoneSchema(v: ScheduleValidation) {
   return z
     .string()
     .trim()
-    .max(max, `${label} must be ${max.toLocaleString()} characters or fewer.`)
+    .min(1, v.timezoneRequired)
+    .max(INTERVIEW_TIMEZONE_MAX, v.timezoneInvalid)
+    .refine(isValidIanaTimeZone, v.timezoneInvalid);
+}
+
+/** Trims, bounds, and collapses empty optional text to null. */
+function optionalBoundedText(message: string, max: number) {
+  return z
+    .string()
+    .trim()
+    .max(max, message)
     .default("")
     .transform((value) => (value.length > 0 ? value : null));
 }
 
-const meetingUrlSchema = z
-  .string()
-  .trim()
-  .max(INTERVIEW_MEETING_URL_MAX, "Meeting link is too long.")
-  .default("")
-  .transform((value, ctx) => {
-    if (value.length === 0) return null;
-    if (!isSafeMeetingUrl(value)) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Meeting link must be a valid https:// URL.",
-      });
-      return z.NEVER;
-    }
-    return value;
-  });
+function meetingUrlSchema(v: ScheduleValidation) {
+  return z
+    .string()
+    .trim()
+    .max(INTERVIEW_MEETING_URL_MAX, v.meetingLinkTooLong)
+    .default("")
+    .transform((value, ctx) => {
+      if (value.length === 0) return null;
+      if (!isSafeMeetingUrl(value)) {
+        ctx.addIssue({ code: "custom", message: v.meetingLinkInvalid });
+        return z.NEVER;
+      }
+      return value;
+    });
+}
 
 // ---------------------------------------------------------------------------
 // Schedule schema (creation + reschedule share the same field rules)
@@ -125,20 +133,28 @@ const meetingUrlSchema = z
  * every cross-field rule (ordering, duration, format requirements) runs after
  * the field rules succeed.
  */
-export function buildInterviewScheduleSchema(now: Date) {
+export function buildInterviewScheduleSchema(
+  now: Date,
+  v: ScheduleValidation = englishInterviews.scheduleForm.validation,
+) {
   return z
     .object({
-      title: titleSchema,
+      title: titleSchema(v),
       format: z.enum(INTERVIEW_FORMATS, {
-        error: "Choose an interview format.",
+        error: v.formatRequired,
       }),
-      startAt: isoInstantSchema("Start time"),
-      endAt: isoInstantSchema("End time"),
-      timeZone: timeZoneSchema,
-      location: optionalBoundedText("Location", INTERVIEW_LOCATION_MAX),
-      meetingUrl: meetingUrlSchema,
+      startAt: isoInstantSchema(v.invalidDateTime),
+      endAt: isoInstantSchema(v.invalidDateTime),
+      timeZone: timeZoneSchema(v),
+      location: optionalBoundedText(
+        formatMessage(v.locationTooLong, { max: INTERVIEW_LOCATION_MAX }),
+        INTERVIEW_LOCATION_MAX,
+      ),
+      meetingUrl: meetingUrlSchema(v),
       instructions: optionalBoundedText(
-        "Instructions",
+        formatMessage(v.instructionsTooLong, {
+          max: INTERVIEW_INSTRUCTIONS_MAX,
+        }),
         INTERVIEW_INSTRUCTIONS_MAX,
       ),
     })
@@ -151,13 +167,15 @@ export function buildInterviewScheduleSchema(now: Date) {
         ctx.addIssue({
           code: "custom",
           path: ["startAt"],
-          message: `Interviews must start at least ${INTERVIEW_MIN_LEAD_MINUTES} minutes from now.`,
+          message: formatMessage(v.leadTime, {
+            minutes: INTERVIEW_MIN_LEAD_MINUTES,
+          }),
         });
       } else if (value.startAt.getTime() > maxStart) {
         ctx.addIssue({
           code: "custom",
           path: ["startAt"],
-          message: "Interviews cannot be scheduled more than a year ahead.",
+          message: v.futureLimit,
         });
       }
 
@@ -167,19 +185,21 @@ export function buildInterviewScheduleSchema(now: Date) {
         ctx.addIssue({
           code: "custom",
           path: ["endAt"],
-          message: "End time must be after the start time.",
+          message: v.endAfterStart,
         });
       } else if (durationMinutes < INTERVIEW_MIN_DURATION_MINUTES) {
         ctx.addIssue({
           code: "custom",
           path: ["endAt"],
-          message: `Interviews must last at least ${INTERVIEW_MIN_DURATION_MINUTES} minutes.`,
+          message: formatMessage(v.minimumDuration, {
+            minutes: INTERVIEW_MIN_DURATION_MINUTES,
+          }),
         });
       } else if (durationMinutes > INTERVIEW_MAX_DURATION_MINUTES) {
         ctx.addIssue({
           code: "custom",
           path: ["endAt"],
-          message: "Interviews cannot run longer than 8 hours.",
+          message: v.maximumDuration,
         });
       }
 
@@ -187,22 +207,21 @@ export function buildInterviewScheduleSchema(now: Date) {
         ctx.addIssue({
           code: "custom",
           path: ["meetingUrl"],
-          message: "Video interviews need an https:// meeting link.",
+          message: v.videoLinkRequired,
         });
       }
       if (value.format === "ONSITE" && !value.location) {
         ctx.addIssue({
           code: "custom",
           path: ["location"],
-          message: "Onsite interviews need a location.",
+          message: v.onsiteLocationRequired,
         });
       }
       if (value.format === "PHONE" && value.meetingUrl) {
         ctx.addIssue({
           code: "custom",
           path: ["meetingUrl"],
-          message:
-            "Phone interviews cannot use a meeting link. Describe the call in the instructions instead.",
+          message: v.phoneLinkForbidden,
         });
       }
       if (
@@ -214,8 +233,7 @@ export function buildInterviewScheduleSchema(now: Date) {
         ctx.addIssue({
           code: "custom",
           path: ["instructions"],
-          message:
-            "Add a location, meeting link, or instructions so the candidate knows how to attend.",
+          message: v.attendanceRequired,
         });
       }
     });

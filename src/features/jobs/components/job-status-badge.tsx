@@ -11,8 +11,12 @@ const statusVariants: Record<
   ARCHIVED: "outline",
 };
 
-export function JobStatusBadge({ status }: { status: JobStatusValue }) {
-  return (
-    <Badge variant={statusVariants[status]}>{jobStatusLabels[status]}</Badge>
-  );
+export function JobStatusBadge({
+  status,
+  label = jobStatusLabels[status],
+}: {
+  status: JobStatusValue;
+  label?: string;
+}) {
+  return <Badge variant={statusVariants[status]}>{label}</Badge>;
 }

@@ -8,9 +8,8 @@ import {
   LoaderCircle,
   LockKeyhole,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -26,41 +25,26 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { registerUserAction } from "@/features/auth/server/actions";
 import {
-  registrationSchema,
+  createRegistrationSchema,
   type RegistrationValues,
 } from "@/features/auth/schemas";
+import { LocaleLink } from "@/i18n/client";
+import type { AuthDictionary, ValidationDictionary } from "@/i18n/dictionary";
 
-const accountTypes = [
-  {
-    role: "CANDIDATE" as const,
-    icon: BriefcaseBusiness,
-    title: "Candidate",
-    description: "Discover opportunities and build your career workspace.",
-    points: ["Professional profile", "Applications", "Saved opportunities"],
-  },
-  {
-    role: "RECRUITER" as const,
-    icon: Building2,
-    title: "Recruiter",
-    description: "Prepare a workspace for your future hiring activity.",
-    points: ["Company workspace", "Job publishing", "Applicant review"],
-  },
-];
-
-function FieldError({ id, message }: { id: string; message?: string }) {
-  if (!message) return null;
-
-  return (
-    <p id={id} role="alert" className="text-destructive text-sm">
-      {message}
-    </p>
-  );
-}
-
-export function RegistrationForm() {
+export function RegistrationForm({
+  t,
+  validation,
+}: {
+  t: AuthDictionary["register"];
+  validation: ValidationDictionary;
+}) {
   const router = useRouter();
   const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const schema = useMemo(
+    () => createRegistrationSchema(validation),
+    [validation],
+  );
   const {
     register,
     handleSubmit,
@@ -69,7 +53,7 @@ export function RegistrationForm() {
     setError,
     formState: { errors, isSubmitting },
   } = useForm<RegistrationValues>({
-    resolver: zodResolver(registrationSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       role: "CANDIDATE",
       fullName: "",
@@ -80,6 +64,23 @@ export function RegistrationForm() {
     },
   });
   const selectedRole = useWatch({ control, name: "role" });
+
+  const accountTypes = [
+    {
+      role: "CANDIDATE" as const,
+      icon: BriefcaseBusiness,
+      title: t.candidateTitle,
+      description: t.candidateDescription,
+      points: [t.candidatePoint1, t.candidatePoint2, t.candidatePoint3],
+    },
+    {
+      role: "RECRUITER" as const,
+      icon: Building2,
+      title: t.recruiterTitle,
+      description: t.recruiterDescription,
+      points: [t.recruiterPoint1, t.recruiterPoint2, t.recruiterPoint3],
+    },
+  ];
 
   function handleRoleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     const direction = ["ArrowRight", "ArrowDown"].includes(event.key)
@@ -126,9 +127,7 @@ export function RegistrationForm() {
         router.replace(result.redirectTo);
         router.refresh();
       } catch {
-        setServerMessage(
-          "We could not create your account. Please try again shortly.",
-        );
+        setServerMessage(t.fallbackError);
       }
     },
     () => {
@@ -144,11 +143,9 @@ export function RegistrationForm() {
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-8">
       <fieldset>
-        <legend className="text-lg font-semibold">
-          1. Choose account type
-        </legend>
+        <legend className="text-lg font-semibold">{t.stepAccountType}</legend>
         <p className="text-muted-foreground mt-1 text-sm">
-          You can register publicly as a Candidate or Recruiter.
+          {t.stepAccountTypeDescription}
         </p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {accountTypes.map((account) => {
@@ -220,11 +217,8 @@ export function RegistrationForm() {
 
       <Card className="shadow-xl shadow-black/5">
         <CardHeader>
-          <CardTitle className="text-xl">2. Create your account</CardTitle>
-          <CardDescription>
-            Use an email you can access. Email verification will be added in a
-            later phase and is not claimed here.
-          </CardDescription>
+          <CardTitle className="text-xl">{t.stepCreate}</CardTitle>
+          <CardDescription>{t.stepCreateDescription}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {(serverMessage || errorMessages.length > 0) && (
@@ -234,7 +228,7 @@ export function RegistrationForm() {
               className="border-destructive/30 bg-destructive/5 rounded-lg border p-4"
             >
               <p id="registration-error-title" className="font-medium">
-                Please review your registration
+                {t.reviewTitle}
               </p>
               {serverMessage && (
                 <p className="text-muted-foreground mt-1 text-sm">
@@ -249,17 +243,17 @@ export function RegistrationForm() {
               role="status"
               className="border-primary/30 bg-primary/5 rounded-lg border p-4 text-sm"
             >
-              {successMessage} Opening your dashboard…
+              {successMessage} {t.openingDashboard}
             </div>
           )}
 
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="fullName">Full name</Label>
+              <Label htmlFor="fullName">{t.fullNameLabel}</Label>
               <Input
                 id="fullName"
                 autoComplete="name"
-                placeholder="Alex Morgan"
+                placeholder={t.fullNamePlaceholder}
                 aria-invalid={Boolean(errors.fullName)}
                 aria-describedby={
                   errors.fullName ? "fullName-error" : undefined
@@ -274,13 +268,13 @@ export function RegistrationForm() {
             </div>
 
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="email">{t.emailLabel}</Label>
               <Input
                 id="email"
                 type="email"
                 inputMode="email"
                 autoComplete="email"
-                placeholder="you@example.com"
+                placeholder={t.emailPlaceholder}
                 aria-invalid={Boolean(errors.email)}
                 aria-describedby={errors.email ? "email-error" : undefined}
                 disabled={isSubmitting}
@@ -290,7 +284,7 @@ export function RegistrationForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t.passwordLabel}</Label>
               <Input
                 id="password"
                 type="password"
@@ -304,7 +298,7 @@ export function RegistrationForm() {
                 id="password-requirements"
                 className="text-muted-foreground text-xs leading-5"
               >
-                Use 12–128 characters. A long, unique passphrase works well.
+                {t.passwordGuidance}
               </p>
               <FieldError
                 id="password-error"
@@ -313,7 +307,7 @@ export function RegistrationForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm password</Label>
+              <Label htmlFor="confirmPassword">{t.confirmPasswordLabel}</Label>
               <Input
                 id="confirmPassword"
                 type="password"
@@ -346,7 +340,7 @@ export function RegistrationForm() {
                 {...register("termsAccepted")}
               />
               <Label htmlFor="termsAccepted" className="block leading-5">
-                I accept the Terms of Service and Privacy Policy.
+                {t.termsLabel}
               </Label>
             </div>
             <FieldError
@@ -370,20 +364,30 @@ export function RegistrationForm() {
             ) : (
               <LockKeyhole aria-hidden="true" data-icon="inline-start" />
             )}
-            {isSubmitting ? "Creating account…" : "Create account"}
+            {isSubmitting ? t.submitting : t.submit}
           </Button>
 
           <p className="text-muted-foreground text-center text-sm">
-            Already have an account?{" "}
-            <Link
+            {t.alreadyHaveAccount}{" "}
+            <LocaleLink
               href="/login"
               className="text-foreground rounded-sm font-semibold underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
             >
-              Sign in
-            </Link>
+              {t.signIn}
+            </LocaleLink>
           </p>
         </CardContent>
       </Card>
     </form>
+  );
+}
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+
+  return (
+    <p id={id} role="alert" className="text-destructive text-sm">
+      {message}
+    </p>
   );
 }

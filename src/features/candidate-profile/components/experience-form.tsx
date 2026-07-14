@@ -20,23 +20,37 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   EMPLOYMENT_TYPES,
-  employmentTypeLabels,
-  experienceSchema,
+  createCandidateProfileSchemas,
   type ExperienceInput,
 } from "@/features/candidate-profile/schemas";
 import type { ProfileActionResult } from "@/features/candidate-profile/server/actions";
 import { FormField, FormStatus } from "./form-field";
+import { useLocale } from "@/i18n/client";
+import type {
+  CandidateDictionary,
+  LabelsDictionary,
+  ValidationDictionary,
+} from "@/i18n/dictionary";
+import { localizeInternalPath } from "@/i18n/paths";
 
 export function ExperienceForm({
   defaultValues,
   action,
   submitLabel,
+  candidate,
+  validation,
+  labels,
 }: {
   defaultValues: ExperienceInput;
   action: (input: unknown) => Promise<ProfileActionResult>;
   submitLabel: string;
+  candidate: CandidateDictionary;
+  validation: ValidationDictionary;
+  labels: LabelsDictionary;
 }) {
+  const t = candidate.profile.experienceForm;
   const router = useRouter();
+  const locale = useLocale();
   const [result, setResult] = useState<ProfileActionResult | null>(null);
   const {
     register,
@@ -46,7 +60,9 @@ export function ExperienceForm({
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<ExperienceInput>({
-    resolver: zodResolver(experienceSchema),
+    resolver: zodResolver(
+      createCandidateProfileSchemas(validation, candidate).experienceSchema,
+    ),
     defaultValues,
   });
   const isCurrent = useWatch({ control, name: "isCurrent" });
@@ -66,7 +82,10 @@ export function ExperienceForm({
     }
 
     router.push(
-      `/candidate/profile?updated=${encodeURIComponent(nextResult.message)}`,
+      localizeInternalPath(
+        `/candidate/profile?updated=${encodeURIComponent(nextResult.feedbackCode ?? "")}`,
+        locale,
+      ),
     );
   });
 
@@ -75,13 +94,13 @@ export function ExperienceForm({
       <div className="grid gap-5 sm:grid-cols-2">
         <FormField
           id="jobTitle"
-          label="Job title"
+          label={t.jobTitle}
           error={errors.jobTitle?.message}
         >
           <Input
             id="jobTitle"
             maxLength={160}
-            placeholder="Software Engineer"
+            placeholder={t.jobTitlePlaceholder}
             aria-invalid={Boolean(errors.jobTitle)}
             aria-describedby={errors.jobTitle ? "jobTitle-error" : undefined}
             {...register("jobTitle")}
@@ -89,7 +108,7 @@ export function ExperienceForm({
         </FormField>
         <FormField
           id="companyName"
-          label="Company"
+          label={t.company}
           error={errors.companyName?.message}
         >
           <Input
@@ -108,7 +127,7 @@ export function ExperienceForm({
       <div className="grid gap-5 sm:grid-cols-2">
         <FormField
           id="employmentType"
-          label="Employment type"
+          label={t.employmentType}
           error={errors.employmentType?.message}
         >
           <Controller
@@ -124,12 +143,12 @@ export function ExperienceForm({
                     errors.employmentType ? "employmentType-error" : undefined
                   }
                 >
-                  <SelectValue placeholder="Select a type" />
+                  <SelectValue placeholder={t.selectType} />
                 </SelectTrigger>
                 <SelectContent position="popper">
                   {EMPLOYMENT_TYPES.map((type) => (
                     <SelectItem key={type} value={type}>
-                      {employmentTypeLabels[type]}
+                      {labels.employmentType[type]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -139,13 +158,13 @@ export function ExperienceForm({
         </FormField>
         <FormField
           id="work-location"
-          label="Location"
+          label={t.location}
           error={errors.location?.message}
         >
           <Input
             id="work-location"
             maxLength={120}
-            placeholder="Baku, Azerbaijan or Remote"
+            placeholder={t.locationPlaceholder}
             aria-invalid={Boolean(errors.location)}
             aria-describedby={
               errors.location ? "work-location-error" : undefined
@@ -158,7 +177,7 @@ export function ExperienceForm({
       <div className="grid gap-5 sm:grid-cols-2">
         <FormField
           id="startDate"
-          label="Start date"
+          label={t.startDate}
           error={errors.startDate?.message}
         >
           <Controller
@@ -179,7 +198,7 @@ export function ExperienceForm({
         </FormField>
         <FormField
           id="endDate"
-          label="End date"
+          label={t.endDate}
           error={errors.endDate?.message}
         >
           <Controller
@@ -214,13 +233,13 @@ export function ExperienceForm({
             />
           )}
         />
-        <Label htmlFor="experience-is-current">I currently work here</Label>
+        <Label htmlFor="experience-is-current">{t.current}</Label>
       </div>
 
       <FormField
         id="experience-description"
-        label="Description"
-        hint="Optional responsibilities, scope, and measurable outcomes."
+        label={t.description}
+        hint={t.descriptionHint}
         error={errors.description?.message}
       >
         <Textarea
@@ -248,7 +267,7 @@ export function ExperienceForm({
           ) : (
             <Save aria-hidden="true" />
           )}
-          {isSubmitting ? "Saving…" : submitLabel}
+          {isSubmitting ? t.saving : submitLabel}
         </Button>
         <Button
           type="button"
@@ -256,7 +275,7 @@ export function ExperienceForm({
           size="lg"
           onClick={() => router.back()}
         >
-          Cancel
+          {t.cancel}
         </Button>
       </div>
     </form>

@@ -42,13 +42,18 @@ function testDatabaseUrl(): string {
   return value;
 }
 
-async function createUser(label: string, role: "CANDIDATE" | "RECRUITER") {
+async function createUser(
+  label: string,
+  role: "CANDIDATE" | "RECRUITER",
+  preferredLocale: "EN" | "TR" | "AZ" | "RU" = "EN",
+) {
   return prisma.user.create({
     data: {
       id: `${prefix}-${label}`,
       name: `${label} Test User`,
       email: `${prefix}-${label}@example.test`,
       role,
+      preferredLocale,
     },
     select: { id: true },
   });
@@ -123,11 +128,11 @@ databaseDescribe(
       vi.stubEnv("EMAIL_APP_BASE_URL", "http://localhost:3000");
 
       const [owner, coOwner, member, candidate, invitee] = await Promise.all([
-        createUser("owner", "RECRUITER"),
-        createUser("co-owner", "RECRUITER"),
+        createUser("owner", "RECRUITER", "TR"),
+        createUser("co-owner", "RECRUITER", "RU"),
         createUser("member", "RECRUITER"),
-        createUser("candidate", "CANDIDATE"),
-        createUser("invitee", "RECRUITER"),
+        createUser("candidate", "CANDIDATE", "AZ"),
+        createUser("invitee", "RECRUITER", "TR"),
       ]);
       ownerId = owner.id;
       coOwnerId = coOwner.id;
@@ -213,7 +218,13 @@ databaseDescribe(
           applicationId: application.id,
           eventType: "APPLICATION_SUBMITTED",
         },
-        select: { recipientUserId: true, status: true },
+        select: {
+          recipientUserId: true,
+          status: true,
+          locale: true,
+          subject: true,
+          destinationPath: true,
+        },
       });
       expect(rows).toHaveLength(2);
       expect(rows.map((row) => row.recipientUserId).sort()).toEqual(
@@ -221,6 +232,36 @@ databaseDescribe(
       );
       expect(rows.every((row) => row.status === "PENDING")).toBe(true);
       expect(rows.some((row) => row.recipientUserId === memberId)).toBe(false);
+      const turkish = rows.find((row) => row.recipientUserId === ownerId);
+      const russian = rows.find((row) => row.recipientUserId === coOwnerId);
+      expect(turkish?.locale).toBe("TR");
+      expect(russian?.locale).toBe("RU");
+      expect(turkish?.subject).not.toBe(russian?.subject);
+      expect(
+        rows.every((row) => row.destinationPath.startsWith("/recruiter/")),
+      ).toBe(true);
+
+      const originalSnapshot = {
+        locale: turkish?.locale,
+        subject: turkish?.subject,
+        destinationPath: turkish?.destinationPath,
+      };
+      await prisma.user.update({
+        where: { id: ownerId },
+        data: { preferredLocale: "AZ" },
+      });
+      const storedTurkish = await prisma.emailOutbox.findFirstOrThrow({
+        where: {
+          applicationId: application.id,
+          recipientUserId: ownerId,
+          eventType: "APPLICATION_SUBMITTED",
+        },
+      });
+      expect(storedTurkish).toMatchObject(originalSnapshot);
+      await prisma.user.update({
+        where: { id: ownerId },
+        data: { preferredLocale: "TR" },
+      });
     });
 
     it("snapshots a disabled status preference as SUPPRESSED while preserving in-app notification", async () => {
@@ -246,6 +287,7 @@ databaseDescribe(
         },
       });
       expect(outbox.status).toBe("SUPPRESSED");
+      expect(outbox.locale).toBe("AZ");
       expect(outbox.lastErrorCode).toBe("USER_PREFERENCE");
       expect(
         await prisma.notification.count({
@@ -278,12 +320,12 @@ databaseDescribe(
           applicationId: application.id,
           eventType: "APPLICATION_WITHDRAWN",
         },
-        select: { recipientUserId: true, status: true },
+        select: { recipientUserId: true, status: true, locale: true },
       });
       expect(rows).toEqual(
         expect.arrayContaining([
-          { recipientUserId: ownerId, status: "PENDING" },
-          { recipientUserId: coOwnerId, status: "SUPPRESSED" },
+          { recipientUserId: ownerId, status: "PENDING", locale: "TR" },
+          { recipientUserId: coOwnerId, status: "SUPPRESSED", locale: "RU" },
         ]),
       );
     });

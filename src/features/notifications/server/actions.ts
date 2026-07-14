@@ -1,7 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
+import { revalidateLocalizedPath } from "@/i18n/revalidate";
 import { getDashboardPathForRole } from "@/features/auth/roles";
 import { notificationIdSchema } from "@/features/notifications/schemas";
 import { requireNotificationRecipient } from "@/features/notifications/server/guard";
@@ -9,6 +8,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/features/notifications/server/mutations";
+import { getRequestDictionary } from "@/i18n/server";
 import { getPrismaClient } from "@/lib/prisma";
 
 export type NotificationActionResult =
@@ -16,47 +16,53 @@ export type NotificationActionResult =
 
 /**
  * Revalidates the Activity Center and the caller's own dashboard so the header
- * bell and any on-page unread counts reflect the change. The client also calls
- * `router.refresh()` to update the layout-level header in the same interaction.
+ * bell and any on-page unread counts reflect the change. Routes live under the
+ * `[locale]` segment, so the page form invalidates every locale variant. The
+ * client also calls `router.refresh()` to update the layout-level header in
+ * the same interaction.
  */
 function revalidateNotificationViews(role: "CANDIDATE" | "RECRUITER") {
-  revalidatePath("/notifications");
-  revalidatePath(getDashboardPathForRole(role));
+  revalidateLocalizedPath("/notifications");
+  revalidateLocalizedPath(`${getDashboardPathForRole(role)}`);
 }
 
 export async function markNotificationReadAction(
   notificationIdInput: unknown,
 ): Promise<NotificationActionResult> {
   const recipient = await requireNotificationRecipient("/notifications");
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.notifications.actions;
   const parsed = notificationIdSchema.safeParse(notificationIdInput);
   if (!parsed.success) {
-    return { success: false, message: "That notification is not available." };
+    return { success: false, message: messages.invalidNotification };
   }
 
   try {
     await markNotificationRead(getPrismaClient(), recipient, parsed.data);
     revalidateNotificationViews(recipient.role);
-    return { success: true, message: "Notification marked as read." };
+    return { success: true, message: messages.markedRead };
   } catch {
     // Return a safe, generic error — never a raw Prisma error or stack trace.
     return {
       success: false,
-      message: "We could not update that notification. Please try again.",
+      message: messages.updateFailed,
     };
   }
 }
 
 export async function markAllNotificationsReadAction(): Promise<NotificationActionResult> {
   const recipient = await requireNotificationRecipient("/notifications");
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.notifications.actions;
 
   try {
     await markAllNotificationsRead(getPrismaClient(), recipient);
     revalidateNotificationViews(recipient.role);
-    return { success: true, message: "All notifications marked as read." };
+    return { success: true, message: messages.markedAllRead };
   } catch {
     return {
       success: false,
-      message: "We could not update your notifications. Please try again.",
+      message: messages.updateAllFailed,
     };
   }
 }

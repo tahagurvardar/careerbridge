@@ -8,15 +8,18 @@ import {
   saveJobAction,
   unsaveJobAction,
 } from "@/features/saved-jobs/server/actions";
+import type { PublicDictionary } from "@/i18n/dictionary";
 
 export function JobSaveButton({
   slug,
   initialSaved,
+  labels,
   className,
   compact = false,
 }: {
   slug: string;
   initialSaved: boolean;
+  labels: PublicDictionary["saveButton"];
   className?: string;
   compact?: boolean;
 }) {
@@ -36,7 +39,7 @@ export function JobSaveButton({
     });
   }
 
-  const label = saved ? "Remove from saved" : "Save job";
+  const label = saved ? labels.removeFromSaved : labels.save;
 
   return (
     <div className={compact ? "shrink-0" : "grid gap-1.5"}>
@@ -57,7 +60,7 @@ export function JobSaveButton({
         ) : (
           <Bookmark aria-hidden="true" />
         )}
-        {pending ? "Updating…" : saved ? "Saved" : "Save job"}
+        {pending ? labels.updating : saved ? labels.saved : labels.save}
       </Button>
       <p
         aria-live="polite"

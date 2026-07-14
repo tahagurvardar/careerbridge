@@ -35,6 +35,11 @@ import {
   deleteApplicationNoteAction,
   editApplicationNoteAction,
 } from "@/features/application-notes/server/actions";
+import { useLocale } from "@/i18n/client";
+import type { RecruiterDictionary } from "@/i18n/dictionary";
+import { formatCount, formatDateTimeUtc } from "@/i18n/formatter";
+import { localizeInternalPath } from "@/i18n/paths";
+import { formatMessage } from "@/i18n/translate";
 
 type ActiveNote = {
   id: string;
@@ -47,13 +52,6 @@ type ActiveNote = {
 };
 
 type DeletedNote = Omit<ActiveNote, "body"> & { deletedAt: Date | null };
-
-function formatNoteDate(value: Date) {
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
 
 function ResultMessage({
   result,
@@ -79,13 +77,16 @@ export function ApplicationNotesPanel({
   currentUserId,
   notes,
   deletedNotes,
+  labels,
 }: {
   applicationId: string;
   currentUserId: string;
   notes: ActiveNote[];
   deletedNotes: DeletedNote[];
+  labels: RecruiterDictionary["notes"];
 }) {
   const router = useRouter();
+  const locale = useLocale();
   const [body, setBody] = useState("");
   const [result, setResult] = useState<ApplicationNoteActionResult | null>(
     null,
@@ -113,14 +114,13 @@ export function ApplicationNotesPanel({
           className="text-primary mt-0.5 size-4 shrink-0"
         />
         <p className="text-muted-foreground text-sm leading-6">
-          Internal hiring-team notes. Candidates, company members, admins, and
-          the public cannot view them.
+          {labels.privacy}
         </p>
       </div>
 
       <form className="grid gap-3" onSubmit={submit} noValidate>
         <div className="flex items-center justify-between gap-3">
-          <Label htmlFor="new-application-note">Add a note</Label>
+          <Label htmlFor="new-application-note">{labels.add}</Label>
           <span className="text-muted-foreground text-xs tabular-nums">
             {body.length}/{NOTE_BODY_MAX}
           </span>
@@ -129,7 +129,7 @@ export function ApplicationNotesPanel({
           id="new-application-note"
           value={body}
           onChange={(event) => setBody(event.target.value)}
-          placeholder="Add private context for the hiring team…"
+          placeholder={labels.placeholder}
           rows={4}
           maxLength={NOTE_BODY_MAX}
           disabled={pending}
@@ -154,16 +154,13 @@ export function ApplicationNotesPanel({
             ) : (
               <Plus aria-hidden="true" />
             )}
-            Add note
+            {pending ? labels.adding : labels.add}
           </Button>
         </div>
       </form>
 
       {notes.length ? (
-        <ul
-          className="grid min-w-0 gap-4"
-          aria-label="Active application notes"
-        >
+        <ul className="grid min-w-0 gap-4" aria-label={labels.activeLabel}>
           {notes.map((note) => (
             <li key={note.id} className="min-w-0">
               <ApplicationNoteCard
@@ -173,16 +170,16 @@ export function ApplicationNotesPanel({
                   { authorUserId: note.authorUserId, deletedAt: null },
                   currentUserId,
                 )}
+                labels={labels}
               />
             </li>
           ))}
         </ul>
       ) : (
         <div className="rounded-xl border border-dashed p-6 text-center">
-          <p className="font-medium">No internal notes yet</p>
+          <p className="font-medium">{labels.emptyTitle}</p>
           <p className="text-muted-foreground mt-1 text-sm">
-            Add the first note to keep private hiring context with this
-            application.
+            {labels.emptyDescription}
           </p>
         </div>
       )}
@@ -190,7 +187,7 @@ export function ApplicationNotesPanel({
       {deletedNotes.length ? (
         <details className="group rounded-xl border p-4">
           <summary className="cursor-pointer text-sm font-medium">
-            Deleted note history ({deletedNotes.length})
+            {formatCount(locale, deletedNotes.length, labels.deletedSummary)}
           </summary>
           <ul className="mt-4 grid gap-3 border-t pt-4">
             {deletedNotes.map((note) => (
@@ -199,11 +196,12 @@ export function ApplicationNotesPanel({
                 className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between"
               >
                 <span className="text-muted-foreground min-w-0">
-                  Deleted{" "}
-                  {note.deletedAt ? formatNoteDate(note.deletedAt) : "—"}
-                  {note.author?.name
-                    ? ` · originally by ${note.author.name}`
-                    : ""}
+                  {formatMessage(labels.deletedBy, {
+                    name: note.author?.name ?? labels.formerRecruiter,
+                    date: note.deletedAt
+                      ? formatDateTimeUtc(locale, note.deletedAt)
+                      : "—",
+                  })}
                 </span>
                 <Button
                   variant="ghost"
@@ -212,10 +210,13 @@ export function ApplicationNotesPanel({
                   className="self-start sm:self-auto"
                 >
                   <Link
-                    href={`/recruiter/applications/${applicationId}/notes/${note.id}/history`}
+                    href={localizeInternalPath(
+                      `/recruiter/applications/${applicationId}/notes/${note.id}/history`,
+                      locale,
+                    )}
                   >
                     <History aria-hidden="true" />
-                    View history
+                    {labels.history}
                   </Link>
                 </Button>
               </li>
@@ -231,12 +232,15 @@ function ApplicationNoteCard({
   applicationId,
   note,
   canManage,
+  labels,
 }: {
   applicationId: string;
   note: ActiveNote;
   canManage: boolean;
+  labels: RecruiterDictionary["notes"];
 }) {
   const router = useRouter();
+  const locale = useLocale();
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(note.body);
   const [result, setResult] = useState<ApplicationNoteActionResult | null>(
@@ -278,26 +282,33 @@ function ApplicationNoteCard({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">
-            {note.author?.name ?? "Former recruiter"}
+            {note.author?.name ?? labels.formerRecruiter}
             {canManage ? (
               <Badge variant="secondary" className="ml-2">
-                Your note
+                {labels.you}
               </Badge>
             ) : null}
           </p>
           <p className="text-muted-foreground mt-1 text-xs">
             {isNoteEdited(note.revision)
-              ? `Edited ${formatNoteDate(note.updatedAt)} · Revision ${note.revision}`
-              : `Added ${formatNoteDate(note.createdAt)}`}
+              ? formatMessage(labels.edited, {
+                  date: formatDateTimeUtc(locale, note.updatedAt),
+                })
+              : formatMessage(labels.created, {
+                  date: formatDateTimeUtc(locale, note.createdAt),
+                })}
           </p>
         </div>
         <div className="flex flex-wrap gap-1 sm:justify-end">
           <Button variant="ghost" size="sm" asChild>
             <Link
-              href={`/recruiter/applications/${applicationId}/notes/${note.id}/history`}
+              href={localizeInternalPath(
+                `/recruiter/applications/${applicationId}/notes/${note.id}/history`,
+                locale,
+              )}
             >
               <History aria-hidden="true" />
-              History
+              {labels.history}
             </Link>
           </Button>
           {canManage ? (
@@ -314,9 +325,13 @@ function ApplicationNoteCard({
                 }}
               >
                 <Pencil aria-hidden="true" />
-                Edit
+                {labels.edit}
               </Button>
-              <DeleteNoteButton pending={pending} onDelete={remove} />
+              <DeleteNoteButton
+                pending={pending}
+                onDelete={remove}
+                labels={labels}
+              />
             </>
           ) : null}
         </div>
@@ -328,7 +343,7 @@ function ApplicationNoteCard({
           onSubmit={edit}
           noValidate
         >
-          <Label htmlFor={`edit-note-${note.id}`}>Edit note</Label>
+          <Label htmlFor={`edit-note-${note.id}`}>{labels.editLabel}</Label>
           <Textarea
             id={`edit-note-${note.id}`}
             value={body}
@@ -350,7 +365,7 @@ function ApplicationNoteCard({
                   setResult(null);
                 }}
               >
-                Cancel
+                {labels.cancel}
               </Button>
               <Button
                 type="submit"
@@ -359,7 +374,7 @@ function ApplicationNoteCard({
                 {pending ? (
                   <LoaderCircle aria-hidden="true" className="animate-spin" />
                 ) : null}
-                Save changes
+                {pending ? labels.saving : labels.save}
               </Button>
             </div>
           </div>
@@ -377,9 +392,11 @@ function ApplicationNoteCard({
 function DeleteNoteButton({
   pending,
   onDelete,
+  labels,
 }: {
   pending: boolean;
   onDelete: () => void;
+  labels: RecruiterDictionary["notes"];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -388,19 +405,20 @@ function DeleteNoteButton({
       <AlertDialogTrigger asChild>
         <Button type="button" variant="ghost" size="sm" disabled={pending}>
           <Trash2 aria-hidden="true" />
-          Delete
+          {labels.delete}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete this note?</AlertDialogTitle>
+          <AlertDialogTitle>{labels.deleteTitle}</AlertDialogTitle>
           <AlertDialogDescription>
-            It will leave the active notes list, but its immutable revision
-            history remains available to authorized company owners.
+            {labels.deleteDescription}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>
+            {labels.cancel}
+          </AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             disabled={pending}
@@ -410,7 +428,7 @@ function DeleteNoteButton({
               onDelete();
             }}
           >
-            Delete note
+            {pending ? labels.deleting : labels.confirmDelete}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

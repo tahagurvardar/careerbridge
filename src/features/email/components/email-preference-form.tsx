@@ -5,19 +5,23 @@ import { CheckCircle2, LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  emailEventDescriptions,
-  emailEventLabels,
-} from "@/features/email/email";
 import { saveEmailPreferencesAction } from "@/features/email/server/actions";
+import type { EmailDictionary } from "@/i18n/dictionary";
 import type { EmailEventType } from "@/generated/prisma/enums";
 
 export function EmailPreferenceForm({
   events,
   initialValues,
+  labels,
 }: {
   events: readonly EmailEventType[];
   initialValues: Partial<Record<EmailEventType, boolean>>;
+  labels: {
+    fieldsetLegend: string;
+    save: string;
+    eventLabels: EmailDictionary["eventLabels"];
+    eventDescriptions: EmailDictionary["eventDescriptions"];
+  };
 }) {
   const [values, setValues] = useState(initialValues);
   const [pending, startTransition] = useTransition();
@@ -40,7 +44,7 @@ export function EmailPreferenceForm({
       }}
     >
       <fieldset disabled={pending} className="grid gap-3">
-        <legend className="sr-only">Transactional email preferences</legend>
+        <legend className="sr-only">{labels.fieldsetLegend}</legend>
         {events.map((eventType) => {
           const id = `email-preference-${eventType.toLowerCase()}`;
           return (
@@ -62,10 +66,10 @@ export function EmailPreferenceForm({
               />
               <span className="grid gap-1">
                 <span className="font-medium">
-                  {emailEventLabels[eventType]}
+                  {labels.eventLabels[eventType]}
                 </span>
                 <span className="text-muted-foreground text-sm leading-6">
-                  {emailEventDescriptions[eventType]}
+                  {labels.eventDescriptions[eventType]}
                 </span>
               </span>
             </label>
@@ -78,7 +82,7 @@ export function EmailPreferenceForm({
           {pending ? (
             <LoaderCircle aria-hidden="true" className="animate-spin" />
           ) : null}
-          Save email settings
+          {labels.save}
         </Button>
         {result ? (
           <p

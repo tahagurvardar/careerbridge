@@ -1,4 +1,11 @@
 import { z } from "zod";
+import type {
+  CandidateDictionary,
+  ValidationDictionary,
+} from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
+import { candidate as englishCandidate } from "@/i18n/dictionaries/en/candidate";
+import { validation as englishValidation } from "@/i18n/dictionaries/en/validation";
 
 const CURRENT_YEAR = new Date().getUTCFullYear();
 const MIN_YEAR = 1950;
@@ -25,130 +32,172 @@ export const employmentTypeLabels: Record<
   FREELANCE: "Freelance",
 };
 
-function optionalText(maxLength: number, label: string) {
-  return z
+export function createCandidateProfileSchemas(
+  validation: ValidationDictionary,
+  candidate: CandidateDictionary,
+) {
+  const v = validation.profile;
+  const profile = candidate.profile;
+  const optionalText = (maxLength: number, label: string) =>
+    z
+      .string()
+      .trim()
+      .max(
+        maxLength,
+        formatMessage(v.fieldTooLong, { field: label, max: maxLength }),
+      );
+
+  const professionalUrlSchema = z
     .string()
     .trim()
-    .max(maxLength, `${label} must be ${maxLength} characters or fewer.`);
-}
+    .max(2048, formatMessage(v.urlTooLong, { max: 2048 }))
+    .superRefine((value, context) => {
+      if (!value) return;
+      try {
+        const url = new URL(value);
+        if (!["http:", "https:"].includes(url.protocol)) {
+          context.addIssue({ code: "custom", message: v.urlScheme });
+        }
+      } catch {
+        context.addIssue({ code: "custom", message: v.invalidUrl });
+      }
+    })
+    .transform((value) => (value ? new URL(value).toString() : ""));
 
-const professionalUrlSchema = z
-  .string()
-  .trim()
-  .max(2048, "URL must be 2,048 characters or fewer.")
-  .superRefine((value, context) => {
-    if (!value) return;
+  const basicProfileSchema = z.object({
+    headline: optionalText(160, profile.basicForm.headlineLabel),
+    location: optionalText(120, profile.basicForm.locationLabel),
+    bio: optionalText(2000, profile.basicForm.bioLabel),
+    websiteUrl: professionalUrlSchema,
+    linkedinUrl: professionalUrlSchema,
+    githubUrl: professionalUrlSchema,
+  });
 
-    try {
-      const url = new URL(value);
+  const yearSchema = z
+    .number({ error: v.enterYear })
+    .int(v.wholeYear)
+    .min(MIN_YEAR, formatMessage(v.yearMin, { min: MIN_YEAR }))
+    .max(MAX_YEAR, formatMessage(v.yearMax, { max: MAX_YEAR }));
 
-      if (!["http:", "https:"].includes(url.protocol)) {
+  const educationSchema = z
+    .object({
+      school: z
+        .string()
+        .trim()
+        .min(
+          1,
+          formatMessage(v.required, { field: profile.educationForm.school }),
+        )
+        .max(
+          160,
+          formatMessage(v.fieldTooLong, {
+            field: profile.educationForm.school,
+            max: 160,
+          }),
+        ),
+      degree: optionalText(120, profile.educationForm.degree),
+      fieldOfStudy: optionalText(120, profile.educationForm.fieldOfStudy),
+      startYear: yearSchema,
+      endYear: yearSchema.nullable(),
+      isCurrent: z.boolean(),
+      description: optionalText(2000, profile.educationForm.description),
+    })
+    .superRefine((value, context) => {
+      if (value.isCurrent && value.endYear !== null) {
         context.addIssue({
           code: "custom",
-          message: "Use an http or https URL.",
+          path: ["endYear"],
+          message: v.currentProgramEnd,
         });
       }
-    } catch {
-      context.addIssue({ code: "custom", message: "Enter a valid URL." });
-    }
-  })
-  .transform((value) => (value ? new URL(value).toString() : ""));
+      if (value.endYear !== null && value.endYear < value.startYear) {
+        context.addIssue({
+          code: "custom",
+          path: ["endYear"],
+          message: v.endYearOrder,
+        });
+      }
+    });
 
-export const basicProfileSchema = z.object({
-  headline: optionalText(160, "Headline"),
-  location: optionalText(120, "Location"),
-  bio: optionalText(2000, "Bio"),
-  websiteUrl: professionalUrlSchema,
-  linkedinUrl: professionalUrlSchema,
-  githubUrl: professionalUrlSchema,
-});
+  const calendarDateSchema = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, v.validDate)
+    .refine((value) => {
+      const date = new Date(`${value}T00:00:00.000Z`);
+      return (
+        !Number.isNaN(date.valueOf()) && date.toISOString().startsWith(value)
+      );
+    }, v.validDate);
 
-const yearSchema = z
-  .number({ error: "Enter a year." })
-  .int("Enter a whole year.")
-  .min(MIN_YEAR, `Year must be ${MIN_YEAR} or later.`)
-  .max(MAX_YEAR, `Year must be ${MAX_YEAR} or earlier.`);
+  const experienceSchema = z
+    .object({
+      companyName: z
+        .string()
+        .trim()
+        .min(
+          1,
+          formatMessage(v.required, { field: profile.experienceForm.company }),
+        )
+        .max(
+          160,
+          formatMessage(v.fieldTooLong, {
+            field: profile.experienceForm.company,
+            max: 160,
+          }),
+        ),
+      jobTitle: z
+        .string()
+        .trim()
+        .min(
+          1,
+          formatMessage(v.required, { field: profile.experienceForm.jobTitle }),
+        )
+        .max(
+          160,
+          formatMessage(v.fieldTooLong, {
+            field: profile.experienceForm.jobTitle,
+            max: 160,
+          }),
+        ),
+      employmentType: z.enum(EMPLOYMENT_TYPES, { error: v.chooseEmployment }),
+      location: optionalText(120, profile.experienceForm.location),
+      startDate: calendarDateSchema,
+      endDate: z.union([calendarDateSchema, z.literal("")]),
+      isCurrent: z.boolean(),
+      description: optionalText(2000, profile.experienceForm.description),
+    })
+    .superRefine((value, context) => {
+      if (value.isCurrent && value.endDate) {
+        context.addIssue({
+          code: "custom",
+          path: ["endDate"],
+          message: v.currentRoleEnd,
+        });
+      }
+      if (value.endDate && value.endDate < value.startDate) {
+        context.addIssue({
+          code: "custom",
+          path: ["endDate"],
+          message: v.endDateOrder,
+        });
+      }
+    });
 
-export const educationSchema = z
-  .object({
-    school: z
+  const skillSchema = z.object({
+    name: z
       .string()
-      .trim()
-      .min(1, "School is required.")
-      .max(160, "School must be 160 characters or fewer."),
-    degree: optionalText(120, "Degree"),
-    fieldOfStudy: optionalText(120, "Field of study"),
-    startYear: yearSchema,
-    endYear: yearSchema.nullable(),
-    isCurrent: z.boolean(),
-    description: optionalText(2000, "Description"),
-  })
-  .superRefine((value, context) => {
-    if (value.isCurrent && value.endYear !== null) {
-      context.addIssue({
-        code: "custom",
-        path: ["endYear"],
-        message: "A current program cannot have an end year.",
-      });
-    }
-
-    if (value.endYear !== null && value.endYear < value.startYear) {
-      context.addIssue({
-        code: "custom",
-        path: ["endYear"],
-        message: "End year cannot be earlier than start year.",
-      });
-    }
+      .transform(normalizeSkillName)
+      .pipe(
+        z
+          .string()
+          .min(2, formatMessage(v.skillMin, { min: 2 }))
+          .max(80, formatMessage(v.skillMax, { max: 80 }))
+          .regex(/^[\p{L}\p{N}][\p{L}\p{N}\s+#./&-]*$/u, v.skillCharacters),
+      ),
   });
 
-const calendarDateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date.")
-  .refine((value) => {
-    const date = new Date(`${value}T00:00:00.000Z`);
-    return (
-      !Number.isNaN(date.valueOf()) && date.toISOString().startsWith(value)
-    );
-  }, "Enter a valid date.");
-
-export const experienceSchema = z
-  .object({
-    companyName: z
-      .string()
-      .trim()
-      .min(1, "Company is required.")
-      .max(160, "Company must be 160 characters or fewer."),
-    jobTitle: z
-      .string()
-      .trim()
-      .min(1, "Job title is required.")
-      .max(160, "Job title must be 160 characters or fewer."),
-    employmentType: z.enum(EMPLOYMENT_TYPES, {
-      error: "Choose an employment type.",
-    }),
-    location: optionalText(120, "Location"),
-    startDate: calendarDateSchema,
-    endDate: z.union([calendarDateSchema, z.literal("")]),
-    isCurrent: z.boolean(),
-    description: optionalText(2000, "Description"),
-  })
-  .superRefine((value, context) => {
-    if (value.isCurrent && value.endDate) {
-      context.addIssue({
-        code: "custom",
-        path: ["endDate"],
-        message: "A current role cannot have an end date.",
-      });
-    }
-
-    if (value.endDate && value.endDate < value.startDate) {
-      context.addIssue({
-        code: "custom",
-        path: ["endDate"],
-        message: "End date cannot be earlier than start date.",
-      });
-    }
-  });
+  return { basicProfileSchema, educationSchema, experienceSchema, skillSchema };
+}
 
 export function normalizeSkillName(value: string) {
   return value.normalize("NFKC").trim().replace(/\s+/g, " ");
@@ -158,21 +207,14 @@ export function getSkillLookupName(value: string) {
   return normalizeSkillName(value).toLocaleLowerCase("en-US");
 }
 
-export const skillSchema = z.object({
-  name: z
-    .string()
-    .transform(normalizeSkillName)
-    .pipe(
-      z
-        .string()
-        .min(2, "Skill must be at least 2 characters.")
-        .max(80, "Skill must be 80 characters or fewer.")
-        .regex(
-          /^[\p{L}\p{N}][\p{L}\p{N}\s+#./&-]*$/u,
-          "Use letters, numbers, spaces, or common skill punctuation.",
-        ),
-    ),
-});
+const defaultSchemas = createCandidateProfileSchemas(
+  englishValidation,
+  englishCandidate,
+);
+export const basicProfileSchema = defaultSchemas.basicProfileSchema;
+export const educationSchema = defaultSchemas.educationSchema;
+export const experienceSchema = defaultSchemas.experienceSchema;
+export const skillSchema = defaultSchemas.skillSchema;
 
 export function isDuplicateSkillAssignment(
   existingNormalizedNames: readonly string[],

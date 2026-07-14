@@ -10,57 +10,22 @@ export type ProfileCompletionSignals = {
 
 export type ProfileRecommendation = {
   key: keyof ProfileCompletionSignals;
-  label: string;
   href: string;
 };
 
 // The six core sections carry 15 points each. A professional link carries the
-// remaining 10 points, for a deterministic total of 100.
+// remaining 10 points, for a deterministic total of 100. Display labels are
+// resolved from the candidate dictionary at render time by section key.
 const COMPLETION_SECTIONS: ReadonlyArray<
   ProfileRecommendation & { weight: number }
 > = [
-  {
-    key: "headline",
-    label: "Add a professional headline",
-    href: "/candidate/profile/edit",
-    weight: 15,
-  },
-  {
-    key: "location",
-    label: "Add your location",
-    href: "/candidate/profile/edit",
-    weight: 15,
-  },
-  {
-    key: "bio",
-    label: "Write a short professional bio",
-    href: "/candidate/profile/edit",
-    weight: 15,
-  },
-  {
-    key: "skills",
-    label: "Add at least one skill",
-    href: "/candidate/profile#skills",
-    weight: 15,
-  },
-  {
-    key: "education",
-    label: "Add an education record",
-    href: "/candidate/profile/education/new",
-    weight: 15,
-  },
-  {
-    key: "experience",
-    label: "Add work experience",
-    href: "/candidate/profile/experience/new",
-    weight: 15,
-  },
-  {
-    key: "professionalLink",
-    label: "Add a professional link",
-    href: "/candidate/profile/edit",
-    weight: 10,
-  },
+  { key: "headline", href: "/candidate/profile/edit", weight: 15 },
+  { key: "location", href: "/candidate/profile/edit", weight: 15 },
+  { key: "bio", href: "/candidate/profile/edit", weight: 15 },
+  { key: "skills", href: "/candidate/profile#skills", weight: 15 },
+  { key: "education", href: "/candidate/profile/education/new", weight: 15 },
+  { key: "experience", href: "/candidate/profile/experience/new", weight: 15 },
+  { key: "professionalLink", href: "/candidate/profile/edit", weight: 10 },
 ];
 
 export function calculateProfileCompletion(signals: ProfileCompletionSignals) {
@@ -70,7 +35,7 @@ export function calculateProfileCompletion(signals: ProfileCompletionSignals) {
   );
   const incomplete = COMPLETION_SECTIONS.filter(
     (section) => !signals[section.key],
-  ).map(({ key, label, href }) => ({ key, label, href }));
+  ).map(({ key, href }) => ({ key, href }));
 
   return { percentage, incomplete };
 }

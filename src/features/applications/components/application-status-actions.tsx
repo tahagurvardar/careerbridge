@@ -25,7 +25,6 @@ import { FormStatus } from "@/features/candidate-profile/components/form-field";
 import { getAllowedRecruiterTransitions } from "@/features/applications/lifecycle";
 import {
   type ApplicationStatusValue,
-  applicationStatusLabels,
   RECRUITER_TARGET_STATUSES,
   type RecruiterTargetStatus,
 } from "@/features/applications/schemas";
@@ -33,14 +32,8 @@ import {
   type ApplicationActionResult,
   transitionApplicationAction,
 } from "@/features/applications/server/actions";
-
-const actionLabels: Record<RecruiterTargetStatus, string> = {
-  UNDER_REVIEW: "Move to review",
-  INTERVIEW: "Advance to interview",
-  OFFER: "Extend offer",
-  HIRED: "Mark hired",
-  REJECTED: "Reject application",
-};
+import type { AppDictionary, RecruiterDictionary } from "@/i18n/dictionary";
+import { formatMessage } from "@/i18n/translate";
 
 // Terminal, high-consequence transitions get a confirmation step.
 const CONFIRM_TARGETS: readonly RecruiterTargetStatus[] = ["HIRED", "REJECTED"];
@@ -48,9 +41,13 @@ const CONFIRM_TARGETS: readonly RecruiterTargetStatus[] = ["HIRED", "REJECTED"];
 export function ApplicationStatusActions({
   applicationId,
   status,
+  labels,
+  statusLabels,
 }: {
   applicationId: string;
   status: ApplicationStatusValue;
+  labels: RecruiterDictionary["applicationActions"];
+  statusLabels: AppDictionary["labels"]["applicationStatus"];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -74,8 +71,7 @@ export function ApplicationStatusActions({
   if (targets.length === 0) {
     return (
       <p className="text-muted-foreground text-sm leading-6">
-        This application is in a final state ({applicationStatusLabels[status]}
-        ). No further actions are available.
+        {formatMessage(labels.finalState, { status: statusLabels[status] })}
       </p>
     );
   }
@@ -89,6 +85,7 @@ export function ApplicationStatusActions({
               key={target}
               target={target}
               pending={pending}
+              labels={labels}
               onConfirm={() => run(target)}
             />
           ) : (
@@ -103,7 +100,7 @@ export function ApplicationStatusActions({
               ) : (
                 <ArrowRight aria-hidden="true" />
               )}
-              {actionLabels[target]}
+              {labels[target]}
             </Button>
           ),
         )}
@@ -119,10 +116,12 @@ function ConfirmTransition({
   target,
   pending,
   onConfirm,
+  labels,
 }: {
   target: RecruiterTargetStatus;
   pending: boolean;
   onConfirm: () => void;
+  labels: RecruiterDictionary["applicationActions"];
 }) {
   const [open, setOpen] = useState(false);
   const isReject = target === "REJECTED";
@@ -140,24 +139,22 @@ function ConfirmTransition({
           ) : (
             <CircleCheckBig aria-hidden="true" />
           )}
-          {actionLabels[target]}
+          {labels[target]}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {isReject
-              ? "Reject this application?"
-              : "Mark this candidate hired?"}
+            {isReject ? labels.rejectTitle : labels.hiredTitle}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {isReject
-              ? "This moves the application to a final rejected state. It cannot be changed afterwards."
-              : "This moves the application to a final hired state. It cannot be changed afterwards."}
+            {isReject ? labels.rejectDescription : labels.hiredDescription}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>
+            {labels.cancel}
+          </AlertDialogCancel>
           <AlertDialogAction
             variant={isReject ? "destructive" : "default"}
             disabled={pending}
@@ -167,7 +164,7 @@ function ConfirmTransition({
               onConfirm();
             }}
           >
-            {actionLabels[target]}
+            {labels[target]}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

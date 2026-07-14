@@ -1,10 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
+import { revalidateLocalizedPath } from "@/i18n/revalidate";
+import { getRequestDictionary } from "@/i18n/server";
 import { requireRole } from "@/features/auth/server/session";
 import {
-  inviteRecruiterSchema,
+  createInviteRecruiterSchema,
   teamEntityIdSchema,
 } from "@/features/company-team/schemas";
 import {
@@ -32,54 +32,53 @@ async function recruiterActor(callbackPath: string) {
   return { userId: session.user.id, role: session.user.role } as const;
 }
 
-function mutationFailure(error: unknown): CompanyTeamActionResult {
-  if (error instanceof CompanyTeamMutationError) {
-    if (error.safeMessage) {
-      return { success: false, message: error.safeMessage };
-    }
+type TeamMessages = Awaited<
+  ReturnType<typeof getRequestDictionary>
+>["dictionary"]["recruiter"]["team"];
 
-    const messages: Partial<Record<typeof error.code, string>> = {
-      NOT_FOUND: "That team record was not found or is not available to you.",
-      FORBIDDEN: "You are not authorized to make that team change.",
-      INVITEE_NOT_ELIGIBLE:
-        "Invitations can only be sent to an existing Recruiter account.",
-      SELF_INVITE: "You cannot invite yourself to this company.",
-      ALREADY_MEMBER: "That recruiter is already a company member.",
-      DUPLICATE_INVITATION:
-        "That recruiter already has an active invitation to this company.",
-      INVITATION_NOT_ACTIVE: "That invitation is no longer active.",
-      INVITATION_EXPIRED: "That invitation has expired.",
-      TARGET_NOT_ELIGIBLE: "That team member is not eligible for this change.",
-      SELF_TARGET: "Use the leave-company action for your own membership.",
-      LAST_OWNER: "A company must keep at least one owner.",
-      CONFLICT: "The team changed at the same time. Refresh and try again.",
+function mutationFailure(
+  error: unknown,
+  messages: TeamMessages,
+): CompanyTeamActionResult {
+  if (error instanceof CompanyTeamMutationError) {
+    const errorMessages: Partial<Record<typeof error.code, string>> = {
+      NOT_FOUND: messages.action.notFound,
+      FORBIDDEN: messages.action.forbidden,
+      INVITEE_NOT_ELIGIBLE: messages.action.accountRequired,
+      SELF_INVITE: messages.action.selfInvite,
+      ALREADY_MEMBER: messages.action.alreadyMember,
+      DUPLICATE_INVITATION: messages.action.duplicateInvitation,
+      INVITATION_NOT_ACTIVE: messages.action.inactiveInvitation,
+      INVITATION_EXPIRED: messages.action.expiredInvitation,
+      TARGET_NOT_ELIGIBLE: messages.action.ineligible,
+      SELF_TARGET: messages.action.selfTarget,
+      LAST_OWNER: messages.finalOwner,
+      CONFLICT: messages.action.conflict,
     };
     return {
       success: false,
-      message:
-        messages[error.code] ??
-        "We could not save that team change. Please try again.",
+      message: errorMessages[error.code] ?? messages.action.failed,
     };
   }
 
   return {
     success: false,
-    message: "We could not save that team change. Please try again.",
+    message: messages.action.failed,
   };
 }
 
-function invalidIdentifier(): CompanyTeamActionResult {
-  return { success: false, message: "That team record is not valid." };
+function invalidIdentifier(messages: TeamMessages): CompanyTeamActionResult {
+  return { success: false, message: messages.action.invalid };
 }
 
 function revalidateTeam(companyId?: string) {
-  revalidatePath("/recruiter/dashboard");
-  revalidatePath("/recruiter/companies");
-  revalidatePath("/recruiter/invitations");
-  revalidatePath("/notifications");
+  revalidateLocalizedPath("/recruiter/dashboard");
+  revalidateLocalizedPath("/recruiter/companies");
+  revalidateLocalizedPath("/recruiter/invitations");
+  revalidateLocalizedPath("/notifications");
   if (companyId) {
-    revalidatePath(`/recruiter/companies/${companyId}`);
-    revalidatePath(`/recruiter/companies/${companyId}/team`);
+    revalidateLocalizedPath(`/recruiter/companies/${companyId}`);
+    revalidateLocalizedPath(`/recruiter/companies/${companyId}/team`);
   }
 }
 
@@ -88,13 +87,17 @@ export async function inviteRecruiterAction(
   input: unknown,
 ): Promise<CompanyTeamActionResult> {
   const actor = await recruiterActor("/recruiter/companies");
+  const { dictionary } = await getRequestDictionary();
+  const messages = dictionary.recruiter.team;
   const parsedCompanyId = teamEntityIdSchema.safeParse(companyId);
-  const parsedInput = inviteRecruiterSchema.safeParse(input);
-  if (!parsedCompanyId.success) return invalidIdentifier();
+  const parsedInput = createInviteRecruiterSchema(
+    dictionary.validation,
+  ).safeParse(input);
+  if (!parsedCompanyId.success) return invalidIdentifier(messages);
   if (!parsedInput.success) {
     return {
       success: false,
-      message: "Enter the email address of an existing Recruiter account.",
+      message: messages.action.invalidEmail,
       fieldErrors: {
         email: parsedInput.error.flatten().fieldErrors.email?.[0],
       },
@@ -109,9 +112,9 @@ export async function inviteRecruiterAction(
       parsedInput.data,
     );
     revalidateTeam(parsedCompanyId.data);
-    return { success: true, message: "Invitation sent." };
+    return { success: true, message: messages.action.sent };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
@@ -119,8 +122,9 @@ export async function acceptCompanyInvitationAction(
   invitationId: string,
 ): Promise<CompanyTeamActionResult> {
   const actor = await recruiterActor("/recruiter/invitations");
+  const messages = (await getRequestDictionary()).dictionary.recruiter.team;
   const parsed = teamEntityIdSchema.safeParse(invitationId);
-  if (!parsed.success) return invalidIdentifier();
+  if (!parsed.success) return invalidIdentifier(messages);
   try {
     const result = await acceptCompanyInvitation(
       getPrismaClient(),
@@ -130,11 +134,11 @@ export async function acceptCompanyInvitationAction(
     revalidateTeam(result.companyId);
     return {
       success: true,
-      message: "Invitation accepted. You are now a company member.",
+      message: messages.action.accepted,
       redirectTo: `/recruiter/companies/${result.companyId}`,
     };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
@@ -142,14 +146,15 @@ export async function declineCompanyInvitationAction(
   invitationId: string,
 ): Promise<CompanyTeamActionResult> {
   const actor = await recruiterActor("/recruiter/invitations");
+  const messages = (await getRequestDictionary()).dictionary.recruiter.team;
   const parsed = teamEntityIdSchema.safeParse(invitationId);
-  if (!parsed.success) return invalidIdentifier();
+  if (!parsed.success) return invalidIdentifier(messages);
   try {
     await declineCompanyInvitation(getPrismaClient(), actor, parsed.data);
     revalidateTeam();
-    return { success: true, message: "Invitation declined." };
+    return { success: true, message: messages.action.declined };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
@@ -157,13 +162,14 @@ async function runOwnerMembershipAction(
   companyId: string,
   membershipId: string,
   callback: typeof promoteCompanyMember,
-  successMessage: string,
+  successMessage: keyof TeamMessages["action"],
 ): Promise<CompanyTeamActionResult> {
   const actor = await recruiterActor("/recruiter/companies");
+  const messages = (await getRequestDictionary()).dictionary.recruiter.team;
   const parsedCompanyId = teamEntityIdSchema.safeParse(companyId);
   const parsedMembershipId = teamEntityIdSchema.safeParse(membershipId);
   if (!parsedCompanyId.success || !parsedMembershipId.success) {
-    return invalidIdentifier();
+    return invalidIdentifier(messages);
   }
   try {
     await callback(
@@ -173,9 +179,9 @@ async function runOwnerMembershipAction(
       parsedMembershipId.data,
     );
     revalidateTeam(parsedCompanyId.data);
-    return { success: true, message: successMessage };
+    return { success: true, message: messages.action[successMessage] };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
@@ -187,7 +193,7 @@ export async function promoteCompanyMemberAction(
     companyId,
     membershipId,
     promoteCompanyMember,
-    "Member promoted to owner.",
+    "promoted",
   );
 }
 
@@ -199,7 +205,7 @@ export async function demoteCompanyOwnerAction(
     companyId,
     membershipId,
     demoteCompanyOwner,
-    "Owner demoted to member.",
+    "demoted",
   );
 }
 
@@ -211,7 +217,7 @@ export async function removeCompanyMemberAction(
     companyId,
     membershipId,
     removeCompanyMember,
-    "Member removed from the company.",
+    "removed",
   );
 }
 
@@ -223,7 +229,7 @@ export async function transferCompanyOwnershipAction(
     companyId,
     membershipId,
     transferCompanyOwnership,
-    "Ownership transferred.",
+    "transferred",
   );
 }
 
@@ -232,10 +238,11 @@ export async function revokeCompanyInvitationAction(
   invitationId: string,
 ): Promise<CompanyTeamActionResult> {
   const actor = await recruiterActor("/recruiter/companies");
+  const messages = (await getRequestDictionary()).dictionary.recruiter.team;
   const parsedCompanyId = teamEntityIdSchema.safeParse(companyId);
   const parsedInvitationId = teamEntityIdSchema.safeParse(invitationId);
   if (!parsedCompanyId.success || !parsedInvitationId.success) {
-    return invalidIdentifier();
+    return invalidIdentifier(messages);
   }
   try {
     await revokeCompanyInvitation(
@@ -245,9 +252,9 @@ export async function revokeCompanyInvitationAction(
       parsedInvitationId.data,
     );
     revalidateTeam(parsedCompanyId.data);
-    return { success: true, message: "Invitation revoked." };
+    return { success: true, message: messages.action.revoked };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
 
@@ -255,17 +262,18 @@ export async function leaveCompanyAction(
   companyId: string,
 ): Promise<CompanyTeamActionResult> {
   const actor = await recruiterActor("/recruiter/companies");
+  const messages = (await getRequestDictionary()).dictionary.recruiter.team;
   const parsed = teamEntityIdSchema.safeParse(companyId);
-  if (!parsed.success) return invalidIdentifier();
+  if (!parsed.success) return invalidIdentifier(messages);
   try {
     await leaveCompany(getPrismaClient(), actor, parsed.data);
     revalidateTeam(parsed.data);
     return {
       success: true,
-      message: "You left the company.",
+      message: messages.action.left,
       redirectTo: "/recruiter/companies",
     };
   } catch (error) {
-    return mutationFailure(error);
+    return mutationFailure(error, messages);
   }
 }
