@@ -198,43 +198,43 @@ enum CompanyMembershipEventType {
 }
 
 model User {
-  id                      String                       @id
-  name                    String
-  email                   String
-  emailVerified           Boolean                      @default(false)
-  image                   String?
-  createdAt               DateTime                     @default(now())
-  updatedAt               DateTime                     @updatedAt
-  role                    Role                         @default(CANDIDATE)
-  accountStatus           UserAccountStatus            @default(ACTIVE)
-  moderationVersion       Int                          @default(1)
-  suspendedAt             DateTime?
-  restoredAt              DateTime?
-  sessions                Session[]
-  accounts                Account[]
-  candidateProfile        CandidateProfile?
-  recruiterProfile        RecruiterProfile?
-  companyMemberships      CompanyMembership[]
-  applications            JobApplication[]             @relation("CandidateApplications")
-  savedJobs               SavedJob[]                   @relation("CandidateSavedJobs")
-  statusChanges           ApplicationStatusHistory[]   @relation("StatusChangedBy")
-  documents               CandidateDocument[]          @relation("CandidateDocuments")
-  currentResume           CandidateResume?             @relation("CandidateCurrentResume")
-  documentAccessLogs      CandidateDocumentAccessLog[] @relation("DocumentAccessActor")
-  applicationNotes        ApplicationNote[]            @relation("ApplicationNoteAuthor")
-  noteRevisions           ApplicationNoteRevision[]    @relation("ApplicationNoteRevisionActor")
-  notifications           Notification[]               @relation("NotificationRecipient")
-  actedNotifications      Notification[]               @relation("NotificationActor")
-  receivedInvitations     CompanyInvitation[]          @relation("CompanyInvitationInvitee")
-  sentInvitations         CompanyInvitation[]          @relation("CompanyInvitationInviter")
-  membershipEventsActed   CompanyMembershipEvent[]     @relation("CompanyMembershipEventActor")
-  membershipEventsSubject CompanyMembershipEvent[]     @relation("CompanyMembershipEventSubject")
-  emailPreferences        UserEmailPreference[]
-  emailOutbox             EmailOutbox[]                @relation("EmailOutboxRecipient")
-  organizedInterviews     Interview[]                  @relation("InterviewOrganizer")
-  interviewEvents         InterviewEvent[]             @relation("InterviewEventActor")
-  adminAuditEventsActed   AdminAuditEvent[]            @relation("AdminAuditActor")
-  adminAuditEventsTargeted AdminAuditEvent[]           @relation("AdminAuditTargetUser")
+  id                       String                       @id
+  name                     String
+  email                    String
+  emailVerified            Boolean                      @default(false)
+  image                    String?
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+  role                     Role                         @default(CANDIDATE)
+  accountStatus            UserAccountStatus            @default(ACTIVE)
+  moderationVersion        Int                          @default(1)
+  suspendedAt              DateTime?
+  restoredAt               DateTime?
+  sessions                 Session[]
+  accounts                 Account[]
+  candidateProfile         CandidateProfile?
+  recruiterProfile         RecruiterProfile?
+  companyMemberships       CompanyMembership[]
+  applications             JobApplication[]             @relation("CandidateApplications")
+  savedJobs                SavedJob[]                   @relation("CandidateSavedJobs")
+  statusChanges            ApplicationStatusHistory[]   @relation("StatusChangedBy")
+  documents                CandidateDocument[]          @relation("CandidateDocuments")
+  currentResume            CandidateResume?             @relation("CandidateCurrentResume")
+  documentAccessLogs       CandidateDocumentAccessLog[] @relation("DocumentAccessActor")
+  applicationNotes         ApplicationNote[]            @relation("ApplicationNoteAuthor")
+  noteRevisions            ApplicationNoteRevision[]    @relation("ApplicationNoteRevisionActor")
+  notifications            Notification[]               @relation("NotificationRecipient")
+  actedNotifications       Notification[]               @relation("NotificationActor")
+  receivedInvitations      CompanyInvitation[]          @relation("CompanyInvitationInvitee")
+  sentInvitations          CompanyInvitation[]          @relation("CompanyInvitationInviter")
+  membershipEventsActed    CompanyMembershipEvent[]     @relation("CompanyMembershipEventActor")
+  membershipEventsSubject  CompanyMembershipEvent[]     @relation("CompanyMembershipEventSubject")
+  emailPreferences         UserEmailPreference[]
+  emailOutbox              EmailOutbox[]                @relation("EmailOutboxRecipient")
+  organizedInterviews      Interview[]                  @relation("InterviewOrganizer")
+  interviewEvents          InterviewEvent[]             @relation("InterviewEventActor")
+  adminAuditEventsActed    AdminAuditEvent[]            @relation("AdminAuditActor")
+  adminAuditEventsTargeted AdminAuditEvent[]            @relation("AdminAuditTargetUser")
 
   @@unique([email])
   @@index([accountStatus])
@@ -258,22 +258,22 @@ model RecruiterProfile {
 }
 
 model Company {
-  id           String       @id @default(cuid())
-  name         String       @db.VarChar(160)
-  slug         String       @unique @db.VarChar(180)
-  tagline      String?      @db.VarChar(240)
-  description  String?      @db.VarChar(4000)
-  industry     String?      @db.VarChar(120)
-  headquarters String?      @db.VarChar(160)
-  websiteUrl   String?      @db.VarChar(2048)
-  companySize  CompanySize?
-  foundedYear  Int?         @db.SmallInt
-  isPublished  Boolean      @default(false)
+  id                String                  @id @default(cuid())
+  name              String                  @db.VarChar(160)
+  slug              String                  @unique @db.VarChar(180)
+  tagline           String?                 @db.VarChar(240)
+  description       String?                 @db.VarChar(4000)
+  industry          String?                 @db.VarChar(120)
+  headquarters      String?                 @db.VarChar(160)
+  websiteUrl        String?                 @db.VarChar(2048)
+  companySize       CompanySize?
+  foundedYear       Int?                    @db.SmallInt
+  isPublished       Boolean                 @default(false)
   moderationStatus  ContentModerationStatus @default(VISIBLE)
   moderationVersion Int                     @default(1)
   moderatedAt       DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 
   memberships      CompanyMembership[]
   jobs             Job[]
@@ -281,11 +281,13 @@ model Company {
   invitations      CompanyInvitation[]
   membershipEvents CompanyMembershipEvent[]
   emailOutbox      EmailOutbox[]
-  adminAuditEvents AdminAuditEvent[] @relation("AdminAuditTargetCompany")
+  adminAuditEvents AdminAuditEvent[]        @relation("AdminAuditTargetCompany")
 
   @@index([isPublished, name])
   @@index([moderationStatus])
   @@index([moderationStatus, createdAt])
+  // Platform Company creation trend and created-in-range count.
+  @@index([createdAt])
   @@map("company")
 }
 
@@ -378,15 +380,15 @@ model CompanyMembershipEvent {
 }
 
 model Job {
-  id                  String           @id @default(cuid())
+  id                  String                  @id @default(cuid())
   companyId           String
-  title               String           @db.VarChar(160)
-  slug                String           @unique @db.VarChar(200)
-  summary             String?          @db.VarChar(320)
-  description         String?          @db.VarChar(8000)
-  responsibilities    String?          @db.VarChar(6000)
-  requirements        String?          @db.VarChar(6000)
-  location            String?          @db.VarChar(160)
+  title               String                  @db.VarChar(160)
+  slug                String                  @unique @db.VarChar(200)
+  summary             String?                 @db.VarChar(320)
+  description         String?                 @db.VarChar(8000)
+  responsibilities    String?                 @db.VarChar(6000)
+  requirements        String?                 @db.VarChar(6000)
+  location            String?                 @db.VarChar(160)
   employmentType      EmploymentType?
   workplaceType       WorkplaceType?
   experienceLevel     ExperienceLevel?
@@ -394,28 +396,30 @@ model Job {
   // units, to keep monetary values as exact integers rather than floats.
   salaryMin           Int?
   salaryMax           Int?
-  salaryCurrency      String?          @db.Char(3)
-  applicationDeadline DateTime?        @db.Date
-  status              JobStatus        @default(DRAFT)
+  salaryCurrency      String?                 @db.Char(3)
+  applicationDeadline DateTime?               @db.Date
+  status              JobStatus               @default(DRAFT)
   moderationStatus    ContentModerationStatus @default(VISIBLE)
   moderationVersion   Int                     @default(1)
   moderatedAt         DateTime?
   publishedAt         DateTime?
   closedAt            DateTime?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
 
-  company       Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  skills        JobSkill[]
-  applications  JobApplication[]
-  savedBy       SavedJob[]
-  notifications Notification[]
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  skills           JobSkill[]
+  applications     JobApplication[]
+  savedBy          SavedJob[]
+  notifications    Notification[]
   adminAuditEvents AdminAuditEvent[] @relation("AdminAuditTargetJob")
 
   @@index([companyId, status, createdAt])
   @@index([status, publishedAt, id])
   @@index([moderationStatus])
   @@index([moderationStatus, createdAt])
+  // Platform Job creation trend and created-in-range count.
+  @@index([createdAt])
   @@map("job")
 }
 
@@ -426,15 +430,15 @@ model Job {
 /// later account/content deletion. No private domain payloads or arbitrary JSON
 /// are stored here.
 model AdminAuditEvent {
-  id                 String               @id @default(cuid())
-  actorAdminUserId   String?
-  targetUserId       String?
-  targetCompanyId    String?
-  targetJobId        String?
-  action             AdminAuditAction
-  reasonCode         ModerationReasonCode
-  reasonNote         String?              @db.VarChar(500)
-  createdAt          DateTime             @default(now())
+  id               String               @id @default(cuid())
+  actorAdminUserId String?
+  targetUserId     String?
+  targetCompanyId  String?
+  targetJobId      String?
+  action           AdminAuditAction
+  reasonCode       ModerationReasonCode
+  reasonNote       String?              @db.VarChar(500)
+  createdAt        DateTime             @default(now())
 
   actor         User?    @relation("AdminAuditActor", fields: [actorAdminUserId], references: [id], onDelete: SetNull)
   targetUser    User?    @relation("AdminAuditTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
@@ -507,6 +511,12 @@ model JobApplication {
   @@unique([jobId, candidateId])
   @@index([candidateId, status, submittedAt])
   @@index([jobId, status, submittedAt])
+  // Analytics cohort/trend scans use the immutable creation instant rather
+  // than the mutable current status or presentation-oriented submittedAt.
+  @@index([createdAt])
+  @@index([candidateId, createdAt])
+  @@index([jobId, createdAt])
+  @@index([status, createdAt])
   @@index([resumeDocumentId])
   @@map("job_application")
 }
@@ -571,6 +581,8 @@ model Interview {
   @@index([organizerUserId, status, startAt])
   // Status-filtered upcoming/past agenda queries.
   @@index([status, startAt])
+  // Candidate/Company Application-scoped Interview creation metrics.
+  @@index([applicationId, createdAt])
   @@index([createdAt])
   @@map("interview")
 }

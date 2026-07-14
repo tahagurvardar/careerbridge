@@ -43,7 +43,7 @@ CareerBridge brings these activities into one role-aware system with shared doma
 - Moderate content and respond to trust and safety concerns
 - Audit important platform actions
 
-User reports, appeals, automated moderation, and expanded analytics remain deferred.
+User reports, appeals, automated moderation, analytics exports, and predictive analytics remain deferred.
 
 ## MVP scope
 
@@ -287,7 +287,27 @@ Moderation preserves Applications/history, Saved Jobs, Interviews/history, Candi
 
 Routes are `/admin`, `/admin/users`, `/admin/users/[userId]`, `/admin/companies`, `/admin/companies/[companyId]`, `/admin/jobs`, `/admin/jobs/[jobId]`, and `/admin/audit`. Directories use bounded page-20 queries with stable newest-first ordering; the dashboard recent audit list is capped at ten and omits internal notes.
 
-## Intentionally deferred after Phase 6A
+## Analytics and recruiting insights (Phase 6B)
+
+CareerBridge analytics use only product records already required by the workflow. They add no tracking pixel, page-view event, click event, email-open/click event, fingerprint, replay, third-party analytics SDK, public endpoint, or invented engagement/growth score. Every metric says whether it is current state, created in the selected range, or a lifetime stage reached by Applications created in that range.
+
+The date selector accepts `30D`, `90D`, `180D`, `365D`, or `ALL` and defaults to `90D`. The server creates UTC calendar starts and an exclusive current-server-time end; browser-supplied arbitrary dates are rejected by omission. Trends use daily, weekly, or monthly windows, fill missing windows with zero, preserve chronological order, and remain at or below 120 points by grouping adjacent months for long all-time histories.
+
+The Application funnel is `SUBMITTED`, `UNDER_REVIEW`, `INTERVIEW`, `OFFER`, `HIRED`. It counts a unique in-range-cohort Application once per stage ever reached, even if history contains stage re-entry. `REJECTED` and `WITHDRAWN` are separate outcomes. Stage rates divide by the previous reached-stage count and overall hire conversion divides `HIRED` by `SUBMITTED`; zero denominators display no percentage and all displayed rates use one decimal. These values describe recorded history and do not rank Candidates or predict future outcomes.
+
+Active Admins see aggregate platform User, Company, Job, Application, Interview, Offer/Hire, lifecycle/status, trend, funnel, and moderation-aware visible/hidden counts without any private record content or identity list. Recruiters see metrics only for Companies they currently own, may select an owned Company and one of its Jobs, and see current distributions, cohort funnels/rates, Interview outcomes, and at most 25 Job performance rows. MEMBER and cross-Company access are denied. Candidates see only personal Application current state, cohort progression, Interview counts, and Saved Job count; there is no comparison, percentile, rank, score, or success probability.
+
+| Data category                                 | Admin              | Recruiter OWNER                     | Candidate                     |
+| --------------------------------------------- | ------------------ | ----------------------------------- | ----------------------------- |
+| Aggregate counts/trends                       | Platform scope     | Selected owned Company/Job          | Own records only              |
+| Candidate identity or CV                      | Never              | Never in analytics                  | No identity/CV payload needed |
+| Notes/cover letters/private Interview details | Never              | Never                               | Never                         |
+| Hidden historical records                     | Counted safely     | Labeled in authorized private scope | Personal history retained     |
+| Moderation reason                             | Never in analytics | Never                               | Never                         |
+
+Analytics routes are `/admin/analytics`, `/recruiter/analytics`, and `/candidate/analytics`; each is linked from role navigation and its dashboard without duplicating the full analytics page. Every chart has visible values and a table fallback. CSV/PDF export, scheduled analytics email, public metrics, materialized views, background aggregation, warehouse/ETL work, revenue/billing analytics, predictive analytics, and custom chart building remain deferred. Phase 6C is localization.
+
+## Intentionally deferred after Phase 6B
 
 - Google, Outlook, and Apple calendar synchronization and OAuth calendar connections
 - Google Meet, Zoom, and Microsoft Teams link generation and calendar provider webhooks
@@ -315,7 +335,7 @@ Routes are `/admin`, `/admin/users`, `/admin/users/[userId]`, `/admin/companies`
 - Candidate search and messaging
 - Public Candidate profile sharing and social feeds
 - Production Admin provisioning beyond the existing secure bootstrap
-- User reports, automated moderation/fraud scoring, appeals, legal takedowns, Company verification, and expanded Admin analytics
+- User reports, automated moderation/fraud scoring, appeals, legal takedowns, Company verification, analytics exports, and predictive analytics
 - AI, billing, and payments
 
 ## Future AI scope

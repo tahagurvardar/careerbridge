@@ -95,7 +95,7 @@ Route files should compose feature modules rather than accumulating domain logic
 - Phase 4A adds only `Notification`, plus the `NotificationType` enum and a unique `dedupeKey` constraint; notifications store bounded event snapshots and nullable Application/Job/Company links (`onDelete: SetNull`) for retention, never duplicating private Candidate, CV, or note data.
 - Database access remains server-only and is acquired through the lazy singleton helper.
 
-In-app notifications and transactional email now exist for the documented application, invitation, and Interview events. Push and real-time delivery remain deferred. Future domain areas include recommendations, alerts, reports, appeals, and expanded analytics. This list is directional, not a committed schema.
+In-app notifications, transactional email, and authorized aggregate analytics now exist for the documented workflows. Push and real-time delivery remain deferred. Future domain areas include recommendations, alerts, reports, appeals, localization, exports, and predictive analytics. This list is directional, not a committed schema.
 
 ### Candidate profile domain
 
@@ -132,7 +132,7 @@ Salary is persisted as whole non-negative integer currency units rather than a f
 
 The lifecycle is centralized and testable: DRAFT permits edit, publish, and archive; PUBLISHED permits edit, close, and archive; CLOSED permits archive; ARCHIVED is read-only. Transitions, the resulting status, and editability all derive from a single table, so no status value is ever accepted from form input. Publishing is an OWNER command that re-evaluates readiness against freshly read database rows: the Company must be published and the Job must have a title, summary, description, responsibilities, requirements, location, employment type, workplace type, experience level, and at least one required skill. Publishing sets `PUBLISHED` and `publishedAt`; closing sets `CLOSED` and `closedAt` and immediately removes the Job from public discovery; archiving sets `ARCHIVED` and removes it from discovery. Editing a published Job re-checks readiness so a live listing cannot become incomplete.
 
-Every Job command asserts the RECRUITER role, derives identity from the session, and scopes its database predicate through the authenticated user's OWNER membership of the Job's Company. Absent, foreign, and unauthorized Job IDs produce the same unavailable result, so a Recruiter cannot view or edit another Company's private drafts, and a MEMBER cannot mutate Jobs. Public list and detail queries always constrain `status = PUBLISHED`, `Job.moderationStatus = VISIBLE`, `Company.isPublished = true`, and `Company.moderationStatus = VISIBLE`, select only presentational fields with no internal IDs or membership identity, and order by newest `publishedAt` with a deterministic `id` tiebreaker. Recruiter Job routes are `/recruiter/jobs`, `/recruiter/jobs/new`, `/recruiter/jobs/[jobId]`, and `/recruiter/jobs/[jobId]/edit`; public discovery uses `/jobs` with bounded URL filters and `/jobs/[slug]` for published detail. Candidate matching, recommendations, alerts, and Job analytics remain deferred.
+Every Job command asserts the RECRUITER role, derives identity from the session, and scopes its database predicate through the authenticated user's OWNER membership of the Job's Company. Absent, foreign, and unauthorized Job IDs produce the same unavailable result, so a Recruiter cannot view or edit another Company's private drafts, and a MEMBER cannot mutate Jobs. Public list and detail queries always constrain `status = PUBLISHED`, `Job.moderationStatus = VISIBLE`, `Company.isPublished = true`, and `Company.moderationStatus = VISIBLE`, select only presentational fields with no internal IDs or membership identity, and order by newest `publishedAt` with a deterministic `id` tiebreaker. Recruiter Job routes are `/recruiter/jobs`, `/recruiter/jobs/new`, `/recruiter/jobs/[jobId]`, and `/recruiter/jobs/[jobId]/edit`; public discovery uses `/jobs` with bounded URL filters and `/jobs/[slug]` for published detail. Candidate matching, recommendations, alerts, and Job page-view analytics remain deferred.
 
 ### Application domain
 
@@ -286,6 +286,73 @@ Moderation controls access and public visibility; it does not destroy or rewrite
 Admin dashboard counts use parallel database aggregates and at most ten recent audit rows. The User, Company, Job, and audit directories validate URL search/filter/page input, use a fixed page size of 20, count separately, and order by `createdAt DESC, id DESC`. The additive `20260713194410_admin_trust_moderation` migration adds the four enums, defaulted moderation columns, indexes, checks, audit table, and retention-oriented foreign keys without deleting or rewriting existing rows.
 
 Deferred from this domain: User reports, automated fraud scoring, automated/AI moderation, content scanning, KYC/identity verification, Company verification badges, appeals, legal takedowns, billing, Admin impersonation, custom Admin permission levels, Admin messaging, production Admin provisioning changes, and analytics beyond the small truthful dashboard counts.
+
+### Analytics read architecture (Phase 6B)
+
+Analytics live under `src/features/analytics`: `analytics.ts` owns database-free date, bucket, status, funnel, and percentage semantics; `schemas.ts` owns stripped URL schemas; `server/admin.ts`, `server/recruiter.ts`, `server/candidate.ts`, and `server/queries.ts` form a `server-only` data-access layer; the components render aggregate DTOs only. Pages await Next.js 16 `searchParams`, call the existing active role guard, create one server `now`, and pass a minimal actor to a read function that independently re-reads current role/account state. No analytics API, mutation, shared cache, browser Prisma access, or public route exists.
+
+The trust model is zero-trust for URL state. Admin accepts only `range`; Candidate accepts only `range` and always derives `candidateId` from the active session; Recruiter accepts `range`, `companyId`, and `jobId`, then loads only current `OWNER` Companies and Jobs belonging to the selected authorized Company. One owned Company is selected automatically; changing Company removes `jobId`; MEMBER-only, removed, unknown, and cross-Company selections share the same unavailable result. Analytics results do not authorize the underlying Job, Application, Interview, or Candidate record.
+
+#### Analytics access matrix
+
+| Surface                | Active authorized User | Additional scope                                      | Denied                                                      |
+| ---------------------- | ---------------------- | ----------------------------------------------------- | ----------------------------------------------------------- |
+| `/admin/analytics`     | `ADMIN`                | Platform aggregates only                              | Candidate, Recruiter, suspended, signed out                 |
+| `/recruiter/analytics` | `RECRUITER`            | Current Company `OWNER`; optional Job in that Company | MEMBER, removed OWNER, cross-Company/unknown Company or Job |
+| `/candidate/analytics` | `CANDIDATE`            | `JobApplication.candidateId = session User id`        | Other Candidate, Recruiter, Admin, suspended, signed out    |
+| Public routes/API      | None                   | None                                                  | Everyone                                                    |
+
+#### Metric-definition table
+
+| Semantic                  | Definition                                                                                                                                          | Examples                                                                                                    |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Current state             | Evaluated now across the complete authorized Company/Job or Candidate scope; not restricted to cohort creation date                                 | Active Applications, current status distribution, published Jobs, upcoming/completed Interviews, Saved Jobs |
+| Created in selected range | Row `createdAt` is within the server-derived UTC half-open interval                                                                                 | New Users/Companies/Jobs/Applications/Interviews                                                            |
+| Ever reached stage        | Unique Application belongs to the creation cohort and has the initial stage or an immutable history event for the stage at any time through `endAt` | Reached Interview, Offer, Hired, Rejected, Withdrawn                                                        |
+| Application cohort        | Applications whose `createdAt` is in the selected interval; later lifetime transitions remain included                                              | Funnel and outcome cards                                                                                    |
+
+`SUBMITTED` is established from every cohort `JobApplication` row, so legacy rows cannot disappear solely because an initial history record is absent. Later stages come from `ApplicationStatusHistory.toStatus`. SQL `UNION` removes repeated `(applicationId, stage)` pairs before counting; current `JobApplication.status` remains the source for current-state distributions. Interview scheduling is not treated as an Application pipeline transition.
+
+#### Funnel-definition table
+
+| Order | Stage/exit     | Meaning                                                       | Conversion denominator             |
+| ----- | -------------- | ------------------------------------------------------------- | ---------------------------------- |
+| 1     | `SUBMITTED`    | Every Application in the selected creation cohort             | Cohort marker; no stage percentage |
+| 2     | `UNDER_REVIEW` | Unique cohort Applications that ever reached review           | Reached `SUBMITTED`                |
+| 3     | `INTERVIEW`    | Unique cohort Applications that ever reached Interview status | Reached `UNDER_REVIEW`             |
+| 4     | `OFFER`        | Unique cohort Applications that ever reached Offer            | Reached `INTERVIEW`                |
+| 5     | `HIRED`        | Unique cohort Applications that ever reached Hired            | Reached `OFFER`                    |
+| Exit  | `REJECTED`     | Unique cohort Applications that ever reached Rejected         | Shown separately                   |
+| Exit  | `WITHDRAWN`    | Unique cohort Applications that ever reached Withdrawn        | Shown separately                   |
+
+Overall hire conversion is reached `HIRED / SUBMITTED`. A denominator of zero produces `null` and renders as an em dash; all other rates are finite and rounded to one decimal. Rates describe recorded cohort flow only and never imply causation, quality, ranking, probability, or a forecast.
+
+#### Date-range and trend table
+
+| Preset | Start                                                     | End                               | Base trend bucket                                                            |
+| ------ | --------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------- |
+| `30D`  | UTC midnight 29 calendar days before the current UTC day  | Current server instant, exclusive | Daily                                                                        |
+| `90D`  | UTC midnight 89 calendar days before the current UTC day  | Current server instant, exclusive | Daily                                                                        |
+| `180D` | UTC midnight 179 calendar days before the current UTC day | Current server instant, exclusive | ISO-style week, first window clipped to range                                |
+| `365D` | UTC midnight 364 calendar days before the current UTC day | Current server instant, exclusive | ISO-style week, first window clipped to range                                |
+| `ALL`  | Earliest authorized source row                            | Current server instant, exclusive | Calendar month; adjacent months compact when history would exceed 120 points |
+
+The browser never supplies start/end dates. The domain creates at most 120 parameterized UTC `(startAt, endAt)` windows, and raw SQL joins only against those server-built values; all table identifiers and scope joins are static server code. Missing windows are also zero-filled by a database-free helper, output is chronologically stable, and charts expose text/table fallbacks. No untrusted identifier or bucket string enters SQL.
+
+Admin reads use parallel counts, grouped current distributions, one distinct-stage funnel aggregate, and five independently described trends. Recruiter reads return at most 100 safe selector entries and a stable top-25 Job performance list ordered by in-range Application count, title, and id; its aggregate rows contain Job title/lifecycle/moderation plus counts only. Candidate reads return only personal counts. There is no N+1 Application loading and no raw Application list in an analytics DTO.
+
+The additive `20260714021140_analytics_query_indexes` migration adds only indexes exercised by these reads: `company(createdAt)` and `job(createdAt)` for platform creation trends; `job_application(createdAt)`, `(candidateId, createdAt)`, `(jobId, createdAt)`, and `(status, createdAt)` for platform/cohort, personal, Job, and state/time scans; and `interview(applicationId, createdAt)` for scoped Interview creation counts. Existing `user(createdAt)`, User role/account indexes, Company/Job moderation indexes, `job(companyId, status, createdAt)`, Application Candidate/Job status indexes, `application_status_history(applicationId, createdAt)`, Interview status/agenda/created indexes, and `saved_job(candidateId, createdAt, id)` remain sufficient for the other predicates.
+
+#### Analytics privacy matrix
+
+| Viewer          | Returned                                                               | Never returned                                                                                                                                     |
+| --------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admin           | Platform counts, distributions, funnels, trends, visible/hidden totals | Candidate identity/CV/cover letter, notes, private Interview details, EmailOutbox/delivery, Notifications, sessions/accounts, moderation note text |
+| Recruiter OWNER | Selected Company/Job labels and aggregate workflow counts              | Candidate name/email/phone/id, CV metadata, note bodies, meeting URL/location, another Company, Admin reason note                                  |
+| Candidate       | Own aggregate Application/Interview/Saved Job counts                   | Other Candidate data, membership data, Recruiter private email, internal notes, email/notification infrastructure, moderation reason               |
+| Public          | Nothing                                                                | Every analytics metric and payload                                                                                                                 |
+
+Moderation does not erase history: Admin may count hidden records, an authorized OWNER may see a safe Hidden label, and a Candidate's historical Application remains included, while no surface exposes the reason note. Charts are supplemental, non-animated, theme-token based, responsive, visibly titled/described, safe at zero, and paired with numeric summaries and tables. No third-party tracking or chart dependency was added. Page views, unique visitors, clicks, email opens/clicks, exports, scheduled reports, data warehouse/ETL work, materialized views, predictions, rankings, and forecasts remain deferred. Phase 6C localizes labels and display formatting without changing these semantics.
 
 ## Validation and forms
 
