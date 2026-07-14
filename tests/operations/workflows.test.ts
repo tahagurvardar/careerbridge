@@ -10,6 +10,12 @@ function workflow(name: string) {
   ).replace(/\r\n?/g, "\n");
 }
 
+function integrationJob(ci: string) {
+  const start = ci.indexOf("\n  integration:");
+  expect(start).toBeGreaterThan(-1);
+  return ci.slice(start);
+}
+
 describe("deployment workflow contracts", () => {
   it("keeps CI triggers, permissions, cancellation, and test isolation explicit", () => {
     const ci = workflow("ci.yml");
@@ -20,6 +26,44 @@ describe("deployment workflow contracts", () => {
     expect(ci).toContain("TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}");
     expect(ci).toContain('RUN_DATABASE_INTEGRATION_TESTS: "true"');
     expect(ci).not.toMatch(/^\s+DATABASE_URL:.*TEST_DATABASE_URL/m);
+  });
+
+  it("serializes integration jobs that share the isolated test database", () => {
+    const integration = integrationJob(workflow("ci.yml"));
+
+    expect(integration).toContain(
+      "concurrency:\n      group: careerbridge-isolated-test-database\n      cancel-in-progress: false",
+    );
+  });
+
+  it("sources the isolated test database only from the GitHub secret", () => {
+    const ci = workflow("ci.yml");
+    const integration = integrationJob(ci);
+
+    expect(integration).toContain(
+      "TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}",
+    );
+    // Every TEST_DATABASE_URL assignment in the workflow must come from the
+    // secret; no inline or derived connection strings.
+    const assignments = ci.match(/^\s*TEST_DATABASE_URL:.*$/gm) ?? [];
+    expect(assignments.length).toBeGreaterThan(0);
+    for (const assignment of assignments) {
+      expect(assignment.trim()).toBe(
+        "TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}",
+      );
+    }
+    // The isolated test database must never be exposed as DATABASE_URL.
+    expect(integration).not.toMatch(/^\s+DATABASE_URL:/m);
+  });
+
+  it("provides synthetic CI-only auth values to the integration job", () => {
+    const integration = integrationJob(workflow("ci.yml"));
+
+    expect(integration).toContain("BETTER_AUTH_URL: https://ci.example.test");
+    expect(integration).toContain(
+      "BETTER_AUTH_SECRET: ci-only-secret-that-is-never-used-000000000000",
+    );
+    expect(integration).toContain('RUN_DATABASE_INTEGRATION_TESTS: "true"');
   });
 
   it("builds before migrating and deploys only the prebuilt artifact", () => {
