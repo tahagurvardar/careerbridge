@@ -31,6 +31,7 @@ export async function SiteHeader() {
           session.user.role === "CANDIDATE"
             ? [
                 { label: "Applications", href: "/candidate/applications" },
+                { label: "Analytics", href: "/candidate/analytics" },
                 { label: "Interviews", href: "/candidate/interviews" },
                 { label: "Documents", href: "/candidate/documents" },
                 { label: "Saved jobs", href: "/candidate/saved-jobs" },
@@ -38,11 +39,13 @@ export async function SiteHeader() {
             : session.user.role === "RECRUITER"
               ? [
                   { label: "Companies", href: "/recruiter/companies" },
+                  { label: "Analytics", href: "/recruiter/analytics" },
                   { label: "Interviews", href: "/recruiter/interviews" },
                   { label: "Invitations", href: "/recruiter/invitations" },
                 ]
               : [
                   { label: "Users", href: "/admin/users" },
+                  { label: "Analytics", href: "/admin/analytics" },
                   { label: "Companies", href: "/admin/companies" },
                   { label: "Jobs", href: "/admin/jobs" },
                   { label: "Audit log", href: "/admin/audit" },

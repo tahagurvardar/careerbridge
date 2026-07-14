@@ -135,6 +135,7 @@ The command refuses production execution, validates all inputs, writes only thro
 | /candidate/dashboard                    | Protected Candidate workspace and summary       |
 | /candidate/applications                 | Candidate's own applications and filters        |
 | /candidate/applications/[applicationId] | Candidate application detail and withdrawal     |
+| /candidate/analytics                    | Candidate's private Application statistics      |
 | /candidate/interviews                   | Candidate's own interview agenda and filters    |
 | /candidate/interviews/[interviewId]     | Candidate interview detail and accept/decline   |
 | /candidate/saved-jobs                   | Candidate's private saved Job list and filters  |
@@ -160,11 +161,13 @@ The command refuses production execution, validates all inputs, writes only thro
 | /recruiter/jobs/[jobId]/applications    | OWNER-only applicant pipeline for one Job       |
 | /recruiter/applications                 | Applications across owned Companies             |
 | /recruiter/applications/[applicationId] | OWNER-only candidate review and status          |
+| /recruiter/analytics                    | OWNER-only recruiting funnel analytics          |
 | /recruiter/interviews                   | OWNER-only interview agenda across Companies    |
 | /recruiter/interviews/[interviewId]     | OWNER-only interview management and history     |
 | /notifications                          | Candidate/Recruiter private Activity Center     |
 | /settings/notifications                 | Candidate/Recruiter email delivery settings     |
 | /admin                                  | Admin trust and moderation dashboard            |
+| /admin/analytics                        | Aggregate platform analytics                    |
 | /admin/users                            | Safe User moderation search and filters         |
 | /admin/users/[userId]                   | Safe User summary, action, and audit history    |
 | /admin/companies                        | Company moderation search and filters           |
@@ -260,7 +263,7 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 - Salary is stored as whole non-negative integer currency units with a normalized uppercase 3-letter currency code, and the salary minimum can never exceed the maximum. Deadlines are date-only and compared in UTC.
 - Required skills reuse the shared normalized `Skill` catalog through `JobSkill`, whose composite primary key prevents duplicate assignment even under concurrent requests.
 - Public directory and detail queries always constrain `status = PUBLISHED` and `Company.isPublished = true`. Draft, closed, archived, and unpublished-Company Jobs return the same not-found behavior, and public results never include internal IDs or membership identity.
-- Candidate matching, recommendations, alerts, and Job analytics remain deferred.
+- Candidate matching, recommendations, alerts, and Job page-view analytics remain deferred.
 
 ## Saved Job boundaries
 
@@ -421,7 +424,27 @@ Public Company eligibility is `isPublished = true AND moderationStatus = VISIBLE
 | Job                      | `VISIBLE` → `HIDDEN`   | `JOB_HIDDEN`       |
 | Job                      | `HIDDEN` → `VISIBLE`   | `JOB_RESTORED`     |
 
-Reports, automated/AI moderation, appeals, legal takedowns, Company verification, custom Admin permissions, impersonation, Admin messaging, delivery dashboards, and expanded Admin analytics remain deferred.
+Reports, automated/AI moderation, appeals, legal takedowns, Company verification, custom Admin permissions, impersonation, Admin messaging, delivery dashboards, exports, scheduled reports, and predictive analytics remain deferred.
+
+## Analytics trust and metric boundaries
+
+Phase 6B adds uncached, server-rendered analytics at `/admin/analytics`, `/recruiter/analytics`, and `/candidate/analytics`. URL state carries only a validated range preset plus, for Recruiters, a Company and optional Job filter. The server derives the current User and time boundaries, re-reads active role state, and re-authorizes current `OWNER` membership and Job-to-Company scope before returning minimal aggregate DTOs. A Candidate ID, ownership claim, arbitrary timestamp, SQL fragment, or metric definition never comes from the browser. Analytics possession grants no access to any underlying record.
+
+Metrics use three explicit meanings: **current state** evaluates the complete authorized scope now; **created in range** applies the server-derived UTC half-open interval `startAt <= createdAt < endAt`; **ever reached** starts with Applications created in that interval and counts each Application at most once per lifetime stage. The ordered funnel is `SUBMITTED → UNDER_REVIEW → INTERVIEW → OFFER → HIRED`; `REJECTED` and `WITHDRAWN` are separate exits. Each stage conversion is reached-current divided by reached-previous, overall hire conversion is `HIRED / SUBMITTED`, zero denominators display an em dash, and every percentage is rounded to one decimal. These are descriptions of recorded history, not predictions or causal claims.
+
+| Preset | UTC trend granularity                    | Maximum chart points |
+| ------ | ---------------------------------------- | -------------------- |
+| `30D`  | Daily                                    | 30                   |
+| `90D`  | Daily                                    | 90                   |
+| `180D` | Weekly                                   | Bounded              |
+| `365D` | Weekly                                   | Bounded              |
+| `ALL`  | Monthly; multi-month windows when needed | 120                  |
+
+Charts are supplemental server-rendered bars with visible totals, zero-data states, numeric labels, and table fallbacks. They use theme tokens, add no animation or hydration boundary, and remain contained on narrow screens. There is no Recharts or third-party analytics dependency, no page-view/click/email-open tracking, and no public analytics endpoint.
+
+The additive `20260714021140_analytics_query_indexes` migration adds Company and Job `createdAt` indexes for platform trends; JobApplication `createdAt`, `(candidateId, createdAt)`, `(jobId, createdAt)`, and `(status, createdAt)` indexes for cohort, Candidate, Job, and state/range aggregation; and `(applicationId, createdAt)` on Interview for Candidate/Company Interview creation metrics. Existing User role/status/time, Company/Job moderation, Job lifecycle/Company, Application current-scope, Interview agenda/status, status-history Application, and SavedJob Candidate indexes remain reused.
+
+Analytics never select Candidate identity into Admin or Recruiter chart payloads, CV metadata, cover letters, internal notes, private Interview details, moderation notes, Notification keys, auth/session data, or EmailOutbox content. Authorized hidden Company/Job history remains countable privately without revealing the moderation reason. CSV/PDF export, scheduled reports, public metrics, page-view tracking, a warehouse/ETL pipeline, predictive analytics, rankings, and forecasts remain deferred; Phase 6C is localization of the completed product surface.
 
 ## Documentation
 

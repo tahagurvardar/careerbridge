@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   Building2,
+  BarChart3,
   BriefcaseBusiness,
   ShieldCheck,
   UserRoundCheck,
@@ -70,6 +71,14 @@ export default async function AdminPage() {
           title="Trust and moderation"
           description="A truthful platform overview with bounded counts and recent immutable moderation history."
         />
+        <div className="mt-5">
+          <Button asChild>
+            <Link href="/admin/analytics">
+              <BarChart3 aria-hidden="true" />
+              View platform analytics
+            </Link>
+          </Button>
+        </div>
 
         <dl className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {metrics.map(({ label, value, icon: Icon }) => (

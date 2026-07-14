@@ -190,11 +190,16 @@ export default async function CandidateDashboardPage() {
                   Real counts from your submitted applications
                 </CardDescription>
               </div>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/candidate/applications">
-                  View all applications
-                </Link>
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/candidate/applications">
+                    View all applications
+                  </Link>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/candidate/analytics">Personal analytics</Link>
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="grid gap-6">

@@ -249,12 +249,30 @@ Deferred from Phase 6A: User reports, automated/AI moderation and fraud scoring,
 
 Exit criteria: active platform Admins can make reasoned, concurrency-safe, auditable account and visibility decisions without destroying history or crossing Candidate/Recruiter privacy boundaries.
 
-## Phase 6B — Communication
+## Phase 6B — Analytics, platform metrics, and recruiting insights
 
-- In-product notifications (initial application-event delivery shipped in Phase 4A)
-- Transactional email infrastructure and preferences (shipped in Phase 4C)
-- Candidate-recruiter messaging if validated by product needs
-- Delivery, read, and retry behavior
+Status: implemented on `feat/analytics-platform-metrics`.
+
+- Central `30D`/`90D`/`180D`/`365D`/`ALL` UTC range domain with half-open server boundaries
+- Bounded daily/weekly/monthly trend windows, zero filling, stable ordering, and at most 120 chart points
+- Explicit current-state, created-in-range, and ever-reached-stage metric semantics
+- Unique-Application `SUBMITTED → UNDER_REVIEW → INTERVIEW → OFFER → HIRED` cohort funnel, separate exits, and null-safe one-decimal conversions
+- Active-Admin platform User, Company, Job, Application, Interview, moderation-aware, funnel, and trend analytics
+- Current-OWNER-only Recruiter Company/Job filters, status distribution, funnel, Interview outcomes, and bounded Job performance comparison
+- Candidate-only personal Application status/trend/outcome, Interview, and Saved Job statistics
+- Server-only minimal aggregate DTOs with no Candidate identity, CV, note, private Interview, EmailOutbox, Notification, session, or moderation-note payloads
+- Accessible server-rendered charts with visible values, summaries, zero states, and table fallbacks; no third-party chart/tracking dependency
+- Additive `20260714021140_analytics_query_indexes` migration plus database-free and isolated integration coverage
+
+Deferred from Phase 6B: page views, unique visitors, click/email tracking, third-party analytics, public analytics, CSV/PDF export, scheduled reports, warehouse/ETL and materialized views, background aggregation, revenue/billing analytics, Candidate ranking/scoring, forecasts, and predictive analytics.
+
+Exit criteria: each role can read truthful, bounded metrics only for its authorized aggregate scope, with cohort and current-state semantics kept visibly separate and no weakening of existing privacy or moderation boundaries.
+
+## Phase 6C — Localization
+
+- Localize role navigation, analytics labels, status copy, and empty states
+- Localize date, number, percentage, and timezone display without changing stored UTC instants or analytics bucket semantics
+- Preserve authorization, privacy, accessible fallbacks, and canonical URL behavior across locales
 
 ## Phase 7 — Responsible AI assistance
 

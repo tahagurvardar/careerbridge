@@ -43,15 +43,6 @@ export const metadata: Metadata = {
   description: "Your protected CareerBridge recruiter workspace.",
 };
 
-const deferredItems = [
-  {
-    icon: BarChart3,
-    title: "Hiring analytics",
-    description:
-      "Analytics remain deferred until they can be based on richer workspace activity.",
-  },
-];
-
 export default async function RecruiterDashboardPage() {
   const session = await requireRole("RECRUITER", "/recruiter/dashboard");
   const prisma = getPrismaClient();
@@ -320,9 +311,14 @@ export default async function RecruiterDashboardPage() {
                   Applicants across every company you own
                 </CardDescription>
               </div>
-              <Button size="sm" variant="outline" asChild>
-                <Link href="/recruiter/applications">View applications</Link>
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/recruiter/applications">View applications</Link>
+                </Button>
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/recruiter/analytics">Recruiting analytics</Link>
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="grid gap-6">
@@ -484,29 +480,23 @@ export default async function RecruiterDashboardPage() {
           </CardContent>
         </Card>
 
-        <div className="mt-6 grid gap-4">
-          {deferredItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Card key={item.title} className="h-full">
-                <CardHeader>
-                  <span className="bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-xl">
-                    <Icon aria-hidden="true" className="size-5" />
-                  </span>
-                  <CardTitle className="mt-3 text-lg">{item.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground leading-6">
-                    {item.description}
-                  </p>
-                  <Badge variant="outline" className="mt-5">
-                    Deferred
-                  </Badge>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+        <Card className="mt-6">
+          <CardHeader>
+            <span className="bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-xl">
+              <BarChart3 aria-hidden="true" className="size-5" />
+            </span>
+            <CardTitle className="mt-3 text-lg">Hiring analytics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground leading-6">
+              OWNER-only Company metrics, Application funnels, conversion rates,
+              and bounded Job performance comparisons from real workflow data.
+            </p>
+            <Button variant="outline" className="mt-5" asChild>
+              <Link href="/recruiter/analytics">View analytics</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </section>
   );
