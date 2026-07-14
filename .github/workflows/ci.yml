@@ -64,8 +64,20 @@ jobs:
     name: Isolated PostgreSQL integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # All branches and PRs share one isolated Neon test database. Serialize
+    # integration jobs so concurrent `prisma migrate deploy` runs cannot
+    # collide on the database advisory lock (P1002). Never cancel a running
+    # migration; queued runs wait instead.
+    concurrency:
+      group: careerbridge-isolated-test-database
+      cancel-in-progress: false
     env:
       TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+      # Synthetic CI-only Auth values (never production credentials). The
+      # integration suites require these to construct the Better Auth server.
+      APP_BASE_URL: https://ci.example.test
+      BETTER_AUTH_URL: https://ci.example.test
+      BETTER_AUTH_SECRET: ci-only-secret-that-is-never-used-000000000000
     steps:
       - name: Check out source
         uses: actions/checkout@v7
