@@ -4,7 +4,10 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 function workflow(name: string) {
-  return readFileSync(path.resolve(".github", "workflows", name), "utf8");
+  return readFileSync(
+    path.resolve(".github", "workflows", name),
+    "utf8",
+  ).replace(/\r\n?/g, "\n");
 }
 
 describe("deployment workflow contracts", () => {
