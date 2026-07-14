@@ -237,5 +237,34 @@ databaseDescribe(
     it("prevents Recruiter from updating role to CANDIDATE", async () => {
       await expectRoleMutationRejected(recruiter, "CANDIDATE");
     });
+
+    it.each([
+      ["accountStatus", "SUSPENDED"],
+      ["moderationVersion", 99],
+      ["suspendedAt", new Date().toISOString()],
+      ["restoredAt", new Date().toISOString()],
+    ])("prevents public updates to %s", async (field, value) => {
+      const response = await auth.handler(
+        createUpdateRequest(candidate.cookie, { [field]: value }),
+      );
+
+      expect(response.status).toBe(400);
+      await expect(
+        prisma.user.findUniqueOrThrow({
+          where: { id: candidate.id },
+          select: {
+            accountStatus: true,
+            moderationVersion: true,
+            suspendedAt: true,
+            restoredAt: true,
+          },
+        }),
+      ).resolves.toEqual({
+        accountStatus: "ACTIVE",
+        moderationVersion: 1,
+        suspendedAt: null,
+        restoredAt: null,
+      });
+    });
   },
 );

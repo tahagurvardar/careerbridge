@@ -8,6 +8,13 @@ import { nextCookies } from "better-auth/next-js";
 import { isPublicRole } from "@/features/auth/roles";
 import { getPrismaClient } from "@/lib/prisma";
 
+const serverOwnedModerationFields = [
+  "accountStatus",
+  "moderationVersion",
+  "suspendedAt",
+  "restoredAt",
+] as const;
+
 function getAuthEnvironment() {
   const baseURL = process.env.BETTER_AUTH_URL;
   const secret = process.env.BETTER_AUTH_SECRET;
@@ -38,6 +45,7 @@ export function createAuth({
   prismaClient?: ReturnType<typeof getPrismaClient>;
 } = {}) {
   const { baseURL, secret } = getAuthEnvironment();
+  const databaseClient = prismaClient ?? getPrismaClient();
   const isProduction = process.env.NODE_ENV === "production";
   const developmentOrigins = ["http://localhost:3000", "http://127.0.0.1:3000"];
 
@@ -45,7 +53,7 @@ export function createAuth({
     appName: "CareerBridge",
     baseURL,
     secret,
-    database: prismaAdapter(prismaClient ?? getPrismaClient(), {
+    database: prismaAdapter(databaseClient, {
       provider: "postgresql",
     }),
     trustedOrigins: isProduction
@@ -85,6 +93,33 @@ export function createAuth({
               throw new APIError("FORBIDDEN", {
                 code: "ROLE_UPDATE_FORBIDDEN",
                 message: "Platform roles cannot be changed through auth APIs.",
+              });
+            }
+            if (
+              serverOwnedModerationFields.some((field) =>
+                Object.prototype.hasOwnProperty.call(user, field),
+              )
+            ) {
+              throw new APIError("FORBIDDEN", {
+                code: "ACCOUNT_MODERATION_UPDATE_FORBIDDEN",
+                message:
+                  "Account moderation cannot be changed through auth APIs.",
+              });
+            }
+          },
+        },
+      },
+      session: {
+        create: {
+          before: async (session) => {
+            const user = await databaseClient.user.findUnique({
+              where: { id: session.userId },
+              select: { accountStatus: true },
+            });
+
+            if (user?.accountStatus !== "ACTIVE") {
+              throw new APIError("FORBIDDEN", {
+                message: "The authentication request could not be completed.",
               });
             }
           },

@@ -5,10 +5,14 @@ export function isJobSaveEligible(input: {
   role: PlatformRole;
   jobStatus: JobStatus;
   companyIsPublished: boolean;
+  jobModerationStatus?: "VISIBLE" | "HIDDEN";
+  companyModerationStatus?: "VISIBLE" | "HIDDEN";
 }) {
   return (
     input.role === "CANDIDATE" &&
     input.jobStatus === "PUBLISHED" &&
-    input.companyIsPublished
+    input.companyIsPublished &&
+    (input.jobModerationStatus ?? "VISIBLE") === "VISIBLE" &&
+    (input.companyModerationStatus ?? "VISIBLE") === "VISIBLE"
   );
 }

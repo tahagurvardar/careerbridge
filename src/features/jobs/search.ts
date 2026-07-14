@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { PUBLIC_JOB_VISIBILITY_WHERE } from "@/features/admin/moderation";
 import type { PublicJobSearch } from "@/features/jobs/schemas";
 
 const INSENSITIVE = "insensitive" as const;
@@ -12,8 +13,7 @@ export function buildPublishedJobWhere(
   search: PublicJobSearch,
 ): Prisma.JobWhereInput {
   const where: Prisma.JobWhereInput = {
-    status: "PUBLISHED",
-    company: { isPublished: true },
+    ...PUBLIC_JOB_VISIBILITY_WHERE,
   };
 
   if (search.employmentType) where.employmentType = search.employmentType;

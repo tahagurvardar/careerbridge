@@ -6,6 +6,7 @@ import type {
   PublicJobSearch,
   RecruiterJobFilters,
 } from "@/features/jobs/schemas";
+import { PUBLIC_JOB_VISIBILITY_WHERE } from "@/features/admin/moderation";
 import { buildPublishedJobWhere } from "@/features/jobs/search";
 
 const MAX_PUBLIC_RESULTS = 60;
@@ -33,7 +34,12 @@ export function getOwnedCompaniesForRecruiter(
 ) {
   return prisma.company.findMany({
     where: { memberships: { some: { userId, role: "OWNER" } } },
-    select: { id: true, name: true, isPublished: true },
+    select: {
+      id: true,
+      name: true,
+      isPublished: true,
+      moderationStatus: true,
+    },
     orderBy: { name: "asc" },
   });
 }
@@ -56,12 +62,20 @@ export function getRecruiterJobs(
       id: true,
       title: true,
       status: true,
+      moderationStatus: true,
       location: true,
       employmentType: true,
       workplaceType: true,
       createdAt: true,
       publishedAt: true,
-      company: { select: { id: true, name: true, isPublished: true } },
+      company: {
+        select: {
+          id: true,
+          name: true,
+          isPublished: true,
+          moderationStatus: true,
+        },
+      },
       _count: { select: { skills: true, applications: true } },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -94,7 +108,13 @@ export function getRecruiterJob(
     where: { id: jobId, ...ownerScope(userId) },
     include: {
       company: {
-        select: { id: true, name: true, slug: true, isPublished: true },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          isPublished: true,
+          moderationStatus: true,
+        },
       },
       skills: skillInclude,
     },
@@ -119,6 +139,7 @@ export async function getCompanyJobsOverview(
         id: true,
         title: true,
         status: true,
+        moderationStatus: true,
         createdAt: true,
         publishedAt: true,
       },
@@ -201,7 +222,7 @@ export function getPublishedJobs(
 
 export function getFeaturedPublishedJobs(prisma: PrismaClient, take = 3) {
   return prisma.job.findMany({
-    where: { status: "PUBLISHED", company: { isPublished: true } },
+    where: PUBLIC_JOB_VISIBILITY_WHERE,
     select: publicJobCardSelect,
     orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
     take,
@@ -210,7 +231,7 @@ export function getFeaturedPublishedJobs(prisma: PrismaClient, take = 3) {
 
 export function getPublishedJobBySlug(prisma: PrismaClient, slug: string) {
   return prisma.job.findFirst({
-    where: { slug, status: "PUBLISHED", company: { isPublished: true } },
+    where: { slug, ...PUBLIC_JOB_VISIBILITY_WHERE },
     select: publicJobDetailSelect,
   });
 }

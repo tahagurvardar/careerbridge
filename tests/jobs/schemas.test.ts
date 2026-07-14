@@ -289,14 +289,19 @@ describe("Public job search-filter mapping", () => {
   it("always restricts to published jobs from published companies", () => {
     expect(buildPublishedJobWhere(emptySearch)).toEqual({
       status: "PUBLISHED",
-      company: { isPublished: true },
+      moderationStatus: "VISIBLE",
+      company: { isPublished: true, moderationStatus: "VISIBLE" },
     });
   });
 
   it("maps free text to a title, company, and skill OR search", () => {
     const where = buildPublishedJobWhere({ ...emptySearch, q: "react" });
     expect(where.status).toBe("PUBLISHED");
-    expect(where.company).toEqual({ isPublished: true });
+    expect(where.moderationStatus).toBe("VISIBLE");
+    expect(where.company).toEqual({
+      isPublished: true,
+      moderationStatus: "VISIBLE",
+    });
     expect(where.OR).toEqual([
       { title: { contains: "react", mode: "insensitive" } },
       { company: { name: { contains: "react", mode: "insensitive" } } },

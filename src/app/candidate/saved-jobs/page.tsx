@@ -150,6 +150,8 @@ export default async function CandidateSavedJobsPage({
               const availability = classifySavedJobAvailability({
                 status: job.status,
                 companyIsPublished: job.company.isPublished,
+                moderationStatus: job.moderationStatus,
+                companyModerationStatus: job.company.moderationStatus,
               });
               const application = job.applications[0];
 

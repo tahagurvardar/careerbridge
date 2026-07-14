@@ -26,6 +26,22 @@ describe("saved job domain rules", () => {
         companyIsPublished: false,
       }),
     ).toBe("UNAVAILABLE");
+    expect(
+      classifySavedJobAvailability({
+        status: "PUBLISHED",
+        companyIsPublished: true,
+        moderationStatus: "HIDDEN",
+        companyModerationStatus: "VISIBLE",
+      }),
+    ).toBe("UNAVAILABLE");
+    expect(
+      classifySavedJobAvailability({
+        status: "PUBLISHED",
+        companyIsPublished: true,
+        moderationStatus: "VISIBLE",
+        companyModerationStatus: "HIDDEN",
+      }),
+    ).toBe("UNAVAILABLE");
   });
 
   it("allows new saves only for candidates and public jobs", () => {
@@ -60,6 +76,15 @@ describe("saved job domain rules", () => {
         role: "CANDIDATE",
         jobStatus: "PUBLISHED",
         companyIsPublished: false,
+      }),
+    ).toBe(false);
+    expect(
+      isJobSaveEligible({
+        role: "CANDIDATE",
+        jobStatus: "PUBLISHED",
+        companyIsPublished: true,
+        jobModerationStatus: "HIDDEN",
+        companyModerationStatus: "VISIBLE",
       }),
     ).toBe(false);
   });

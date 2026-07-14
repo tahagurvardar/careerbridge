@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { PrismaClient } from "@/generated/prisma/client";
+import { PUBLIC_JOB_VISIBILITY_WHERE } from "@/features/admin/moderation";
 import type { PlatformRole } from "@/features/auth/roles";
 
 export type SavedJobActor = {
@@ -40,7 +41,10 @@ export async function saveJob(
   assertCandidate(actor);
 
   const job = await prisma.job.findFirst({
-    where: { slug, status: "PUBLISHED", company: { isPublished: true } },
+    where: {
+      slug,
+      ...PUBLIC_JOB_VISIBILITY_WHERE,
+    },
     select: { id: true },
   });
   if (!job) throw new SavedJobMutationError("NOT_ELIGIBLE");

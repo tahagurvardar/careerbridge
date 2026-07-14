@@ -15,6 +15,35 @@ enum Role {
   ADMIN
 }
 
+enum UserAccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ContentModerationStatus {
+  VISIBLE
+  HIDDEN
+}
+
+enum ModerationReasonCode {
+  SPAM
+  FRAUD
+  ABUSE
+  IMPERSONATION
+  POLICY_VIOLATION
+  SECURITY_RISK
+  OTHER
+}
+
+enum AdminAuditAction {
+  USER_SUSPENDED
+  USER_RESTORED
+  COMPANY_HIDDEN
+  COMPANY_RESTORED
+  JOB_HIDDEN
+  JOB_RESTORED
+}
+
 enum EmploymentType {
   FULL_TIME
   PART_TIME
@@ -177,6 +206,10 @@ model User {
   createdAt               DateTime                     @default(now())
   updatedAt               DateTime                     @updatedAt
   role                    Role                         @default(CANDIDATE)
+  accountStatus           UserAccountStatus            @default(ACTIVE)
+  moderationVersion       Int                          @default(1)
+  suspendedAt             DateTime?
+  restoredAt              DateTime?
   sessions                Session[]
   accounts                Account[]
   candidateProfile        CandidateProfile?
@@ -200,8 +233,13 @@ model User {
   emailOutbox             EmailOutbox[]                @relation("EmailOutboxRecipient")
   organizedInterviews     Interview[]                  @relation("InterviewOrganizer")
   interviewEvents         InterviewEvent[]             @relation("InterviewEventActor")
+  adminAuditEventsActed   AdminAuditEvent[]            @relation("AdminAuditActor")
+  adminAuditEventsTargeted AdminAuditEvent[]           @relation("AdminAuditTargetUser")
 
   @@unique([email])
+  @@index([accountStatus])
+  @@index([role, accountStatus])
+  @@index([createdAt])
   @@map("user")
 }
 
@@ -231,6 +269,9 @@ model Company {
   companySize  CompanySize?
   foundedYear  Int?         @db.SmallInt
   isPublished  Boolean      @default(false)
+  moderationStatus  ContentModerationStatus @default(VISIBLE)
+  moderationVersion Int                     @default(1)
+  moderatedAt       DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -240,8 +281,11 @@ model Company {
   invitations      CompanyInvitation[]
   membershipEvents CompanyMembershipEvent[]
   emailOutbox      EmailOutbox[]
+  adminAuditEvents AdminAuditEvent[] @relation("AdminAuditTargetCompany")
 
   @@index([isPublished, name])
+  @@index([moderationStatus])
+  @@index([moderationStatus, createdAt])
   @@map("company")
 }
 
@@ -353,6 +397,9 @@ model Job {
   salaryCurrency      String?          @db.Char(3)
   applicationDeadline DateTime?        @db.Date
   status              JobStatus        @default(DRAFT)
+  moderationStatus    ContentModerationStatus @default(VISIBLE)
+  moderationVersion   Int                     @default(1)
+  moderatedAt         DateTime?
   publishedAt         DateTime?
   closedAt            DateTime?
   createdAt           DateTime         @default(now())
@@ -363,10 +410,44 @@ model Job {
   applications  JobApplication[]
   savedBy       SavedJob[]
   notifications Notification[]
+  adminAuditEvents AdminAuditEvent[] @relation("AdminAuditTargetJob")
 
   @@index([companyId, status, createdAt])
   @@index([status, publishedAt, id])
+  @@index([moderationStatus])
+  @@index([moderationStatus, createdAt])
   @@map("job")
+}
+
+/// Append-only, privacy-bounded record of one platform moderation transition.
+/// Exactly one target relation is populated and its type is compatible with
+/// `action`; the migration enforces both invariants with database checks.
+/// Actor and target relations use SetNull so the historical decision survives
+/// later account/content deletion. No private domain payloads or arbitrary JSON
+/// are stored here.
+model AdminAuditEvent {
+  id                 String               @id @default(cuid())
+  actorAdminUserId   String?
+  targetUserId       String?
+  targetCompanyId    String?
+  targetJobId        String?
+  action             AdminAuditAction
+  reasonCode         ModerationReasonCode
+  reasonNote         String?              @db.VarChar(500)
+  createdAt          DateTime             @default(now())
+
+  actor         User?    @relation("AdminAuditActor", fields: [actorAdminUserId], references: [id], onDelete: SetNull)
+  targetUser    User?    @relation("AdminAuditTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  targetCompany Company? @relation("AdminAuditTargetCompany", fields: [targetCompanyId], references: [id], onDelete: SetNull)
+  targetJob     Job?     @relation("AdminAuditTargetJob", fields: [targetJobId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorAdminUserId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([targetCompanyId, createdAt])
+  @@index([targetJobId, createdAt])
+  @@index([action, createdAt])
+  @@map("admin_audit_event")
 }
 
 model SavedJob {

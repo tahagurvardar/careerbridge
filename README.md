@@ -122,49 +122,56 @@ The command refuses production execution, validates all inputs, writes only thro
 
 ## Public routes
 
-| Route                                   | Purpose                                        |
-| --------------------------------------- | ---------------------------------------------- |
-| /                                       | Product landing page with featured Jobs        |
-| /jobs                                   | Published Job discovery, search, and filters   |
-| /jobs/[slug]                            | Published Job public detail with apply state   |
-| /jobs/[slug]/apply                      | Candidate-only application form                |
-| /companies                              | Published Company discovery and search         |
-| /companies/[slug]                       | Published Company public profile               |
-| /login                                  | Email/password sign-in                         |
-| /register                               | Candidate and Recruiter account registration   |
-| /candidate/dashboard                    | Protected Candidate workspace and summary      |
-| /candidate/applications                 | Candidate's own applications and filters       |
-| /candidate/applications/[applicationId] | Candidate application detail and withdrawal    |
-| /candidate/interviews                   | Candidate's own interview agenda and filters   |
-| /candidate/interviews/[interviewId]     | Candidate interview detail and accept/decline  |
-| /candidate/saved-jobs                   | Candidate's private saved Job list and filters |
-| /candidate/profile                      | Protected Candidate profile overview           |
-| /candidate/profile/edit                 | Edit Candidate professional information        |
-| /candidate/profile/education/new        | Add an education record                        |
-| /candidate/profile/education/[id]/edit  | Edit owned education                           |
-| /candidate/profile/experience/new       | Add an experience record                       |
-| /candidate/profile/experience/[id]/edit | Edit owned experience                          |
-| /recruiter/dashboard                    | Protected Recruiter workspace summary          |
-| /recruiter/profile                      | Protected Recruiter profile overview           |
-| /recruiter/profile/edit                 | Edit Recruiter professional information        |
-| /recruiter/companies                    | Recruiter's Company memberships                |
-| /recruiter/companies/new                | Create a private Company as OWNER              |
-| /recruiter/companies/[companyId]        | Private member Company workspace               |
-| /recruiter/companies/[companyId]/edit   | OWNER-only Company editing                     |
-| /recruiter/companies/[companyId]/team   | OWNER-only team administration and audit       |
-| /recruiter/invitations                  | Recruiter's own incoming Company invitations   |
-| /recruiter/jobs                         | Owned Jobs with status/company/title filters   |
-| /recruiter/jobs/new                     | Create a draft Job for an owned Company        |
-| /recruiter/jobs/[jobId]                 | Private Job workspace and lifecycle actions    |
-| /recruiter/jobs/[jobId]/edit            | OWNER-only Job editing                         |
-| /recruiter/jobs/[jobId]/applications    | OWNER-only applicant pipeline for one Job      |
-| /recruiter/applications                 | Applications across owned Companies            |
-| /recruiter/applications/[applicationId] | OWNER-only candidate review and status         |
-| /recruiter/interviews                   | OWNER-only interview agenda across Companies   |
-| /recruiter/interviews/[interviewId]     | OWNER-only interview management and history    |
-| /notifications                          | Candidate/Recruiter private Activity Center    |
-| /settings/notifications                 | Candidate/Recruiter email delivery settings    |
-| /admin                                  | Protected Admin access confirmation            |
+| Route                                   | Purpose                                         |
+| --------------------------------------- | ----------------------------------------------- |
+| /                                       | Product landing page with featured Jobs         |
+| /jobs                                   | Published Job discovery, search, and filters    |
+| /jobs/[slug]                            | Published Job public detail with apply state    |
+| /jobs/[slug]/apply                      | Candidate-only application form                 |
+| /companies                              | Published Company discovery and search          |
+| /companies/[slug]                       | Published Company public profile                |
+| /login                                  | Email/password sign-in                          |
+| /register                               | Candidate and Recruiter account registration    |
+| /candidate/dashboard                    | Protected Candidate workspace and summary       |
+| /candidate/applications                 | Candidate's own applications and filters        |
+| /candidate/applications/[applicationId] | Candidate application detail and withdrawal     |
+| /candidate/interviews                   | Candidate's own interview agenda and filters    |
+| /candidate/interviews/[interviewId]     | Candidate interview detail and accept/decline   |
+| /candidate/saved-jobs                   | Candidate's private saved Job list and filters  |
+| /candidate/profile                      | Protected Candidate profile overview            |
+| /candidate/profile/edit                 | Edit Candidate professional information         |
+| /candidate/profile/education/new        | Add an education record                         |
+| /candidate/profile/education/[id]/edit  | Edit owned education                            |
+| /candidate/profile/experience/new       | Add an experience record                        |
+| /candidate/profile/experience/[id]/edit | Edit owned experience                           |
+| /recruiter/dashboard                    | Protected Recruiter workspace summary           |
+| /recruiter/profile                      | Protected Recruiter profile overview            |
+| /recruiter/profile/edit                 | Edit Recruiter professional information         |
+| /recruiter/companies                    | Recruiter's Company memberships                 |
+| /recruiter/companies/new                | Create a private Company as OWNER               |
+| /recruiter/companies/[companyId]        | Private member Company workspace                |
+| /recruiter/companies/[companyId]/edit   | OWNER-only Company editing                      |
+| /recruiter/companies/[companyId]/team   | OWNER-only team administration and audit        |
+| /recruiter/invitations                  | Recruiter's own incoming Company invitations    |
+| /recruiter/jobs                         | Owned Jobs with status/company/title filters    |
+| /recruiter/jobs/new                     | Create a draft Job for an owned Company         |
+| /recruiter/jobs/[jobId]                 | Private Job workspace and lifecycle actions     |
+| /recruiter/jobs/[jobId]/edit            | OWNER-only Job editing                          |
+| /recruiter/jobs/[jobId]/applications    | OWNER-only applicant pipeline for one Job       |
+| /recruiter/applications                 | Applications across owned Companies             |
+| /recruiter/applications/[applicationId] | OWNER-only candidate review and status          |
+| /recruiter/interviews                   | OWNER-only interview agenda across Companies    |
+| /recruiter/interviews/[interviewId]     | OWNER-only interview management and history     |
+| /notifications                          | Candidate/Recruiter private Activity Center     |
+| /settings/notifications                 | Candidate/Recruiter email delivery settings     |
+| /admin                                  | Admin trust and moderation dashboard            |
+| /admin/users                            | Safe User moderation search and filters         |
+| /admin/users/[userId]                   | Safe User summary, action, and audit history    |
+| /admin/companies                        | Company moderation search and filters           |
+| /admin/companies/[companyId]            | Safe Company summary, action, and audit history |
+| /admin/jobs                             | Job lifecycle/moderation search and filters     |
+| /admin/jobs/[jobId]                     | Safe Job summary, action, and audit history     |
+| /admin/audit                            | Immutable Admin moderation audit log            |
 
 ## Project structure
 
@@ -361,6 +368,60 @@ Database integration tests never use `DATABASE_URL`. To run them, configure a se
 | `DECLINED`         | —               | Reschedule, Cancel           |
 | `CANCELED`         | — (terminal)    | — (terminal)                 |
 | `COMPLETED`        | — (terminal)    | — (terminal)                 |
+
+## Admin trust and moderation boundaries
+
+Phase 6A adds an active-Admin-only trust surface without turning the Admin role into universal private-data access. `User.accountStatus` (`ACTIVE`/`SUSPENDED`) is independent from `User.role`; `Company.moderationStatus` and `Job.moderationStatus` (`VISIBLE`/`HIDDEN`) are independent from Company publication and Job lifecycle. Every moderation action requires a server-validated reason code and may include a trimmed, plain-text internal note of at most 500 characters. Browser input supplies only the target reference, expected moderation version, reason, and note — never the actor, role, current state, action, timestamps, or version increment.
+
+Suspension compare-and-sets the account state, increments `moderationVersion`, appends an `AdminAuditEvent`, and deletes all Better Auth sessions in one transaction. Better Auth refuses new session creation for suspended Users, while the central session helper re-reads `accountStatus` from PostgreSQL and revokes any session that somehow survives, so a stale cookie cannot retain Candidate or Recruiter access. Restore clears `suspendedAt`, records `restoredAt`, and appends history, but creates no session; the User signs in normally again. Admin accounts cannot be suspension targets.
+
+Public Company eligibility is `isPublished = true AND moderationStatus = VISIBLE`. Public Job eligibility additionally requires `status = PUBLISHED`, Job moderation `VISIBLE`, and a published, moderation-visible parent Company. The same predicate protects discovery, detail, metadata reads, featured Jobs, saving, and the fresh transaction read during application creation. Hidden detail uses normal not-found behavior. Authorized Recruiter workspaces retain hidden records and show a moderation notice without the reason; Candidate Saved Jobs show an unavailable state. Hiding never rewrites publication/lifecycle and never removes Applications, Interviews, CV snapshots, notes/revisions, memberships/invitations/events, notifications, email history, or saved rows.
+
+`AdminAuditEvent` is append-only application history with nullable `SetNull` actor/target relations, an action, enumerated reason, optional bounded note, and timestamp. It stores no arbitrary JSON or private domain payload. Database checks enforce positive moderation versions, consistent suspension timestamps, and action/target compatibility. Mutations re-read both the active Admin actor and the target inside the transaction, then compare-and-set `(id, current state, expected moderationVersion)`; one concurrent transition wins, stale/repeated requests create no audit entry, and callers receive the fixed refresh conflict. Dashboard audit queries omit the internal note entirely.
+
+### Admin access matrix
+
+| Capability                                                             | Active Admin | Suspended User | Candidate / Recruiter         | Signed out       |
+| ---------------------------------------------------------------------- | ------------ | -------------- | ----------------------------- | ---------------- |
+| Dashboard and bounded counts                                           | Allowed      | Denied         | Denied                        | Sign-in redirect |
+| Safe User/Company/Job summaries                                        | Allowed      | Denied         | Denied                        | Sign-in redirect |
+| Suspend/restore Candidate or Recruiter                                 | Allowed      | Denied         | Denied                        | Denied           |
+| Hide/restore Company or Job                                            | Allowed      | Denied         | Denied                        | Denied           |
+| Immutable audit log and internal reason note                           | Allowed      | Denied         | Denied                        | Denied           |
+| Candidate CV, internal note, private Interview, or EmailOutbox content | Denied       | Denied         | Existing ownership rules only | Denied           |
+
+### User moderation lifecycle
+
+| Current state                   | Action          | Result                                   | Session behavior     |
+| ------------------------------- | --------------- | ---------------------------------------- | -------------------- |
+| `ACTIVE` Candidate/Recruiter    | Suspend         | `SUSPENDED`, version + 1, audit appended | All sessions revoked |
+| `SUSPENDED` Candidate/Recruiter | Restore         | `ACTIVE`, version + 1, audit appended    | No session created   |
+| Already in requested state      | Repeat          | Rejected; no write or audit              | Unchanged            |
+| Any Admin account               | Suspend/restore | Rejected with safe unavailable result    | Unchanged            |
+
+### Company and Job visibility matrix
+
+| Record state                                | Public discovery                    | Authorized private workspace | Historical records |
+| ------------------------------------------- | ----------------------------------- | ---------------------------- | ------------------ |
+| Published Company + `VISIBLE`               | Visible                             | Visible                      | Retained           |
+| Published Company + `HIDDEN`                | Not found; its Jobs also excluded   | Retained with notice         | Retained           |
+| Unpublished Company + `VISIBLE`             | Not public                          | Retained                     | Retained           |
+| Published Job + visible Company + `VISIBLE` | Visible and application-eligible    | Retained                     | Retained           |
+| Any Job + `HIDDEN`                          | Not found; new applications blocked | Retained with notice         | Retained           |
+| Draft/Closed/Archived Job + `VISIBLE`       | Not public                          | Retained                     | Retained           |
+
+### Moderation action matrix
+
+| Target                   | Allowed transition     | Audit action       |
+| ------------------------ | ---------------------- | ------------------ |
+| Candidate/Recruiter User | `ACTIVE` → `SUSPENDED` | `USER_SUSPENDED`   |
+| Candidate/Recruiter User | `SUSPENDED` → `ACTIVE` | `USER_RESTORED`    |
+| Company                  | `VISIBLE` → `HIDDEN`   | `COMPANY_HIDDEN`   |
+| Company                  | `HIDDEN` → `VISIBLE`   | `COMPANY_RESTORED` |
+| Job                      | `VISIBLE` → `HIDDEN`   | `JOB_HIDDEN`       |
+| Job                      | `HIDDEN` → `VISIBLE`   | `JOB_RESTORED`     |
+
+Reports, automated/AI moderation, appeals, legal takedowns, Company verification, custom Admin permissions, impersonation, Admin messaging, delivery dashboards, and expanded Admin analytics remain deferred.
 
 ## Documentation
 
