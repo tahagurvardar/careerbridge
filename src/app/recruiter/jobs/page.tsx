@@ -193,7 +193,15 @@ export default async function RecruiterJobsPage({
                           {job.company.name}
                         </p>
                       </div>
-                      <JobStatusBadge status={job.status} />
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <JobStatusBadge status={job.status} />
+                        {job.moderationStatus === "HIDDEN" ||
+                        job.company.moderationStatus === "HIDDEN" ? (
+                          <Badge variant="destructive">
+                            Hidden by moderation
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

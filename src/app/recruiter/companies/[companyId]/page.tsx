@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Pencil,
   Plus,
+  ShieldAlert,
   UsersRound,
 } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -123,6 +124,25 @@ export default async function CompanyWorkspacePage({
           ) : null}
         </div>
 
+        {company.moderationStatus === "HIDDEN" ? (
+          <div
+            role="status"
+            className="border-destructive/40 bg-destructive/5 mt-7 flex gap-3 rounded-xl border p-4"
+          >
+            <ShieldAlert
+              aria-hidden="true"
+              className="text-destructive mt-0.5 size-5 shrink-0"
+            />
+            <div>
+              <p className="font-medium">Platform moderation notice</p>
+              <p className="text-muted-foreground mt-1 text-sm leading-6">
+                This company is hidden from public discovery by platform
+                moderation.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         <div className="mt-9 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
           <Card>
             <CardHeader>
@@ -196,9 +216,11 @@ export default async function CompanyWorkspacePage({
             <CardHeader>
               <CardTitle>Publication</CardTitle>
               <CardDescription>
-                {company.isPublished
-                  ? "This profile is visible in public company discovery."
-                  : "This profile is private and absent from public discovery."}
+                {company.moderationStatus === "HIDDEN"
+                  ? "The publication setting is retained, but moderation currently prevents public discovery."
+                  : company.isPublished
+                    ? "This profile is visible in public company discovery."
+                    : "This profile is private and absent from public discovery."}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">
@@ -228,7 +250,7 @@ export default async function CompanyWorkspacePage({
                   Only an owner can change publication state.
                 </p>
               )}
-              {company.isPublished ? (
+              {company.isPublished && company.moderationStatus === "VISIBLE" ? (
                 <Button variant="ghost" asChild>
                   <Link href={`/companies/${company.slug}`}>
                     View public profile

@@ -1,11 +1,9 @@
 import "server-only";
 
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+import { PUBLIC_JOB_VISIBILITY_WHERE } from "@/features/admin/moderation";
 import type { SavedJobSearch } from "@/features/saved-jobs/schemas";
-import {
-  buildCandidateSavedJobWhere,
-  openSavedJobWhere,
-} from "@/features/saved-jobs/search";
+import { buildCandidateSavedJobWhere } from "@/features/saved-jobs/search";
 
 const MAX_SAVED_RESULTS = 100;
 
@@ -16,11 +14,18 @@ const savedJobSelect = {
       slug: true,
       title: true,
       status: true,
+      moderationStatus: true,
       location: true,
       employmentType: true,
       workplaceType: true,
       experienceLevel: true,
-      company: { select: { name: true, isPublished: true } },
+      company: {
+        select: {
+          name: true,
+          isPublished: true,
+          moderationStatus: true,
+        },
+      },
       skills: {
         select: { skill: { select: { name: true } } },
         orderBy: { skill: { normalizedName: "asc" as const } },
@@ -105,10 +110,8 @@ export async function getCandidateSavedJobDashboard(
     prisma.savedJob.count({
       where: {
         candidateId,
-        ...openSavedJobWhere,
         job: {
-          status: "PUBLISHED",
-          company: { isPublished: true },
+          ...PUBLIC_JOB_VISIBILITY_WHERE,
           applications: { none: { candidateId } },
         },
       },
@@ -122,7 +125,14 @@ export async function getCandidateSavedJobDashboard(
             slug: true,
             title: true,
             status: true,
-            company: { select: { name: true, isPublished: true } },
+            moderationStatus: true,
+            company: {
+              select: {
+                name: true,
+                isPublished: true,
+                moderationStatus: true,
+              },
+            },
           },
         },
       },

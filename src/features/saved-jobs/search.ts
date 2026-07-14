@@ -1,10 +1,11 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { PUBLIC_JOB_VISIBILITY_WHERE } from "@/features/admin/moderation";
 import type { SavedJobSearch } from "@/features/saved-jobs/schemas";
 
 const INSENSITIVE = "insensitive" as const;
 
 export const openSavedJobWhere = {
-  job: { status: "PUBLISHED", company: { isPublished: true } },
+  job: PUBLIC_JOB_VISIBILITY_WHERE,
 } satisfies Prisma.SavedJobWhereInput;
 
 export function buildCandidateSavedJobWhere(
@@ -14,11 +15,13 @@ export function buildCandidateSavedJobWhere(
   const where: Prisma.SavedJobWhereInput = { candidateId };
 
   if (search.availability === "OPEN") {
-    where.job = { status: "PUBLISHED", company: { isPublished: true } };
+    where.job = openSavedJobWhere.job;
   } else if (search.availability === "UNAVAILABLE") {
     where.OR = [
       { job: { status: { not: "PUBLISHED" } } },
+      { job: { moderationStatus: "HIDDEN" } },
       { job: { company: { isPublished: false } } },
+      { job: { company: { moderationStatus: "HIDDEN" } } },
     ];
   }
 

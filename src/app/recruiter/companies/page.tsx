@@ -67,6 +67,11 @@ export default async function RecruiterCompaniesPage() {
                       >
                         {company.isPublished ? "Published" : "Private"}
                       </Badge>
+                      {company.moderationStatus === "HIDDEN" ? (
+                        <Badge variant="destructive">
+                          Hidden by moderation
+                        </Badge>
+                      ) : null}
                     </div>
                   </div>
                   <CardTitle className="mt-3">{company.name}</CardTitle>

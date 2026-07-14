@@ -38,10 +38,12 @@ CareerBridge brings these activities into one role-aware system with shared doma
 
 ### Admin
 
-- Manage users, companies, listings, and reports
-- Review platform-level analytics
+- Moderate Candidate/Recruiter accounts and Company/Job public visibility
+- Review small truthful platform-level counts
 - Moderate content and respond to trust and safety concerns
 - Audit important platform actions
+
+User reports, appeals, automated moderation, and expanded analytics remain deferred.
 
 ## MVP scope
 
@@ -249,7 +251,43 @@ The Candidate is notified in-app (and by preference-respecting email) when an in
 
 Missing preferences default to enabled; disabling an event suppresses only email (an auditable `SUPPRESSED` record is kept) while in-app notifications always remain.
 
-## Intentionally deferred after Phase 5A
+## Admin trust and moderation (Phase 6A)
+
+An authenticated, active Admin can view truthful platform counts, search/filter/page through safe User, Company, and Job summaries, suspend or restore Candidate/Recruiter accounts, hide or restore Companies and Jobs, and read immutable moderation audit history. Every action requires one of `SPAM`, `FRAUD`, `ABUSE`, `IMPERSONATION`, `POLICY_VIOLATION`, `SECURITY_RISK`, or `OTHER`; an optional trimmed plain-text note is limited to 500 characters and appears only in Admin audit history. There is no hard deletion, role mutation, impersonation, password/session inspection, or Admin-to-User messaging.
+
+Account moderation is independent from role. Suspending an active Candidate or Recruiter atomically marks the account `SUSPENDED`, records server timestamps, increments the optimistic version, appends audit, and revokes every session. Suspended Users cannot create a new Better Auth session and fail the central authenticated-session boundary even with a stale cookie. Restore returns the account to `ACTIVE` and appends audit without creating a session. Admin accounts, self-targets, already-transitioned records, and stale versions are rejected without duplicate audit.
+
+Company/Job moderation is independent from business lifecycle. A hidden published Company is absent from public list/detail/search/metadata, and all its Jobs are absent even if individually visible and published. A hidden Job is absent from public list/detail/search/metadata and cannot receive a new Application. Authorized private recruiter workspaces remain available and show a fixed moderation notice without the private reason. Restore changes only moderation visibility: unpublished Companies and Draft/Closed/Archived Jobs remain non-public.
+
+Moderation preserves Applications/history, Saved Jobs, Interviews/history, Candidate CV versions and Application snapshots, internal notes/revisions, Company memberships/invitations/events, notifications, email outbox/delivery attempts, and Admin audit. Admin pages do not expose those private domains: no CV file/metadata, cover letter, internal note, private Interview meeting/location/instructions, notification keys, auth account/session/token, email recipient/subject/body/provider/delivery error, or membership email list is selected. Existing Candidate/Recruiter ownership rules remain authoritative and Admin receives no implicit private access.
+
+| Admin capability                                          | Active Admin                            | Candidate / Recruiter     | Suspended or signed out   |
+| --------------------------------------------------------- | --------------------------------------- | ------------------------- | ------------------------- |
+| Dashboard and safe directories                            | Allowed                                 | Denied                    | Denied / sign-in redirect |
+| Account or content transition                             | Allowed with reason and current version | Denied                    | Denied                    |
+| Audit note/history                                        | Allowed                                 | Denied                    | Denied                    |
+| CV, internal note, private Interview, EmailOutbox content | Denied                                  | Existing ownership policy | Denied                    |
+
+| Target              | From        | Action  | To          | History            |
+| ------------------- | ----------- | ------- | ----------- | ------------------ |
+| Candidate/Recruiter | `ACTIVE`    | Suspend | `SUSPENDED` | `USER_SUSPENDED`   |
+| Candidate/Recruiter | `SUSPENDED` | Restore | `ACTIVE`    | `USER_RESTORED`    |
+| Company             | `VISIBLE`   | Hide    | `HIDDEN`    | `COMPANY_HIDDEN`   |
+| Company             | `HIDDEN`    | Restore | `VISIBLE`   | `COMPANY_RESTORED` |
+| Job                 | `VISIBLE`   | Hide    | `HIDDEN`    | `JOB_HIDDEN`       |
+| Job                 | `HIDDEN`    | Restore | `VISIBLE`   | `JOB_RESTORED`     |
+
+| Publication/lifecycle + moderation                         | Public outcome                        | Private outcome                |
+| ---------------------------------------------------------- | ------------------------------------- | ------------------------------ |
+| Published Company + visible                                | Discoverable                          | Workspace available            |
+| Any Company + hidden                                       | Not found; child Jobs excluded        | Workspace retained with notice |
+| Published Job + visible Job/Company                        | Discoverable and application-eligible | Workspace available            |
+| Any Job + hidden                                           | Not found; new Applications blocked   | Workspace and history retained |
+| Unpublished Company or Draft/Closed/Archived Job + visible | Not public                            | Existing workspace behavior    |
+
+Routes are `/admin`, `/admin/users`, `/admin/users/[userId]`, `/admin/companies`, `/admin/companies/[companyId]`, `/admin/jobs`, `/admin/jobs/[jobId]`, and `/admin/audit`. Directories use bounded page-20 queries with stable newest-first ordering; the dashboard recent audit list is capped at ten and omits internal notes.
+
+## Intentionally deferred after Phase 6A
 
 - Google, Outlook, and Apple calendar synchronization and OAuth calendar connections
 - Google Meet, Zoom, and Microsoft Teams link generation and calendar provider webhooks
@@ -276,7 +314,8 @@ Missing preferences default to enabled; disabling an event suppresses only email
 - Candidate matching, job recommendations, and saved-search alerts
 - Candidate search and messaging
 - Public Candidate profile sharing and social feeds
-- Production Admin provisioning, moderation, and audit workflows
+- Production Admin provisioning beyond the existing secure bootstrap
+- User reports, automated moderation/fraud scoring, appeals, legal takedowns, Company verification, and expanded Admin analytics
 - AI, billing, and payments
 
 ## Future AI scope

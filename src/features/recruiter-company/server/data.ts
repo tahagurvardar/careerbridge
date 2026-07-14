@@ -1,7 +1,22 @@
 import "server-only";
 
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+import { PUBLIC_COMPANY_VISIBILITY_WHERE } from "@/features/admin/moderation";
 import type { PublicCompanySearch } from "@/features/recruiter-company/schemas";
+
+const publicCompanySelect = {
+  id: true,
+  name: true,
+  slug: true,
+  tagline: true,
+  description: true,
+  industry: true,
+  headquarters: true,
+  websiteUrl: true,
+  companySize: true,
+  foundedYear: true,
+  isPublished: true,
+} satisfies Prisma.CompanySelect;
 
 export function getRecruiterProfile(prisma: PrismaClient, userId: string) {
   return prisma.recruiterProfile.findUnique({ where: { userId } });
@@ -55,7 +70,7 @@ export function getPublishedCompanies(
 ) {
   return prisma.company.findMany({
     where: {
-      isPublished: true,
+      ...PUBLIC_COMPANY_VISIBILITY_WHERE,
       ...(search.q
         ? { name: { contains: search.q, mode: "insensitive" as const } }
         : {}),
@@ -76,12 +91,14 @@ export function getPublishedCompanies(
           }
         : {}),
     },
+    select: publicCompanySelect,
     orderBy: [{ name: "asc" }, { id: "asc" }],
   });
 }
 
 export function getPublishedCompanyBySlug(prisma: PrismaClient, slug: string) {
   return prisma.company.findFirst({
-    where: { slug, isPublished: true },
+    where: { slug, ...PUBLIC_COMPANY_VISIBILITY_WHERE },
+    select: publicCompanySelect,
   });
 }

@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+import { PUBLIC_JOB_VISIBILITY_WHERE } from "@/features/admin/moderation";
 import type {
   ApplicationStatusValue,
   CandidateApplicationSearch,
@@ -63,7 +64,10 @@ const candidateSkillPreview = {
 
 export function getJobForApplication(prisma: PrismaClient, slug: string) {
   return prisma.job.findFirst({
-    where: { slug, status: "PUBLISHED", company: { isPublished: true } },
+    where: {
+      slug,
+      ...PUBLIC_JOB_VISIBILITY_WHERE,
+    },
     select: {
       id: true,
       slug: true,

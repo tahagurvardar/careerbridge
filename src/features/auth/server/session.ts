@@ -12,12 +12,14 @@ import {
   platformRoleSchema,
 } from "@/features/auth/roles";
 import { getAuth } from "@/lib/auth";
+import { getPrismaClient } from "@/lib/prisma";
 
 export type CurrentSession = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getAuth>["api"]["getSession"]>>
 > & {
   user: {
     role: PlatformRole;
+    accountStatus: "ACTIVE";
   };
 };
 
@@ -33,9 +35,18 @@ export const getCurrentSession = cache(
       return null;
     }
 
-    const role = platformRoleSchema.safeParse(session.user.role);
+    const databaseUser = await getPrismaClient().user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true, accountStatus: true },
+    });
+    const role = platformRoleSchema.safeParse(databaseUser?.role);
 
-    if (!role.success) {
+    if (!role.success || databaseUser?.accountStatus !== "ACTIVE") {
+      if (databaseUser?.accountStatus === "SUSPENDED") {
+        await getPrismaClient().session.deleteMany({
+          where: { userId: session.user.id },
+        });
+      }
       return null;
     }
 
@@ -44,6 +55,7 @@ export const getCurrentSession = cache(
       user: {
         ...session.user,
         role: role.data,
+        accountStatus: "ACTIVE",
       },
     } as CurrentSession;
   },

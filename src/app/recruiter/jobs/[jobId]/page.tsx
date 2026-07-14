@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ExternalLink,
   Pencil,
+  ShieldAlert,
   StickyNote,
   UsersRound,
 } from "lucide-react";
@@ -142,6 +143,27 @@ export default async function JobWorkspacePage({
             </Button>
           ) : null}
         </div>
+
+        {job.moderationStatus === "HIDDEN" ||
+        job.company.moderationStatus === "HIDDEN" ? (
+          <div
+            role="status"
+            className="border-destructive/40 bg-destructive/5 mt-7 flex gap-3 rounded-xl border p-4"
+          >
+            <ShieldAlert
+              aria-hidden="true"
+              className="text-destructive mt-0.5 size-5 shrink-0"
+            />
+            <div>
+              <p className="font-medium">Platform moderation notice</p>
+              <p className="text-muted-foreground mt-1 text-sm leading-6">
+                {job.moderationStatus === "HIDDEN"
+                  ? "This job is hidden from public discovery by platform moderation."
+                  : "This job is unavailable in public discovery because its company is hidden by platform moderation."}
+              </p>
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-9 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
           <div className="grid gap-6">
@@ -366,7 +388,9 @@ export default async function JobWorkspacePage({
                 canPublish={canPublish}
               />
 
-              {job.status === "PUBLISHED" ? (
+              {job.status === "PUBLISHED" &&
+              job.moderationStatus === "VISIBLE" &&
+              job.company.moderationStatus === "VISIBLE" ? (
                 <Button variant="ghost" asChild>
                   <Link href={`/jobs/${job.slug}`}>
                     View public listing

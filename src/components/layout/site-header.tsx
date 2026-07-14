@@ -41,7 +41,12 @@ export async function SiteHeader() {
                   { label: "Interviews", href: "/recruiter/interviews" },
                   { label: "Invitations", href: "/recruiter/invitations" },
                 ]
-              : [],
+              : [
+                  { label: "Users", href: "/admin/users" },
+                  { label: "Companies", href: "/admin/companies" },
+                  { label: "Jobs", href: "/admin/jobs" },
+                  { label: "Audit log", href: "/admin/audit" },
+                ],
       }
     : null;
 

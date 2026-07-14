@@ -230,17 +230,26 @@ Deferred from Phase 5A: Google/Outlook/Apple calendar sync, OAuth calendar conne
 
 Exit criteria: Company OWNERs can safely schedule and manage conflict-free interviews that Candidates can answer, with immutable history and transactional notification/email intent, without weakening any existing authorization or privacy boundary.
 
-## Phase 5 — Admin, trust, and analytics
+## Phase 6A — Admin, trust, moderation, and immutable Admin audit
 
-- User, company, job, and report moderation
-- Admin authorization and audit events
-- Operational dashboards
-- Recruitment funnel analytics
-- Trust, safety, and abuse workflows
+Status: implemented on `feat/admin-trust-moderation`.
 
-Exit criteria: platform operators can safely manage and understand production activity.
+- Independent User `ACTIVE`/`SUSPENDED` state with monotonic optimistic concurrency
+- Independent Company and Job `VISIBLE`/`HIDDEN` moderation state that never rewrites publication or lifecycle
+- Required enumerated reasons, optional bounded Admin-only plain-text notes, and accessible confirmation flows
+- Atomic suspension plus Better Auth session revocation, new-session denial, and central stale-cookie enforcement
+- Public Company/Job discovery, detail, featured, metadata-source, save, and application predicates hardened for moderation
+- Existing private workspaces and historical Applications, Interviews, CV snapshots, notes, memberships, notifications, and email history retained
+- Active-Admin-only dashboard, User/Company/Job directories and detail actions, filters, stable pagination, and responsive navigation
+- Append-only `AdminAuditEvent` with action/target database checks, retention-oriented relations, and newest-first filters
+- Explicit privacy boundary: no implicit Admin CV, internal-note, private Interview, Application, Notification, auth-token/session, or EmailOutbox access
+- Additive `20260713194410_admin_trust_moderation` migration plus database-free and isolated integration coverage
 
-## Phase 6 — Communication
+Deferred from Phase 6A: User reports, automated/AI moderation and fraud scoring, content scanning, KYC/identity verification, Company verification, appeals, legal takedowns, custom Admin permissions, impersonation, Admin messaging, production provisioning changes, billing, and analytics beyond truthful platform counts.
+
+Exit criteria: active platform Admins can make reasoned, concurrency-safe, auditable account and visibility decisions without destroying history or crossing Candidate/Recruiter privacy boundaries.
+
+## Phase 6B — Communication
 
 - In-product notifications (initial application-event delivery shipped in Phase 4A)
 - Transactional email infrastructure and preferences (shipped in Phase 4C)

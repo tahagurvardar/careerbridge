@@ -376,6 +376,8 @@ export default async function CandidateDashboardPage() {
                     classifySavedJobAvailability({
                       status: job.status,
                       companyIsPublished: job.company.isPublished,
+                      moderationStatus: job.moderationStatus,
+                      companyModerationStatus: job.company.moderationStatus,
                     }) === "OPEN";
                   const content = (
                     <>
