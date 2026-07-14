@@ -4,6 +4,7 @@ import { parseSetCookieHeader, toCookieOptions } from "better-auth/cookies";
 import { cookies, headers } from "next/headers";
 
 import { getAuth } from "@/lib/auth";
+import { resolveAuthRuntimeConfiguration } from "@/lib/env/server";
 
 type AuthEndpointPath = "/sign-in/email" | "/sign-up/email";
 
@@ -53,9 +54,10 @@ export async function executeAuthRequest<T>(
   path: AuthEndpointPath,
   body: Record<string, unknown>,
 ): Promise<T> {
-  const baseURL = process.env.BETTER_AUTH_URL;
-
-  if (!baseURL) {
+  let baseURL: string;
+  try {
+    baseURL = resolveAuthRuntimeConfiguration().baseURL;
+  } catch {
     throw new AuthRequestError(500);
   }
 
