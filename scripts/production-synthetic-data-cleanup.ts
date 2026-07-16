@@ -19,12 +19,16 @@ export const APPROVED_ROOTS = [
   {
     key: "phase-6a-browser",
     displayName: "Phase 6A Browser",
-    slug: "cb-browser-p6a-20260713-001",
+    userMarker: "cb-browser-p6a-20260713-001",
+    companySlug: "cb-browser-p6a-20260713-001-company",
+    jobSlug: "cb-browser-p6a-20260713-001-job",
   },
   {
     key: "phase-7b-verification",
     displayName: "cb-verify-1783989194946-mrjx3sn6",
-    slug: "cb-verify-1783989194946-mrjx3sn6",
+    userMarker: "cb-verify-1783989194946-mrjx3sn6",
+    companySlug: "cb-verify-1783989194946-mrjx3sn6-company",
+    jobSlug: "cb-verify-1783989194946-mrjx3sn6-job",
   },
 ] as const;
 
@@ -278,13 +282,21 @@ const forbiddenCountsSchema = z.object(forbiddenCountsShape).strict();
 
 const cleanupPlanSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     operation: z.literal("production-synthetic-data-cleanup"),
     status: z.enum(["ready", "no_matches"]),
     generatedAt: timestampSchema,
-    approvedRootSlugs: z.tuple([
-      z.literal(APPROVED_ROOTS[0].slug),
-      z.literal(APPROVED_ROOTS[1].slug),
+    approvedUserMarkers: z.tuple([
+      z.literal(APPROVED_ROOTS[0].userMarker),
+      z.literal(APPROVED_ROOTS[1].userMarker),
+    ]),
+    approvedCompanySlugs: z.tuple([
+      z.literal(APPROVED_ROOTS[0].companySlug),
+      z.literal(APPROVED_ROOTS[1].companySlug),
+    ]),
+    approvedJobSlugs: z.tuple([
+      z.literal(APPROVED_ROOTS[0].jobSlug),
+      z.literal(APPROVED_ROOTS[1].jobSlug),
     ]),
     counts: countsSchema,
     forbiddenCounts: forbiddenCountsSchema,
@@ -601,16 +613,17 @@ export function validateSnapshot(
       canonicalize(roles) !== canonicalize([...KNOWN_ROLES].sort())
     ) {
       throw new CleanupSafetyError(
-        `Approved root ${root.slug} does not have exactly one known User role of each type.`,
+        `Approved root ${root.userMarker} does not have exactly one known User role of each type.`,
       );
     }
 
     const rootCompanies = snapshot.records.Company.filter(
-      (record) => record.rootKey === root.key && record.slug === root.slug,
+      (record) =>
+        record.rootKey === root.key && record.slug === root.companySlug,
     );
     if (rootCompanies.length !== 1) {
       throw new CleanupSafetyError(
-        `Approved root ${root.slug} does not have exactly one Company.`,
+        `Approved root ${root.userMarker} does not have exactly one Company with the exact approved slug ${root.companySlug}.`,
       );
     }
     const company = rootCompanies[0];
@@ -623,7 +636,7 @@ export function validateSnapshot(
     );
     if (memberships.length !== 1 || memberships[0]?.role !== "OWNER") {
       throw new CleanupSafetyError(
-        `Approved root ${root.slug} does not have exactly one OWNER membership.`,
+        `Approved root ${root.userMarker} does not have exactly one OWNER membership.`,
       );
     }
     const membershipUser = rootUsers.find(
@@ -631,16 +644,21 @@ export function validateSnapshot(
     );
     if (membershipUser?.role !== "RECRUITER") {
       throw new CleanupSafetyError(
-        `Approved root ${root.slug} has an unexpected membership relationship.`,
+        `Approved root ${root.userMarker} has an unexpected membership relationship.`,
       );
     }
 
-    if (
-      snapshot.records.Job.filter((record) => record.companyId === company.id)
-        .length !== 1
-    ) {
+    const companyJobs = snapshot.records.Job.filter(
+      (record) => record.companyId === company.id,
+    );
+    if (companyJobs.length !== 1) {
       throw new CleanupSafetyError(
-        `Approved root ${root.slug} does not have exactly one Job.`,
+        `Approved root ${root.userMarker} does not have exactly one Job.`,
+      );
+    }
+    if (companyJobs[0]?.slug !== root.jobSlug) {
+      throw new CleanupSafetyError(
+        `Approved root ${root.userMarker} does not have the exact approved Job slug ${root.jobSlug}.`,
       );
     }
   }
@@ -671,11 +689,13 @@ export function createPlan(
   const status = validateSnapshot(snapshot);
   const records = sortRecords(snapshot.records);
   return cleanupPlanSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     operation: "production-synthetic-data-cleanup",
     status,
     generatedAt: generatedAt.toISOString(),
-    approvedRootSlugs: APPROVED_ROOTS.map((root) => root.slug),
+    approvedUserMarkers: APPROVED_ROOTS.map((root) => root.userMarker),
+    approvedCompanySlugs: APPROVED_ROOTS.map((root) => root.companySlug),
+    approvedJobSlugs: APPROVED_ROOTS.map((root) => root.jobSlug),
     counts: recordCounts(records),
     forbiddenCounts: snapshot.forbiddenCounts,
     deletionOrder: EXECUTION_DELETE_ORDER,
@@ -844,15 +864,17 @@ function rootUserPredicate(alias: string): {
   const values: string[] = [];
   for (const root of APPROVED_ROOTS) {
     const namePosition = values.push(root.displayName);
-    const slugPosition = values.push(root.slug);
+    const markerPosition = values.push(root.userMarker);
     clauses.push(
-      `(${alias}.name = $${namePosition} OR strpos(${alias}.email, $${slugPosition}) > 0)`,
+      `(${alias}.name = $${namePosition} OR strpos(${alias}.email, $${markerPosition}) > 0)`,
     );
   }
   return { sql: clauses.join(" OR "), values };
 }
 
-async function discoverUsers(client: SqlClient): Promise<SafeRecords["User"]> {
+export async function discoverUsers(
+  client: SqlClient,
+): Promise<SafeRecords["User"]> {
   const records: SafeRecords["User"] = [];
   for (const root of APPROVED_ROOTS) {
     const result = await client.query<{
@@ -873,7 +895,7 @@ async function discoverUsers(client: SqlClient): Promise<SafeRecords["User"]> {
         WHERE synthetic_user.name = $1 OR strpos(synthetic_user.email, $2) > 0
         ORDER BY synthetic_user.id
       `,
-      [root.displayName, root.slug],
+      [root.displayName, root.userMarker],
     );
     records.push(
       ...result.rows.map((row) => ({
@@ -889,12 +911,11 @@ async function discoverUsers(client: SqlClient): Promise<SafeRecords["User"]> {
   return records;
 }
 
-async function discoverCompanies(
+export async function discoverCompanies(
   client: SqlClient,
 ): Promise<SafeRecords["Company"]> {
   const result = await client.query<{
     id: string;
-    rootKey: RootKey;
     slug: string;
     status: (typeof KNOWN_MODERATION_STATUSES)[number];
     isPublished: boolean;
@@ -904,38 +925,36 @@ async function discoverCompanies(
     `
       SELECT
         synthetic_company.id,
-        CASE
-          WHEN synthetic_company.name = $1 AND synthetic_company.slug = $2
-            THEN '${APPROVED_ROOTS[0].key}'
-          WHEN synthetic_company.slug = $3
-            THEN '${APPROVED_ROOTS[1].key}'
-        END AS "rootKey",
         synthetic_company.slug,
         synthetic_company."moderationStatus"::text AS status,
         synthetic_company."isPublished",
         synthetic_company."createdAt",
         synthetic_company."updatedAt"
       FROM company AS synthetic_company
-      WHERE
-        (synthetic_company.name = $1 AND synthetic_company.slug = $2)
-        OR synthetic_company.slug = $3
+      WHERE synthetic_company.slug = ANY($1::text[])
       ORDER BY synthetic_company.id
     `,
-    [
-      APPROVED_ROOTS[0].displayName,
-      APPROVED_ROOTS[0].slug,
-      APPROVED_ROOTS[1].slug,
-    ],
+    [APPROVED_ROOTS.map((root) => root.companySlug)],
   );
-  return result.rows.map((row) => ({
-    id: row.id,
-    rootKey: row.rootKey,
-    slug: row.slug,
-    status: row.status,
-    publicationStatus: row.isPublished ? "PUBLISHED" : "UNPUBLISHED",
-    createdAt: normalizeTimestamp(row.createdAt),
-    updatedAt: normalizeTimestamp(row.updatedAt),
-  }));
+  return result.rows.map((row) => {
+    const root = APPROVED_ROOTS.find(
+      (approvedRoot) => approvedRoot.companySlug === row.slug,
+    );
+    if (!root) {
+      throw new CleanupSafetyError(
+        "Company discovery returned a non-approved slug.",
+      );
+    }
+    return {
+      id: row.id,
+      rootKey: root.key,
+      slug: row.slug,
+      status: row.status,
+      publicationStatus: row.isPublished ? "PUBLISHED" : "UNPUBLISHED",
+      createdAt: normalizeTimestamp(row.createdAt),
+      updatedAt: normalizeTimestamp(row.updatedAt),
+    };
+  });
 }
 
 async function discoverApprovedRecords(
@@ -1462,16 +1481,18 @@ async function verifyExactDeletion(
   );
   const companyRoots = await client.query<{ count: unknown }>(
     `SELECT COUNT(*)::int AS count FROM company
-     WHERE (name = $1 AND slug = $2) OR slug = $3`,
-    [
-      APPROVED_ROOTS[0].displayName,
-      APPROVED_ROOTS[0].slug,
-      APPROVED_ROOTS[1].slug,
-    ],
+     WHERE slug = ANY($1::text[])`,
+    [APPROVED_ROOTS.map((root) => root.companySlug)],
+  );
+  const jobRoots = await client.query<{ count: unknown }>(
+    `SELECT COUNT(*)::int AS count FROM job
+     WHERE slug = ANY($1::text[])`,
+    [APPROVED_ROOTS.map((root) => root.jobSlug)],
   );
   if (
     normalizeCount(userRoots.rows[0]?.count ?? 0) !== 0 ||
-    normalizeCount(companyRoots.rows[0]?.count ?? 0) !== 0
+    normalizeCount(companyRoots.rows[0]?.count ?? 0) !== 0 ||
+    normalizeCount(jobRoots.rows[0]?.count ?? 0) !== 0
   ) {
     throw new CleanupSafetyError(
       "Approved root post-delete verification failed; the transaction will roll back.",
@@ -1554,7 +1575,9 @@ export function formatRedactedSummary(
   const lines = [
     `Mode: ${mode}`,
     `Plan status: ${plan.status}`,
-    `Approved root slugs: ${plan.approvedRootSlugs.join(", ")}`,
+    `Approved user markers: ${plan.approvedUserMarkers.join(", ")}`,
+    `Approved Company slugs: ${plan.approvedCompanySlugs.join(", ")}`,
+    `Approved Job slugs: ${plan.approvedJobSlugs.join(", ")}`,
     `Generated at: ${plan.generatedAt}`,
     `Roles: ${roles}`,
     `Statuses: ${formatStatuses(plan)}`,

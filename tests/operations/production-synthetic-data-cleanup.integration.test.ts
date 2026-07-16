@@ -34,14 +34,14 @@ const users = APPROVED_ROOTS.flatMap((root, rootIndex) =>
   (["CANDIDATE", "RECRUITER", "ADMIN"] as const).map((role) => ({
     id: `ops-cleanup-user-${rootIndex}-${role.toLowerCase()}`,
     name: root.displayName,
-    email: `${root.slug}-${role.toLowerCase()}@example.test`,
+    email: `${root.userMarker}-${role.toLowerCase()}@example.test`,
     role,
   })),
 );
 const companies = APPROVED_ROOTS.map((root, index) => ({
   id: `ops-cleanup-company-${index}`,
   name: root.displayName,
-  slug: root.slug,
+  slug: root.companySlug,
 }));
 const planFiles = new Set<string>();
 
@@ -141,7 +141,7 @@ async function seedFixture(): Promise<void> {
       id: `ops-cleanup-job-${index}`,
       companyId: company.id,
       title: `Approved synthetic job ${index}`,
-      slug: `ops-cleanup-approved-job-${index}`,
+      slug: APPROVED_ROOTS[index]!.jobSlug,
       status: "PUBLISHED",
     })),
   });
@@ -197,6 +197,21 @@ databaseDescribe(
       const preview = await runPreview(testDatabaseURL);
       planFiles.add(preview.planFile);
       expect(preview.plan.status).toBe("ready");
+      expect(preview.plan.approvedUserMarkers).toEqual(
+        APPROVED_ROOTS.map((root) => root.userMarker),
+      );
+      expect(preview.plan.approvedCompanySlugs).toEqual(
+        APPROVED_ROOTS.map((root) => root.companySlug),
+      );
+      expect(preview.plan.approvedJobSlugs).toEqual(
+        APPROVED_ROOTS.map((root) => root.jobSlug),
+      );
+      expect(preview.plan.records.Company.map((record) => record.slug)).toEqual(
+        APPROVED_ROOTS.map((root) => root.companySlug),
+      );
+      expect(preview.plan.records.Job.map((record) => record.slug)).toEqual(
+        APPROVED_ROOTS.map((root) => root.jobSlug),
+      );
 
       await runExecute({
         connectionString: testDatabaseURL,
@@ -215,6 +230,47 @@ databaseDescribe(
       planFiles.add(postCleanupPreview.planFile);
       expect(postCleanupPreview.plan.status).toBe("no_matches");
       expect(postCleanupPreview.plan.counts.User).toBe(0);
+    }, 120_000);
+
+    it("rejects old marker-only Company slugs during discovery", async () => {
+      await seedFixture();
+      await prisma.company.update({
+        where: { id: companies[0]!.id },
+        data: { slug: APPROVED_ROOTS[0].userMarker },
+      });
+
+      await expect(runPreview(testDatabaseURL)).rejects.toThrow(
+        "Company count changed: expected 2, found 1",
+      );
+    }, 120_000);
+
+    it("audits and rejects an unexpected additional Job", async () => {
+      await seedFixture();
+      await prisma.job.create({
+        data: {
+          id: "ops-cleanup-unexpected-job",
+          companyId: companies[0]!.id,
+          title: "Unexpected synthetic job",
+          slug: "ops-cleanup-unexpected-job",
+          status: "PUBLISHED",
+        },
+      });
+
+      await expect(runPreview(testDatabaseURL)).rejects.toThrow(
+        "Job count changed: expected 2, found 3",
+      );
+    }, 120_000);
+
+    it("rejects an approved Company Job with the wrong slug", async () => {
+      await seedFixture();
+      await prisma.job.update({
+        where: { id: "ops-cleanup-job-0" },
+        data: { slug: "ops-cleanup-wrong-job-slug" },
+      });
+
+      await expect(runPreview(testDatabaseURL)).rejects.toThrow(
+        `exact approved Job slug ${APPROVED_ROOTS[0].jobSlug}`,
+      );
     }, 120_000);
 
     it("rolls back every deletion when a final assertion fails", async () => {

@@ -1,9 +1,16 @@
 # Production synthetic data cleanup
 
-This runbook covers only the two reviewed synthetic roots:
+This runbook covers only the two reviewed synthetic roots and their exact entity
+identifiers:
 
-- `cb-browser-p6a-20260713-001` (display marker `Phase 6A Browser`)
-- `cb-verify-1783989194946-mrjx3sn6`
+- Phase 6A Browser
+  - User marker: `cb-browser-p6a-20260713-001`
+  - Company slug: `cb-browser-p6a-20260713-001-company`
+  - Job slug: `cb-browser-p6a-20260713-001-job`
+- Phase 7B verification
+  - User marker: `cb-verify-1783989194946-mrjx3sn6`
+  - Company slug: `cb-verify-1783989194946-mrjx3sn6-company`
+  - Job slug: `cb-verify-1783989194946-mrjx3sn6-job`
 
 The utility is intentionally fail closed. Its approved footprint is exactly 6
 Users, 6 Accounts, 5 Sessions, 1 CandidateProfile, 1 RecruiterProfile, 2
@@ -73,7 +80,8 @@ Expected preview characteristics:
 - plan status `ready` before cleanup, or `no_matches` after a successful cleanup;
 - the exact approved counts listed above;
 - one Candidate, Recruiter, and Admin User per root;
-- one OWNER Recruiter membership and one Job per Company;
+- one OWNER Recruiter membership per Company;
+- exactly one Job per Company, with the exact approved Job slug listed above;
 - zero forbidden dependencies;
 - a SHA-256 plan digest;
 - final database result `ROLLBACK`;
@@ -86,7 +94,10 @@ Stop if any expectation differs. Do not edit a plan to make it pass.
 Two people must review the newly generated plan before execute:
 
 1. Confirm the branch, commit, schema, and generated timestamp.
-2. Confirm both exact root slugs and all expected counts.
+2. Confirm both exact User markers, Company slugs, Job slugs, and all expected
+   counts. Version 2 plans record these as separate `approvedUserMarkers`,
+   `approvedCompanySlugs`, and `approvedJobSlugs` fields; version 1 plans cannot
+   authorize execute mode.
 3. Confirm every forbidden dependency count is zero.
 4. Confirm roles, statuses, membership roles, and safe slugs are plausible.
 5. Review the exact internal IDs in the local plan against the separately
@@ -131,9 +142,10 @@ environment when the window closes.
 ## Rollback behavior
 
 Preview always issues `ROLLBACK`, including after a successful audit. Execute
-issues `COMMIT` only after every planned row and both root locators verify as
-zero. Argument, digest, schema, count, relationship, lock, delete, or final
-verification failure issues `ROLLBACK`.
+issues `COMMIT` only after every planned row and all exact User-marker,
+Company-slug, and Job-slug locators verify as zero. Argument, digest, schema,
+count, relationship, lock, delete, or final verification failure issues
+`ROLLBACK`.
 
 If the database reports `COMMIT` but later business verification finds a
 problem, stop writes, open an incident, and follow the provider-approved PITR
@@ -143,8 +155,12 @@ restore process. Do not improvise inverse inserts from the cleanup plan.
 
 1. Run preview again. It must return `no_matches`, all approved counts zero, all
    forbidden counts zero, and `ROLLBACK`.
-2. Verify the two Company and Job public slugs return the normal not-found
-   behavior and do not redirect to unrelated content.
+2. Verify these exact public slugs return the normal not-found behavior and do
+   not redirect to unrelated content:
+   - Companies: `cb-browser-p6a-20260713-001-company` and
+     `cb-verify-1783989194946-mrjx3sn6-company`
+   - Jobs: `cb-browser-p6a-20260713-001-job` and
+     `cb-verify-1783989194946-mrjx3sn6-job`
 3. Verify the synthetic accounts cannot establish authenticated sessions.
 4. Check aggregate platform counts changed only by the reviewed footprint.
 5. Review database/application logs for success/failure categories only. Do not
