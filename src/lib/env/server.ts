@@ -74,6 +74,40 @@ function hasPlaceholder(value: string | undefined): boolean {
   return Boolean(value && PLACEHOLDER_PATTERN.test(value));
 }
 
+function isLocalOrLoopbackHost(hostname: string): boolean {
+  const normalized = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.$/, "");
+  if (normalized === "localhost" || normalized.endsWith(".localhost")) {
+    return true;
+  }
+  if (normalized === "::1") return true;
+
+  const ipv4Octets = normalized.split(".");
+  return (
+    ipv4Octets.length === 4 &&
+    ipv4Octets.every((octet) => /^\d+$/.test(octet)) &&
+    Number(ipv4Octets[0]) === 127
+  );
+}
+
+function isDocumentStorageS3Endpoint(value: string | undefined): boolean {
+  const candidate = trimmed(value);
+  if (!candidate || hasPlaceholder(candidate)) return false;
+
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== "https:") return false;
+    if (!url.hostname || isLocalOrLoopbackHost(url.hostname)) return false;
+    if (url.username || url.password) return false;
+    if (candidate.includes("?") || candidate.includes("#")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function parseOrigin(
   value: string | undefined,
   options: { requireHttps: boolean; rejectLocalhost: boolean },
@@ -244,14 +278,11 @@ function productionIssues(env: ServerEnvironment): string[] {
   ] as const) {
     if (hasPlaceholder(env[name])) issues.add(name);
   }
-  if (env.DOCUMENT_STORAGE_S3_ENDPOINT) {
-    const endpoint = parseOrigin(env.DOCUMENT_STORAGE_S3_ENDPOINT, {
-      requireHttps: true,
-      rejectLocalhost: true,
-    });
-    if (!endpoint || hasPlaceholder(env.DOCUMENT_STORAGE_S3_ENDPOINT)) {
-      issues.add("DOCUMENT_STORAGE_S3_ENDPOINT");
-    }
+  if (
+    env.DOCUMENT_STORAGE_S3_ENDPOINT &&
+    !isDocumentStorageS3Endpoint(env.DOCUMENT_STORAGE_S3_ENDPOINT)
+  ) {
+    issues.add("DOCUMENT_STORAGE_S3_ENDPOINT");
   }
 
   if (trimmed(env.EMAIL_DELIVERY_DRIVER)?.toLowerCase() !== "resend") {

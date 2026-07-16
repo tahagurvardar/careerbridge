@@ -128,6 +128,42 @@ describe("production server environment validation", () => {
     );
   });
 
+  it("accepts a path-based production S3 endpoint", () => {
+    expect(() =>
+      validateServerEnvironment(
+        productionEnvironment({
+          DOCUMENT_STORAGE_S3_ENDPOINT:
+            "https://project.storage.example.invalid/storage/v1/s3",
+        }),
+        { deployment: "production" },
+      ),
+    ).not.toThrow();
+  });
+
+  it.each([
+    ["HTTP", "http://project.storage.example.invalid/storage/v1/s3"],
+    ["localhost", "https://localhost:9000/storage/v1/s3"],
+    ["IPv4 loopback", "https://127.0.0.2/storage/v1/s3"],
+    ["IPv6 loopback", "https://[::1]/storage/v1/s3"],
+    [
+      "credentials",
+      "https://access:secret@project.storage.example.invalid/storage/v1/s3",
+    ],
+    [
+      "a query string",
+      "https://project.storage.example.invalid/storage/v1/s3?region=local",
+    ],
+    [
+      "a fragment",
+      "https://project.storage.example.invalid/storage/v1/s3#documents",
+    ],
+  ])("rejects an invalid production S3 endpoint: %s", (_case, endpoint) => {
+    expectInvalidVariable(
+      productionEnvironment({ DOCUMENT_STORAGE_S3_ENDPOINT: endpoint }),
+      "DOCUMENT_STORAGE_S3_ENDPOINT",
+    );
+  });
+
   it("rejects log delivery and incomplete production email", () => {
     expectInvalidVariable(
       productionEnvironment({ EMAIL_DELIVERY_DRIVER: "log" }),
