@@ -10,6 +10,8 @@ import {
   assertPlanMatchesSnapshot,
   createPlan,
   digestPlan,
+  discoverCompanies,
+  discoverUsers,
   formatRedactedSummary,
   parseArguments,
   parsePlanEnvelope,
@@ -44,7 +46,7 @@ function validRecords(): SafeRecords {
   const companies = APPROVED_ROOTS.map((root, index) => ({
     id: `company-${index}`,
     rootKey: root.key,
-    slug: root.slug,
+    slug: root.companySlug,
     status: "VISIBLE" as const,
     publicationStatus: "PUBLISHED" as const,
     createdAt: timestamp,
@@ -94,7 +96,7 @@ function validRecords(): SafeRecords {
     Job: companies.map((company, index) => ({
       id: `job-${index}`,
       companyId: company.id,
-      slug: `synthetic-job-${index}`,
+      slug: APPROVED_ROOTS[index]!.jobSlug,
       status: "PUBLISHED" as const,
       moderationStatus: "VISIBLE" as const,
       createdAt: timestamp,
@@ -133,14 +135,120 @@ describe("production synthetic data cleanup safety model", () => {
       {
         key: "phase-6a-browser",
         displayName: "Phase 6A Browser",
-        slug: "cb-browser-p6a-20260713-001",
+        userMarker: "cb-browser-p6a-20260713-001",
+        companySlug: "cb-browser-p6a-20260713-001-company",
+        jobSlug: "cb-browser-p6a-20260713-001-job",
       },
       {
         key: "phase-7b-verification",
         displayName: "cb-verify-1783989194946-mrjx3sn6",
-        slug: "cb-verify-1783989194946-mrjx3sn6",
+        userMarker: "cb-verify-1783989194946-mrjx3sn6",
+        companySlug: "cb-verify-1783989194946-mrjx3sn6-company",
+        jobSlug: "cb-verify-1783989194946-mrjx3sn6-job",
       },
     ]);
+  });
+
+  it("accepts the exact production Company and Job slugs", () => {
+    const snapshot = validSnapshot();
+    expect(validateSnapshot(snapshot)).toBe("ready");
+
+    const plan = createPlan(snapshot, new Date(timestamp));
+    expect(plan).toMatchObject({
+      schemaVersion: 2,
+      approvedUserMarkers: APPROVED_ROOTS.map((root) => root.userMarker),
+      approvedCompanySlugs: APPROVED_ROOTS.map((root) => root.companySlug),
+      approvedJobSlugs: APPROVED_ROOTS.map((root) => root.jobSlug),
+    });
+    expect(plan.records.Company.map((company) => company.slug)).toEqual(
+      APPROVED_ROOTS.map((root) => root.companySlug),
+    );
+    expect(plan.records.Job.map((job) => job.slug)).toEqual(
+      APPROVED_ROOTS.map((root) => root.jobSlug),
+    );
+  });
+
+  it("uses User markers as the User discovery identifiers", async () => {
+    const valuesSeen: unknown[][] = [];
+    class UserDiscoveryClient implements SqlClient {
+      async query<Row extends Record<string, unknown>>(
+        _text: string,
+        values?: unknown[],
+      ) {
+        valuesSeen.push(values ?? []);
+        return { rows: [] as Row[], rowCount: 0 };
+      }
+    }
+
+    await expect(discoverUsers(new UserDiscoveryClient())).resolves.toEqual([]);
+    expect(valuesSeen).toEqual(
+      APPROVED_ROOTS.map((root) => [root.displayName, root.userMarker]),
+    );
+  });
+
+  it("discovers only the exact production Company slugs", async () => {
+    let queryText = "";
+    let queryValues: unknown[] | undefined;
+    class CompanyDiscoveryClient implements SqlClient {
+      async query<Row extends Record<string, unknown>>(
+        text: string,
+        values?: unknown[],
+      ) {
+        queryText = text;
+        queryValues = values;
+        const rows = APPROVED_ROOTS.map((root, index) => ({
+          id: `discovered-company-${index}`,
+          slug: root.companySlug,
+          status: "VISIBLE",
+          isPublished: true,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }));
+        return { rows: rows as unknown as Row[], rowCount: rows.length };
+      }
+    }
+
+    const discovered = await discoverCompanies(new CompanyDiscoveryClient());
+    expect(queryText).toContain(
+      "WHERE synthetic_company.slug = ANY($1::text[])",
+    );
+    expect(queryValues).toEqual([
+      APPROVED_ROOTS.map((root) => root.companySlug),
+    ]);
+    expect(discovered.map((company) => company.slug)).toEqual(
+      APPROVED_ROOTS.map((root) => root.companySlug),
+    );
+    expect(queryValues).not.toEqual([
+      APPROVED_ROOTS.map((root) => root.userMarker),
+    ]);
+  });
+
+  it("rejects the old marker-only Company slugs", () => {
+    const snapshot = validSnapshot();
+    snapshot.records.Company[0]!.slug = APPROVED_ROOTS[0].userMarker;
+    expect(() => validateSnapshot(snapshot)).toThrow(
+      `exact approved slug ${APPROVED_ROOTS[0].companySlug}`,
+    );
+  });
+
+  it("rejects an unexpected additional Job for an approved Company", () => {
+    const snapshot = validSnapshot();
+    snapshot.records.Job.push({
+      ...snapshot.records.Job[0]!,
+      id: "unexpected-additional-job",
+      slug: "unexpected-additional-job",
+    });
+    expect(() => validateSnapshot(snapshot)).toThrow(
+      "Job count changed: expected 2, found 3",
+    );
+  });
+
+  it("requires each approved Job to use its exact production slug", () => {
+    const snapshot = validSnapshot();
+    snapshot.records.Job[0]!.slug = "wrong-job-slug";
+    expect(() => validateSnapshot(snapshot)).toThrow(
+      `exact approved Job slug ${APPROVED_ROOTS[0].jobSlug}`,
+    );
   });
 
   it("defaults to preview and rejects execute-only preview arguments", () => {
@@ -215,11 +323,32 @@ describe("production synthetic data cleanup safety model", () => {
     expect(() => parsePlanEnvelope(envelope(plan, "0".repeat(64)))).toThrow(
       "plan digest does not match",
     );
+    expect(() => parsePlanEnvelope(envelope(plan), "f".repeat(64))).toThrow(
+      "confirmed digest does not match",
+    );
 
     const noMatchPlan = createPlan(emptySnapshot(), new Date(timestamp));
     expect(() =>
       assertPlanMatchesSnapshot(noMatchPlan, emptySnapshot()),
     ).toThrow("no-match preview plan cannot authorize execute mode");
+  });
+
+  it("rejects old-schema plans before execute can use them", () => {
+    const currentPlan = createPlan(validSnapshot(), new Date(timestamp));
+    const oldPlan = {
+      ...currentPlan,
+      schemaVersion: 1,
+      approvedRootSlugs: APPROVED_ROOTS.map((root) => root.userMarker),
+    } as Record<string, unknown>;
+    delete oldPlan.approvedUserMarkers;
+    delete oldPlan.approvedCompanySlugs;
+    delete oldPlan.approvedJobSlugs;
+
+    expect(() =>
+      parsePlanEnvelope(
+        JSON.stringify({ digest: digestPlan(currentPlan), plan: oldPlan }),
+      ),
+    ).toThrow("invalid or sensitive-field-bearing shape");
   });
 
   it("requires the environment authorization and explicit confirmation", () => {
@@ -233,6 +362,11 @@ describe("production synthetic data cleanup safety model", () => {
       "--confirm",
       EXECUTE_CONFIRMATION,
     ]);
+    expect(() =>
+      assertExecuteAuthorization(base, {
+        ALLOW_PRODUCTION_SYNTHETIC_CLEANUP: "true",
+      }),
+    ).not.toThrow();
     expect(() => assertExecuteAuthorization(base, {})).toThrow(
       "ALLOW_PRODUCTION_SYNTHETIC_CLEANUP=true",
     );
@@ -315,6 +449,9 @@ describe("production synthetic data cleanup safety model", () => {
     await expect(
       runTransaction(previewClient, "preview", async () => "ok"),
     ).resolves.toBe("ok");
+    expect(previewClient.commands[0]).toBe(
+      "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY DEFERRABLE",
+    );
     expect(previewClient.commands.at(-1)).toBe("ROLLBACK");
 
     const executeClient = new FakeClient();
