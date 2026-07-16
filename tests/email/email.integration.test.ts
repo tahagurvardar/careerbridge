@@ -4,12 +4,15 @@ import { randomBytes } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { EmailDeliveryProvider } from "@/features/email/server/provider";
 
 vi.mock("server-only", () => ({}));
 
-const prefix = `cb-email-${Date.now()}-${randomBytes(4).toString("hex")}`;
+const fixtureNamespace = "cb-email-";
+const prefix = `${fixtureNamespace}${Date.now()}-${randomBytes(4).toString("hex")}`;
+const staleRegressionPrefix = `${fixtureNamespace}stale-regression`;
+const unrelatedDedupeKey = `cb-unrelated-email-${Date.now()}-${randomBytes(4).toString("hex")}`;
 const enabled =
   process.env.RUN_DATABASE_INTEGRATION_TESTS === "true" &&
   Boolean(process.env.TEST_DATABASE_URL);
@@ -25,7 +28,9 @@ let memberId: string;
 let candidateId: string;
 let inviteeId: string;
 let companyId: string;
-let skillId: string;
+let staleOutboxId: string;
+let staleAttemptId: string;
+let unrelatedOutboxId: string;
 
 function testDatabaseUrl(): string {
   const value = process.env.TEST_DATABASE_URL;
@@ -40,6 +45,112 @@ function testDatabaseUrl(): string {
     throw new Error("The test database must be isolated.");
   }
   return value;
+}
+
+function reservedOutboxWhere(): Prisma.EmailOutboxWhereInput {
+  return {
+    OR: [
+      { dedupeKey: { startsWith: fixtureNamespace } },
+      { recipientUserId: { startsWith: fixtureNamespace } },
+      {
+        recipientEmail: {
+          startsWith: fixtureNamespace,
+          endsWith: "@example.test",
+        },
+      },
+    ],
+  };
+}
+
+async function cleanupReservedEmailFixtures(client: PrismaClient) {
+  await client.$transaction(
+    async (tx) => {
+      const outboxRows = await tx.emailOutbox.findMany({
+        where: reservedOutboxWhere(),
+        select: { id: true },
+      });
+      const outboxIds = outboxRows.map(({ id }) => id);
+
+      if (outboxIds.length > 0) {
+        await tx.emailDeliveryAttempt.deleteMany({
+          where: { outboxId: { in: outboxIds } },
+        });
+        await tx.emailOutbox.deleteMany({
+          where: { id: { in: outboxIds } },
+        });
+      }
+
+      const companyRows = await tx.company.findMany({
+        where: { slug: { startsWith: fixtureNamespace } },
+        select: { id: true },
+      });
+      const companyIds = companyRows.map(({ id }) => id);
+      if (companyIds.length > 0) {
+        await tx.company.deleteMany({ where: { id: { in: companyIds } } });
+      }
+
+      await tx.user.deleteMany({
+        where: { id: { startsWith: fixtureNamespace } },
+      });
+      await tx.skill.deleteMany({
+        where: { normalizedName: { startsWith: fixtureNamespace } },
+      });
+    },
+    { maxWait: 10_000, timeout: 60_000 },
+  );
+}
+
+async function createCleanupRegressionFixtures() {
+  await prisma.user.create({
+    data: {
+      id: `${staleRegressionPrefix}-candidate`,
+      name: "Stale Email Integration User",
+      email: `${staleRegressionPrefix}-candidate@example.test`,
+      role: "CANDIDATE",
+    },
+  });
+  const staleOutbox = await prisma.emailOutbox.create({
+    data: {
+      recipientUserId: `${staleRegressionPrefix}-candidate`,
+      recipientEmail: `${staleRegressionPrefix}-snapshot@example.test`,
+      eventType: "APPLICATION_STATUS_CHANGED",
+      subject: "Stale integration fixture",
+      textBody: "Stale integration fixture",
+      htmlBody: "<p>Stale integration fixture</p>",
+      destinationPath: "/candidate/applications/stale",
+      dedupeKey: `${staleRegressionPrefix}:queue:stale`,
+      status: "RETRY_SCHEDULED",
+      attemptCount: 1,
+      nextAttemptAt: new Date(0),
+    },
+  });
+  staleOutboxId = staleOutbox.id;
+  const staleAttempt = await prisma.emailDeliveryAttempt.create({
+    data: {
+      outboxId: staleOutbox.id,
+      attemptNumber: 1,
+      status: "RETRYABLE_FAILURE",
+      provider: "fake",
+      errorCode: "STALE_TEST_FIXTURE",
+      startedAt: new Date(0),
+      finishedAt: new Date(1),
+    },
+  });
+  staleAttemptId = staleAttempt.id;
+
+  const unrelated = await prisma.emailOutbox.create({
+    data: {
+      recipientEmail: "unrelated-email-integration@example.test",
+      eventType: "APPLICATION_STATUS_CHANGED",
+      subject: "Unrelated integration fixture",
+      textBody: "Unrelated integration fixture",
+      htmlBody: "<p>Unrelated integration fixture</p>",
+      destinationPath: "/candidate/applications/unrelated",
+      dedupeKey: unrelatedDedupeKey,
+      nextAttemptAt: new Date("2999-01-01T00:00:00.000Z"),
+    },
+  });
+  unrelatedOutboxId = unrelated.id;
 }
 
 async function createUser(
@@ -127,6 +238,10 @@ databaseDescribe(
       vi.stubEnv("NODE_ENV", "test");
       vi.stubEnv("EMAIL_APP_BASE_URL", "http://localhost:3000");
 
+      await cleanupReservedEmailFixtures(prisma);
+      await createCleanupRegressionFixtures();
+      await cleanupReservedEmailFixtures(prisma);
+
       const [owner, coOwner, member, candidate, invitee] = await Promise.all([
         createUser("owner", "RECRUITER", "TR"),
         createUser("co-owner", "RECRUITER", "RU"),
@@ -163,13 +278,12 @@ databaseDescribe(
         },
         select: { id: true },
       });
-      skillId = skill.id;
       await prisma.candidateProfile.create({
         data: {
           userId: candidateId,
           headline: "Integration Engineer",
           location: "Remote",
-          skills: { create: { skillId } },
+          skills: { create: { skillId: skill.id } },
         },
       });
     });
@@ -178,36 +292,42 @@ databaseDescribe(
       vi.unstubAllEnvs();
       if (!prisma) return;
       try {
-        await prisma.emailDeliveryAttempt.deleteMany({
-          where: {
-            outbox: {
-              OR: [
-                { dedupeKey: { startsWith: prefix } },
-                { recipientUserId: { startsWith: prefix } },
-              ],
-            },
-          },
-        });
-        await prisma.emailOutbox.deleteMany({
-          where: {
-            OR: [
-              { dedupeKey: { startsWith: prefix } },
-              { recipientUserId: { startsWith: prefix } },
-            ],
-          },
-        });
-        await prisma.notification.deleteMany({
-          where: { recipientUserId: { startsWith: prefix } },
-        });
-        await prisma.userEmailPreference.deleteMany({
-          where: { userId: { startsWith: prefix } },
-        });
-        await prisma.company.deleteMany({ where: { id: companyId } });
-        await prisma.user.deleteMany({ where: { id: { startsWith: prefix } } });
-        await prisma.skill.deleteMany({ where: { id: skillId } });
+        await cleanupReservedEmailFixtures(prisma);
+        if (unrelatedOutboxId) {
+          await prisma.$transaction([
+            prisma.emailDeliveryAttempt.deleteMany({
+              where: { outboxId: unrelatedOutboxId },
+            }),
+            prisma.emailOutbox.deleteMany({
+              where: { id: unrelatedOutboxId },
+            }),
+          ]);
+        }
       } finally {
         await prisma.$disconnect();
       }
+    });
+
+    it("removes stale reserved fixtures without deleting unrelated outbox rows", async () => {
+      await expect(
+        prisma.emailDeliveryAttempt.findUnique({
+          where: { id: staleAttemptId },
+        }),
+      ).resolves.toBeNull();
+      await expect(
+        prisma.emailOutbox.findUnique({ where: { id: staleOutboxId } }),
+      ).resolves.toBeNull();
+      await expect(
+        prisma.user.findUnique({
+          where: { id: `${staleRegressionPrefix}-candidate` },
+        }),
+      ).resolves.toBeNull();
+      await expect(
+        prisma.emailOutbox.findUnique({ where: { id: unrelatedOutboxId } }),
+      ).resolves.toMatchObject({
+        dedupeKey: unrelatedDedupeKey,
+        status: "PENDING",
+      });
     });
 
     it("creates OWNER submission outbox rows atomically and excludes MEMBERs", async () => {
@@ -376,14 +496,19 @@ databaseDescribe(
         fakeProvider(send),
         1,
       );
-      const second = await dispatcher.dispatchEmailBatch(
+      const secondClaim = await dispatcher.claimDueEmails(
         prisma,
-        fakeProvider(send),
         1,
+        new Date(0),
       );
       expect(first.sent).toBe(1);
-      expect(second.claimed).toBe(0);
+      expect(secondClaim).toHaveLength(0);
       expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          idempotencyKey: `${prefix}:queue:success`,
+        }),
+      );
       expect(
         await prisma.emailDeliveryAttempt.count({
           where: { outboxId: row.id },
@@ -423,18 +548,28 @@ databaseDescribe(
 
     it("uses SKIP LOCKED across workers and safely recovers stale processing", async () => {
       const row = await createQueueFixture("concurrent");
+      const claimAt = new Date(0);
       const [first, second] = await Promise.all([
-        dispatcher.claimDueEmails(prisma, 1),
-        dispatcher.claimDueEmails(prisma, 1),
+        dispatcher.claimDueEmails(prisma, 1, claimAt),
+        dispatcher.claimDueEmails(prisma, 1, claimAt),
       ]);
       expect(first.length + second.length).toBe(1);
-      const firstToken = [...first, ...second][0].lockToken;
+      const claimed = [...first, ...second];
+      expect(claimed.map((row) => row.dedupeKey)).toEqual([
+        `${prefix}:queue:concurrent`,
+      ]);
+      const firstToken = claimed[0].lockToken;
       await prisma.emailOutbox.update({
         where: { id: row.id },
-        data: { lockedAt: new Date(Date.now() - 11 * 60_000) },
+        data: { lockedAt: claimAt },
       });
-      const recovered = await dispatcher.claimDueEmails(prisma, 1);
+      const recovered = await dispatcher.claimDueEmails(
+        prisma,
+        1,
+        new Date(11 * 60_000),
+      );
       expect(recovered).toHaveLength(1);
+      expect(recovered[0].dedupeKey).toBe(`${prefix}:queue:concurrent`);
       expect(recovered[0].lockToken).not.toBe(firstToken);
     });
   },
