@@ -18,10 +18,18 @@ async function main(): Promise<void> {
   baseURL.search = "";
   baseURL.hash = "";
 
+  const requestHeaders: Record<string, string> = {
+    "user-agent": "CareerBridge-Production-Smoke/1.0",
+  };
+  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (bypassSecret) {
+    requestHeaders["x-vercel-protection-bypass"] = bypassSecret;
+  }
+
   async function request(path: string, redirect: RequestRedirect = "follow") {
     return fetch(new URL(path, baseURL), {
       redirect,
-      headers: { "user-agent": "CareerBridge-Production-Smoke/1.0" },
+      headers: requestHeaders,
       signal: AbortSignal.timeout(10_000),
     });
   }

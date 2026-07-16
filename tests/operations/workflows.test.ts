@@ -81,4 +81,15 @@ describe("deployment workflow contracts", () => {
     expect(prebuilt).toBeGreaterThan(migrate);
     expect(smoke).toBeGreaterThan(prebuilt);
   });
+
+  it("maps and validates the Vercel automation bypass secret", () => {
+    const deploy = workflow("deploy-production.yml");
+
+    expect(deploy).toContain(
+      "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+    );
+    expect(deploy).toContain(
+      "for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_AUTOMATION_BYPASS_SECRET DIRECT_URL; do",
+    );
+  });
 });
