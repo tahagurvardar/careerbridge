@@ -37,6 +37,9 @@ yarn-error.log*
 # private document storage (local development/test object store)
 /.careerbridge-private-storage
 
+# local, redacted production operations artifacts
+/.careerbridge-operations/
+
 # vercel
 .vercel
 

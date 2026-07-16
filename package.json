@@ -28,7 +28,9 @@
     "prisma:validate": "prisma validate",
     "prisma:studio": "prisma studio",
     "env:validate:production": "node --conditions=react-server --import tsx scripts/validate-production-env.ts",
-    "smoke:production": "tsx scripts/smoke-production.ts"
+    "smoke:production": "tsx scripts/smoke-production.ts",
+    "ops:synthetic-data:preview": "node --import tsx scripts/production-synthetic-data-cleanup.ts --mode preview",
+    "ops:synthetic-data:execute": "node --import tsx scripts/production-synthetic-data-cleanup.ts --mode execute"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "^1.6.23",
