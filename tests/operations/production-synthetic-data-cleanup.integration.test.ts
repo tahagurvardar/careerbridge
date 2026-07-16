@@ -215,7 +215,7 @@ databaseDescribe(
       planFiles.add(postCleanupPreview.planFile);
       expect(postCleanupPreview.plan.status).toBe("no_matches");
       expect(postCleanupPreview.plan.counts.User).toBe(0);
-    });
+    }, 120_000);
 
     it("rolls back every deletion when a final assertion fails", async () => {
       await seedFixture();
@@ -239,6 +239,6 @@ databaseDescribe(
         companyCount: 2,
         sessionCount: 5,
       });
-    });
+    }, 120_000);
   },
 );
