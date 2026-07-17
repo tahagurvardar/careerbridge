@@ -266,7 +266,6 @@ See [docs/screenshots/README.md](docs/screenshots/README.md).
   `/privacy` routes and policy documents are not yet published.
 - CSP, performance baselines, alert ownership, and restore/rotation drills remain.
 - Job recommendations and AI assistance are deferred; AI makes no hiring decisions.
-- No public license is selected; normal copyright rules currently apply.
 
 See the [final release-readiness & portfolio audit](docs/final-release-readiness-audit.md)
 and the [roadmap](docs/roadmap.md).
@@ -283,4 +282,20 @@ Application, Interview, Admin, email, or Cron workflows production-verified.
 
 - [Final release-readiness & portfolio audit](docs/final-release-readiness-audit.md)
 - [Product specification](docs/product-spec.md)
-- [Architecture
+- [Architecture](docs/architecture.md)
+
+## License and copyright
+
+Copyright © 2026 Taha Gürvardar. All rights reserved.
+
+This repository is **source-available for portfolio review, employment
+evaluation, and educational inspection — it is not open source**. No
+permission is granted to copy, modify, distribute, sublicense, sell, deploy,
+host, commercially exploit, or create derivative works from the original
+source code, documentation, designs, branding, or other original materials
+without prior written permission from the copyright holder. See the
+[LICENSE](LICENSE) file for the full terms.
+
+No registered trademark claim is made over the "CareerBridge" name or any
+related branding. Third-party libraries, frameworks, assets, and dependencies
+remain subject to their own respective licenses.
