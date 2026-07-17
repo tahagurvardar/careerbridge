@@ -1,8 +1,9 @@
 {
   "name": "careerbridge",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "AI-powered job and internship platform for candidates, recruiters, and platform teams.",
+  "description": "Production-oriented hiring platform for candidates, recruiters, and platform administrators.",
+  "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "node": ">=20.9.0"
   },

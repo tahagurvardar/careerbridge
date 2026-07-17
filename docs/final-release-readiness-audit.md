@@ -79,7 +79,7 @@ core two-sided workflow that defines the product is unproven in production.
 | Architecture & explainability    | 18/20 | Detailed product/architecture/deployment/ops docs and clean feature boundaries; some phase-era strings remain                                        |
 | Testing & delivery engineering   | 17/20 | Broad unit/integration coverage, CI gates, controlled deploy, env validation, smoke + operations tooling                                             |
 | UX, accessibility & localization | 15/20 | Responsive theme-aware UI in four locales; production browser/a11y evidence incomplete; one stale public "coming soon" card                          |
-| GitHub presentation              | 14/20 | Honest, accurate README and live demo; missing screenshots, no license, one broken doc link, stale placeholder card                                  |
+| GitHub presentation              | 14/20 | Honest, accurate README and live demo; missing screenshots, one broken doc link, stale placeholder card                                              |
 
 CareerBridge is suitable to present in job applications today, provided it is
 described honestly per the framing above.
@@ -175,8 +175,6 @@ exercised in production during verification and must remain UNVERIFIED:
   browser tests.
 - **Job recommendations / AI assistance** — intentionally deferred; the Candidate
   dashboard shows a "recommendations deferred" card by design.
-- **Public license** — no `LICENSE` file and no `license` field in
-  `package.json`; default copyright applies.
 
 ---
 
@@ -211,7 +209,7 @@ not commitments. Every item states whether it requires **code**,
 | ---- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------: | ------------------- |
 | P2-1 | Stale public "coming soon" card on Company detail page | `/companies/[slug]` unconditionally renders "Job listings coming next … will arrive with the dedicated Job domain" even though the Job domain is fully implemented; a company's published jobs are not shown on its profile, and the copy contradicts the rest of the app | Replace the placeholder card with the company's published-job list (reusing existing job-query predicates), or, minimally, correct the copy; update the four locale strings | 0.5–1 day | Code, documentation |
 | P2-2 | No screenshots; broken README screenshots link         | Weakens GitHub/portfolio first impression                                                                                                                                                                                                                                 | Add a `docs/screenshots/` placeholder README and later add sanitized captures (no PII/production data)                                                                      | 0.5–1 day | Documentation       |
-| P2-3 | No public license selected                             | Ambiguous reuse terms for reviewers                                                                                                                                                                                                                                       | Decide and add a `LICENSE` (or explicitly document "all rights reserved")                                                                                                   |   0.5 day | Documentation       |
+| P2-3 | ~~No public license selected~~ — **Resolved**          | Ambiguous reuse terms for reviewers                                                                                                                                                                                                                                       | A root `LICENSE` (proprietary, source-available for portfolio review; not open source) and matching `package.json`/README metadata have been added                          |   0.5 day | Documentation       |
 | P2-4 | No social preview / repo metadata polish               | Minor presentation gap                                                                                                                                                                                                                                                    | Add repo description, topics, and social preview image                                                                                                                      |   0.5 day | Documentation       |
 
 ### P3 — optional roadmap
@@ -287,9 +285,11 @@ P1-4). Provider/legal approvals may extend the calendar time beyond the
 engineering estimate.
 
 To reach **"strong, fully-polished portfolio"** status (P2 cleared on top of the
-current base), realistic remaining effort is approximately **2–4 days**: fix the
-stale Company-page placeholder (P2-1), add screenshots and repair the doc link
-(P2-2), decide the license (P2-3), and polish repo metadata (P2-4).
+current base), realistic remaining effort is approximately **1.5–2.5 days**: fix
+the stale Company-page placeholder (P2-1), add screenshots and repair the doc
+link (P2-2), and polish repo metadata (P2-4). The license decision (P2-3) is
+resolved — see Section 6 and the root `LICENSE` file.
 
 The current state is already a credible portfolio project when described
-honestly;
+honestly; the remaining gaps should be presented as roadmap work rather than
+completed production verification.
