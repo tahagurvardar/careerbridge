@@ -19,6 +19,34 @@ moderation, and four-locale delivery in one server-first Next.js application.
 > CareerBridge as a substantial production-oriented portfolio project, not yet as
 > a fully production-ready hiring service.
 
+## Screenshots
+
+**Sanitized local portfolio states, not production verification.** These images
+show the actual production-build interface using a disposable local PostgreSQL
+database. All profiles, companies, jobs, applications and counts are synthetic.
+Recruiter and Admin production journeys remain **UNVERIFIED** as stated above.
+No real email, CV, meeting, private account or production data is captured.
+
+![CareerBridge English landing with synthetic local jobs](docs/assets/screenshots/landing-en-light.png)
+
+| Job discovery — local fixture                                                                  | Candidate dashboard — local fixture                                                              |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| ![Synthetic local job discovery](docs/assets/screenshots/job-discovery-en-light.png)           | ![Synthetic local Candidate dashboard](docs/assets/screenshots/candidate-dashboard-en-light.png) |
+| Recruiter Company/Job workspace — local fixture                                                | Admin Company moderation — local fixture                                                         |
+| ![Synthetic local Recruiter workspace](docs/assets/screenshots/recruiter-company-en-light.png) | ![Synthetic local Admin moderation](docs/assets/screenshots/admin-moderation-en-light.png)       |
+
+<details>
+<summary>Responsive job discovery — 390×844 local fixture</summary>
+
+<img src="docs/assets/screenshots/job-discovery-en-light-mobile.png" alt="Responsive synthetic local job discovery" width="260" />
+
+</details>
+
+Desktop captures use 1440×900 and the English/light theme. They document the
+interface and local fixture rendering; they do not change the verification
+legend or imply real users, hiring activity, or production acceptance.
+[Capture provenance and reproduction](docs/screenshots/README.md).
+
 ## Highlights
 
 - Candidate and Recruiter registration with a server-owned role allow-list
@@ -232,23 +260,6 @@ conservative headers, rate limits, redacted logs, and private document delivery.
 Still required: authenticated browser E2E, automated accessibility checks, full
 desktop/mobile/keyboard/screen-reader/four-locale QA, Core Web Vitals baselines, a
 tested Content Security Policy, and complete protected multi-role verification.
-
-## Screenshots
-
-**No screenshots have been added yet — this is still outstanding for portfolio
-v1.** Real, sanitized captures still need to be produced. Add only captures with
-no email, account, private Company, Application, CV, meeting, token, or
-production data.
-
-Planned set:
-
-1. Localized landing and Job discovery
-2. Candidate dashboard on desktop and mobile
-3. Recruiter Company/Job workspace with synthetic local data
-4. Admin moderation/analytics with synthetic local data
-5. Light/dark comparison
-
-See [docs/screenshots/README.md](docs/screenshots/README.md).
 
 ## Limitations and roadmap
 
